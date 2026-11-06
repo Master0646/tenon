@@ -87,6 +87,10 @@ export function requireChange(root: string, id: string | undefined): string {
   return id;
 }
 
+/** 变更归档后的目录（相对仓库根）：id 已以日期开头时不再加日期 */
+export const archiveTarget = (id: string, date = new Date()): string =>
+  `${DF}/changes/archive/${/^\d{4}-\d{2}-\d{2}-/.test(id) ? id : `${date.toISOString().slice(0, 10)}-${id}`}`;
+
 /** 进行中的变更（不含 archive） */
 export function listChanges(root: string): string[] {
   const dir = join(root, DF, 'changes');

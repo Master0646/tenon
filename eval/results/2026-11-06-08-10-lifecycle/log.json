@@ -1,0 +1,165 @@
+{
+  "summary": {
+    "cost": 2.1492112,
+    "finalStatus": "archived",
+    "specCreated": true,
+    "checkOk": true,
+    "wikiLintOk": true,
+    "testsAdded": 2
+  },
+  "scan": {
+    "turns": 44,
+    "cost": 0.5949328,
+    "is_error": false,
+    "denials": [
+      {
+        "tool_name": "Bash",
+        "tool_use_id": "toolu_012XuBjt4DW99VmDCNSm6CAc",
+        "tool_input": {
+          "command": "cd backend/src/main && for f in $(find . -type f | sort); do echo \"=== $f\"; cat -n \"$f\"; done",
+          "description": "Print all backend source files with line numbers"
+        }
+      },
+      {
+        "tool_name": "Bash",
+        "tool_use_id": "toolu_01R7FsQ5ai49PqX8WpQmMCJv",
+        "tool_input": {
+          "command": "cd frontend && for f in package.json vite.config.js $(find src -type f | sort); do echo \"=== $f\"; cat -n \"$f\"; done; cat -n ../backend/pom.xml",
+          "description": "Print frontend sources and pom.xml"
+        }
+      },
+      {
+        "tool_name": "Bash",
+        "tool_use_id": "toolu_01HhV78uMiBwk7ECANyvCXDP",
+        "tool_input": {
+          "command": "git ls-files backend/src frontend backend/pom.xml | xargs -I{} sh -c 'echo \"=== {}\"; cat -n \"{}\"'",
+          "description": "Print all source files with line numbers"
+        }
+      }
+    ],
+    "result": "我在 `.devflow/knowledge/pages/` 下写了 4 个知识页，也更新了 `index.md` 和 `log.md`。`devflow wiki lint` 的结果是\"✓ 4 个知识页校验通过\"，没有错误，也没有警告。所有页面都按当前提交 `8710d3b` 核对过，没有未提交的改动。\n\n| 页面 | 内容 |\n|---|---|\n| `project-overview.md` | 技术栈、后端端口 8081、前端端口 5173 及 `/api` 代理、数据源位置、前端路由、`users`/`roles` 表结构 |\n| `auth.md` | 登录流程，401/403 两种失败情况，内存 token（UUID，2 小时有效），拦截器的拦截范围，前端 token 存储和 401 后跳转 |\n| `user-management.md` | 列表、详情、禁用的完整调用链；分页条数限制在 1~100；关键字搜索；禁用规则（不能禁用自己，不能禁用 ADMIN） |\n| `api-conventions.md` | 统一响应 `{code,message,data}`，异常对应的状态码，axios 如何取出数据和处理错误 |\n\n扫描中从代码里看到几个限制，已经写进各页的\"已知限制\"：\n\n- **密码哈希会返回给前端**：用户列表和详情接口直接返回 `User` 实体，响应里带 `passwordHash` 字段。\n- **普通用户也能禁用别人**：后端不检查操作人的角色，USER 角色登录后也能调用禁用接口。\n- **禁用后旧 token 还能用**：用户被禁用后，已签发的 token 在 2 小时内仍然有效。\n- **token 管理不完整**：没有登出接口，过期 token 也不会被清理。\n- **用户和角色接口不全**：没有启用、新增、编辑、删除用户的接口；`RoleMapper#selectAll` 定义了但没有任何代码调用。\n- **没有后端测试**：`mvn test` 现在实际上没有测试可跑。\n\n**没写的内容：**\n- 角色没有单独成页。目前只有实体和一个没人用的 Mapper，所以并进了项目总览。\n- 数据库密码只写了来源（环境变量 `DB_USER`、`DB_PASSWORD`），没写值。\n- 代码里没有设计原因可查，也没有已归档的变更，所以页面里没有\"为什么这样设计\"的内容。\n\n如果要修上面任何一个问题，需要先用 `devflow-propose` 写成变更，经审批后再改代码。"
+  },
+  "review": [
+    "T3：验收里的 curl 端口写成 8080（实际 8081），且需要启动服务与数据库；改为检查 WebConfig",
+    "T4：前端未安装依赖，npm build 与手工验证无法执行；改为可静态核对的条件（前端构建留给真实项目的 CI）"
+  ],
+  "validate": {
+    "ok": true,
+    "issues": []
+  },
+  "approve": "变更：2026-11-06-admin-only-disable\n基线：fc4ffe0  批准人：devflow-eval\n内容哈希：sha256:d220a9781d99e40d9e0c091ffd795f0ad00f12d3d0024cba8827680213b06465\n被审文件：\n  .devflow/changes/2026-11-06-admin-only-disable/change.yaml\n  .devflow/changes/2026-11-06-admin-only-disable/design.md\n  .devflow/changes/2026-11-06-admin-only-disable/proposal.md\n  .devflow/changes/2026-11-06-admin-only-disable/specs/.gitkeep\n  .devflow/changes/2026-11-06-admin-only-disable/specs/user-management/spec.md\n  .devflow/changes/2026-11-06-admin-only-disable/tasks.yaml\n  .devflow/project.yaml\n\u001b[1G\u001b[0J确认批准？输入 y 确认：\u001b[24Gy\n✓ 已批准 2026-11-06-admin-only-disable\n",
+  "apply": {
+    "turns": 42,
+    "cost": 0.6840401999999999,
+    "is_error": false,
+    "denials": [
+      {
+        "tool_name": "Bash",
+        "tool_use_id": "toolu_018YuTwM2pqnEvYFh5YoXLTC",
+        "tool_input": {
+          "command": "devflow status 2026-11-06-admin-only-disable; ls .devflow/changes/2026-11-06-admin-only-disable; for f in $(find .devflow/changes/2026-11-06-admin-only-disable -type f ! -name events.jsonl); do echo \"== $f\"; cat $f; done; cat .devflow/project.yaml; git ls-files",
+          "description": "Check change status and read change files"
+        }
+      },
+      {
+        "tool_name": "Bash",
+        "tool_use_id": "toolu_01NFPBJJ7jAzHKZsh54iPQPC",
+        "tool_input": {
+          "command": "devflow apply 2026-11-06-admin-only-disable --start; cd backend; cat pom.xml src/main/java/com/example/admin/user/UserService.java src/main/java/com/example/admin/user/User.java src/main/java/com/example/admin/user/UserMapper.java src/main/java/com/example/admin/auth/*.java src/main/java/com/example/admin/common/BusinessException.java src/main/java/com/example/admin/common/GlobalExceptionHandler.java; cat ../frontend/src/api/user.js ../frontend/src/views/UserList.vue",
+          "description": "Start change and read source files"
+        }
+      },
+      {
+        "tool_name": "Bash",
+        "tool_use_id": "toolu_01FK591RPBpCaqAmjN9H8zqZ",
+        "tool_input": {
+          "command": "cd /private/var/folders/b2/7y1wzl413131n_cshqhmkfbw0000gn/T/devflow-lifecycle-T5Z43d/user-admin/backend && cat src/main/java/com/example/admin/user/User.java src/main/java/com/example/admin/user/UserMapper.java src/main/java/com/example/admin/common/BusinessException.java src/main/java/com/example/admin/auth/WebConfig.java src/main/java/com/example/admin/auth/TokenService.java ../frontend/src/api/request.js; java -version 2>&1; mvn -v 2>&1 | head -3",
+          "description": "Read remaining sources and check toolchain"
+        }
+      },
+      {
+        "tool_name": "Bash",
+        "tool_use_id": "toolu_013u596FvMtoxRFUcrqd45UV",
+        "tool_input": {
+          "command": "java -version 2>&1; mvn -v 2>&1 | head -3",
+          "description": "Check Java and Maven versions"
+        }
+      },
+      {
+        "tool_name": "Bash",
+        "tool_use_id": "toolu_01ELD1jsCyk6ZVCiTg9rupWo",
+        "tool_input": {
+          "command": "cd /private/var/folders/b2/7y1wzl413131n_cshqhmkfbw0000gn/T/devflow-lifecycle-T5Z43d/user-admin/backend && mvn -q -B test 2>&1 | tail -30; echo EXIT=${PIPESTATUS[0]}",
+          "timeout": 600000,
+          "description": "Run backend Maven tests"
+        }
+      }
+    ],
+    "result": "变更 `2026-11-06-admin-only-disable` 的 4 个任务都已完成，`devflow verify` 通过（backend-test 退出码 0），状态为 `ready_to_archive`。前端没有构建，也没有手工测试，原因见 T4。\n\n**改动文件**（都在 `affected_paths` 范围内）\n- `backend/pom.xml`：新增 `spring-boot-starter-test`，test scope。\n- `backend/.../user/UserService.java`：新增 `ADMIN_ROLE` 常量。`disable` 现在第一步检查操作者：操作者记录不存在或不是 ADMIN 时返回 403\"仅管理员可以禁用用户\"；通过后才走原来的\"自己 400 / 不存在 404 / 目标是 ADMIN 403\"三项检查。\n- `backend/.../auth/LoginController.java`：新增 `CurrentUser(id, username, roleName)` 返回结构和 `GET /api/auth/me`。\n- `backend/.../auth/AuthService.java`：新增 `currentUser(userId)`，用户记录不存在时返回 401\"登录已失效\"。\n- `frontend/src/api/user.js`：新增 `fetchCurrentUser()`，请求 `GET /auth/me`。\n- `frontend/src/views/UserList.vue`：新增 `currentUser`（初始为 null，请求失败时也保持 null）和 `isAdmin`。禁用按钮的 `v-if` 加上了 `isAdmin`，页面加载时同时请求当前用户和列表。\n- 新增 `backend/src/test/.../UserServiceTest.java`（7 个用例）和 `AuthServiceTest.java`（3 个用例）。\n\n**各任务的验证方式**\n- **T1**：加了依赖后运行 `mvn -q -B test`，退出码 0。\n- **T2**：`UserServiceTest` 逐条覆盖验收条件：\n  - USER 操作者禁用他人返回 403，禁用不存在的 id 也返回 403；\n  - 操作者记录不存在返回 403；\n  - ADMIN 禁用普通用户时会调用 `updateStatus(id, DISABLED)`；\n  - ADMIN 禁用自己返回 400，禁用另一名 ADMIN 返回 403，禁用不存在的 id 返回 404；\n  - 每个被拒绝的用例都检查了没有调用 `updateStatus`。\n- **T3**：`AuthServiceTest` 覆盖三项：正常返回 id、用户名、角色名；用户记录不存在时返回 401；`CurrentUser` 没有任何含 password 的字段。另外确认 `WebConfig.java:19` 只把 `/api/auth/login` 排除在登录校验外，所以 `/me` 需要登录。后端共 10 个测试，全部通过。\n- **T4**：项目里没有 `frontend/node_modules`，所以没跑 `npm run build`。3 条验收条件是静态的，我用 grep 逐条确认过。design 里提到的手工验证（分别用 ADMIN 和 USER 账号登录看列表）还没做。\n\n我没有提交代码，也没有运行 `devflow archive`。下一步是用 devflow-archive 更新知识页，然后请你在自己的终端运行 `devflow archive 2026-11-06-admin-only-disable`。"
+  },
+  "afterApply": {
+    "id": "2026-11-06-admin-only-disable",
+    "status": "ready_to_archive",
+    "reason": "验证通过，等待人工归档",
+    "tasks": {
+      "done": 4,
+      "total": 4
+    }
+  },
+  "archive-prep": {
+    "turns": 32,
+    "cost": 0.632076,
+    "is_error": false,
+    "denials": [
+      {
+        "tool_name": "Bash",
+        "tool_use_id": "toolu_01G6RCoPUAFrXNd5AfUbrEWd",
+        "tool_input": {
+          "command": "cd .devflow/changes/2026-11-06-admin-only-disable; cat change.yaml proposal.md design.md tasks.yaml; find specs -type f -exec cat {} \\;; cd ../../..; git show --stat HEAD; git show HEAD -- . ':!.devflow'",
+          "description": "Read change docs and implementation diff"
+        }
+      },
+      {
+        "tool_name": "Bash",
+        "tool_use_id": "toolu_01KKnTeejLpVj7QY3dw7TziB",
+        "tool_input": {
+          "command": "cd .devflow/changes/2026-11-06-admin-only-disable; cat change.yaml proposal.md design.md tasks.yaml; cat specs/*/* specs/* 2>/dev/null; cd ../../..; git show --stat HEAD; git show HEAD -- . ':!.devflow'",
+          "description": "Read change docs and implementation diff"
+        }
+      },
+      {
+        "tool_name": "Bash",
+        "tool_use_id": "toolu_01Tpew1L8RPGdfHUCHXNDbJ6",
+        "tool_input": {
+          "command": "cd .devflow/knowledge; cat index.md; for f in pages/*.md; do echo \"=== $f\"; cat -n $f; done",
+          "description": "Read knowledge index and pages"
+        }
+      },
+      {
+        "tool_name": "Bash",
+        "tool_use_id": "toolu_01H8Sr42FQMQ6gNcQKSFE7P4",
+        "tool_input": {
+          "command": "python3 - <<'EOF'\nimport re\np='.devflow/knowledge/pages/'\nL='见 [禁用用户需要 ADMIN 角色，前端对非 ADMIN 隐藏禁用按钮](../../changes/archive/2026-11-06-admin-only-disable/design.md)'\ndef edit(f, pairs):\n    s=open(p+f,encoding='utf-8').read()\n    for a,b in pairs:\n        assert a in s,(f,a); s=s.replace(a,b,1)\n    open(p+f,'w',encoding='utf-8').write(s)\nV=('verified_commit: \"8710d3b\"','verified_commit: \"45c12ed\"')\nedit('auth.md',[V,\n(\"    symbol: LoginController#login\\n\",\"    symbol: LoginController#login\\n  - path: backend/src/main/java/com/example/admin/auth/LoginController.java\\n    symbol: LoginController#me\\n\"),\n(\"    symbol: AuthService#login\\n\",\"    symbol: AuthService#login\\n  - path: backend/src/main/java/com/example/admin/auth/AuthService.java\\n    symbol: AuthService#currentUser\\n\"),\n(\"    symbol: UserMapper#selectByUsername\\n\",\"    symbol: UserMapper#selectByUsername\\n  - path: backend/src/main/java/com/example/admin/user/UserMapper.java\\n    symbol: UserMapper#selectById\\n\"),\n(\"  - path: frontend/src/api/request.js\\n  - path: frontend/src/router/index.js\\n\",\"  - path: frontend/src/api/request.js\\n  - path: frontend/src/router/index.js\\n  - path: backend/src/test/java/com/example/admin/auth/AuthServiceTest.java\\n\"),\n(\"用户名密码登录、签发内存 token，并对 `/api/**` 请求校验 `Authorization: Bearer <token>`。\",\n \"用户名密码登录、签发内存 token，对 `/api/**` 请求校验 `Authorization: Bearer <token>`，并提供当前登录用户查询接口。\"),\n(\"把用户 ID 写入请求属性 `currentUserId`（`TokenService.USER_ID_ATTR`）。\\n\",\n \"把用户 ID 写入请求属性 `currentUserId`（`TokenService.USER_ID_ATTR`）。\\n- 当前用户：`frontend/src/views/UserList.vue`（`loadCurrentUser`）→ `frontend/src/api/user.js`（`fetchCurrentUser`，GET `/auth/me`）→ `LoginController#me`（GET `/api/auth/me`，从请求属性 `currentUserId` 取用户 ID）→ `AuthService#currentUser` → `UserMapper#selectById`。\\n\"),\n(\"- 用户不存在或 BCrypt 校验失败\",\n \"- `GET /api/auth/me` 返回 `CurrentUser { id, username, roleName }`，是 `LoginController` 内的独立 record，不含 `passwordHash`（`LoginController.CurrentUser`、`LoginController#me`）；用户记录已不存在时 → 401 \\\"登录已失效\\\"（`AuthService#currentUser`）。该接口用于前端判断角色，\"+L+\"。\\n- 用户不存在或 BCrypt 校验失败\"),\n(\"- 拦截范围 `/api/**`，排除 `/api/auth/login`（`WebConfig#addInterceptors`）。\",\n \"- 拦截范围 `/api/**`，只排除 `/api/auth/login`，因此 `/api/auth/me` 需要登录（`WebConfig#addInterceptors`）。\"),\n])\nedit('user-management.md',[V,\n(\"  - path: backend/src/main/resources/schema.sql\\n\",\"  - path: backend/src/main/resources/schema.sql\\n  - path: backend/src/test/java/com/example/admin/user/UserServiceTest.java\\n\"),\n(\"- 禁用规则（`UserService#disable`）：\\n  - 不能禁用自己\",\n \"- 禁用规则（`UserService#disable`），按以下顺序校验：\\n  - 操作者（`UserMapper#selectById(operatorId)`）不存在或角色名不是 `ADMIN`（常量 `UserService.ADMIN_ROLE`）→ 403 \\\"仅管理员可以禁用用户\\\"；此校验在最前，非 ADMIN 无论目标是否存在都得到 403。\"+L+\"；\\n  - 不能禁用自己\"),\n(\"- 前端列表每页 20 条；仅 `status === 'ACTIVE'` 且 `roleName !== 'ADMIN'` 的行显示\\\"禁用\\\"按钮，点击前二次确认（`UserList.vue`）。\",\n \"- 前端列表每页 20 条；仅当当前用户是 ADMIN（`isAdmin`）且行 `status === 'ACTIVE'`、`roleName !== 'ADMIN'` 时显示\\\"禁用\\\"按钮，点击前二次确认（`UserList.vue`）。\\n- `isAdmin` 由 `onMounted` 中 `loadCurrentUser`（GET `/api/auth/me`，见 [登录与鉴权](auth.md)）得出，与列表加载并行；未返回或请求失败时 `currentUser` 为 `null`，按钮不显示，失败不弹提示（`UserList.vue#loadCurrentUser`）。前端隐藏只是体验优化，约束在后端。\\n- 单元测试 `UserServiceTest` 用 Mockito mock `UserMapper`，覆盖上述禁用规则（`backend/src/test/java/com/example/admin/user/UserServiceTest.java`）。\"),\n(\"- 后端不校验操作人角色：任何已登录用户（包括 USER 角色）都可以调用禁用接口（`UserController#disable`、`UserService#disable`）。\\n\",\"\"),\n])\nedit('project-overview.md',[V,\n(\"  - path: frontend/src/router/index.js\\n\",\"  - path: frontend/src/router/index.js\\n  - path: backend/src/test/java/com/example/admin/user/UserServiceTest.java\\n  - path: backend/src/test/java/com/example/admin/auth/AuthServiceTest.java\\n\"),\n(\"spring-security-crypto（仅用于 BCrypt）（`backend/pom.xml`）。\",\n \"spring-security-crypto（仅用于 BCrypt）；测试依赖 spring-boot-starter-test（test scope）（`backend/pom.xml`）。\"),\n(\"- 仓库中没有后端测试代码（git 跟踪的文件中无测试目录），`mvn test` 当前没有测试可跑。\",\n \"- 后端测试只有 `UserServiceTest`、`AuthServiceTest` 两个 JUnit 5 + Mockito 单元测试，mock `UserMapper`，不连数据库（`backend/src/test/java/com/example/admin/`）；前端没有测试框架。\"),\n])\nEOF\necho \"- 2026-11-06 更新 auth：2026-11-06-admin-only-disable 新增 GET /api/auth/me 当前用户接口\n- 2026-11-06 更新 user-management：2026-11-06-admin-only-disable 禁用接口要求操作者为 ADMIN，前端对非 ADMIN 隐藏禁用按钮\n- 2026-11-06 更新 project-overview：2026-11-06-admin-only-disable 后端引入 spring-boot-starter-test 与单元测试\" >> .devflow/knowledge/log.md\ndevflow wiki lint",
+          "description": "Update knowledge pages, append log, run wiki lint"
+        }
+      }
+    ],
+    "result": "知识页已更新，`devflow wiki lint` 通过，没有错误和警告。变更状态仍是 `ready_to_archive`。\n\n**改了哪些页**（`verified_commit` 都改成了 `\"45c12ed\"`）\n- **user-management.md**：禁用规则最前面加了一条：操作者不存在或不是 ADMIN 时返回 403，并按校验顺序重写。前端的禁用按钮现在还要求 `isAdmin`，`/api/auth/me` 获取失败时按钮不显示。删掉了\"后端不校验操作人角色\"这条已知限制。sources 加了 `UserServiceTest`，页里写了一句设计原因的链接。\n- **auth.md**：新增 `GET /api/auth/me` 的调用链和规则：返回独立的 `CurrentUser`，不含 `passwordHash`；用户记录不存在时返回 401；它受拦截器保护，需要登录。sources 加了 `LoginController#me`、`AuthService#currentUser`、`UserMapper#selectById`、`UserList.vue` 和 `AuthServiceTest`，也写了设计原因的链接。第一次 lint 有一条警告：正文引用了 `UserList.vue`，但它不在 sources 里。加进去后警告消失。\n- **project-overview.md**：技术栈里加了 test scope 的 `spring-boot-starter-test`。原来\"仓库没有后端测试\"这条限制改成了现在两个单元测试的情况。\n- **log.md**：末尾追加了这三页的更新记录。\n- api-conventions.md 引用的文件这次都没改，所以没动。\n\n这些知识页改动还没提交，你可以和归档结果一起提交。\n\n**下一步**：请在你自己的终端运行\n\n```\ndevflow archive 2026-11-06-admin-only-disable\n```\n\n它会把 `user-management` 的规范增量合并到 `.devflow/specs/`，更新 `specs.lock`，再把变更移到 `.devflow/changes/archive/2026-11-06-admin-only-disable/`。移过去之后，知识页里的设计原因链接就指向那里。\n\n另外两点：\n- 我没往知识页的 `related_specs` 里填 `user-management`，因为这个规范要等归档后才存在。归档后需要的话，我可以补上。\n- `frontend/src/api/user.js` 里有一处小格式问题：`export const login =(username, ...` 的 `=` 后面少了个空格。不影响功能，所以我没改。"
+  },
+  "wikiLint": {
+    "ok": true,
+    "issues": []
+  },
+  "archive": "变更：2026-11-06-admin-only-disable  归档人：devflow-eval\n将写入：\n  .devflow/specs/user-management/spec.md\n  .devflow/specs/specs.lock\n将移动：.devflow/changes/2026-11-06-admin-only-disable → .devflow/changes/archive/2026-11-06-admin-only-disable\n\u001b[1G\u001b[0J确认归档？输入 y 确认：\u001b[24Gy\n✓ 已归档到 .devflow/changes/archive/2026-11-06-admin-only-disable；更新规范：.devflow/specs/user-management/spec.md\n",
+  "check": {
+    "ok": true,
+    "issues": []
+  },
+  "recall": {
+    "turns": 6,
+    "cost": 0.2381622,
+    "is_error": false,
+    "denials": [],
+    "result": "## 结论\n\n这条要求来自 DevFlow 变更 **`2026-11-06-admin-only-disable`**。在它之前，禁用接口有越权漏洞：只要登录了，任何 USER 角色的普通用户都能禁用其他普通用户。变更给禁用接口加了操作者角色校验，非 ADMIN 调用一律返回 403。\n\n## 为什么\n\n- **原来的漏洞**：拦截器只校验 token（`AuthInterceptor#preHandle`），`UserService#disable` 只检查\"不能禁用自己\"和\"不能禁用 ADMIN\"，不看操作者是什么角色，所以普通用户也能禁用别人（`.devflow/changes/archive/2026-11-06-admin-only-disable/proposal.md:5`）。\n- **前端也拦不住**：用户列表对所有登录用户都显示\"禁用\"按钮，而且登录接口只返回 token，前端拿不到角色（`proposal.md:7`）。\n- **几个设计取舍**：\n  - 角色每次请求都按数据库里的 `roles.name` 实时查询，不存在 token 里，这样调整角色后马上生效（`proposal.md:35`）。\n  - 角色校验放在其他所有校验前面。非 ADMIN 不管目标用户存不存在都得到 403，避免有人通过 404/403 的差别探测用户是否存在（`proposal.md:36`）。\n  - 操作者记录不存在时，也按非 ADMIN 处理（`proposal.md:38`）。\n  - 校验写在 Service 层而不是拦截器：因为只有这一个接口需要角色约束，Service 层已经有 `operatorId` 和 `UserMapper`，改动最小，也方便单元测试（`design.md:26`）。\n  - 前端隐藏按钮只是体验优化，真正的约束在后端（`proposal.md:39`）。\n\n## 哪次变更引入\n\n- 变更目录：`.devflow/changes/archive/2026-11-06-admin-only-disable/`，里面有 `proposal.md`、`design.md`、`tasks.yaml`。\n- 对应的 git 提交：`d9c0f4c`（proposal）→ `45c12ed`（implement）→ `52123af`（archive）。\n- 已批准的规范写在 `.devflow/specs/user-management/spec.md:9-10`，条目为 \"Requirement: 禁用用户需要 ADMIN 角色\"，要求角色校验 MUST 先于其他校验执行，非 ADMIN 调用 MUST 返回 403，且 MUST NOT 修改任何用户的状态。\n\n## 实现在哪里\n\n**后端**\n- `backend/src/main/java/com/example/admin/user/UserService.java:11`：常量 `ADMIN_ROLE = \"ADMIN\"`。\n- `backend/src/main/java/com/example/admin/user/UserService.java:34-39`：`disable` 开头先用 `selectById(operatorId)` 查操作者，操作者不存在或角色不是 ADMIN 时抛 `BusinessException(403, \"仅管理员可以禁用用户\")`。之后才是原有的三项校验：禁用自己返回 400，目标不存在返回 404，目标是 ADMIN 返回 403（`UserService.java:40-46`）。\n- `backend/src/main/java/com/example/admin/user/UserController.java:36-38`：从请求属性取出 `operatorId`，传给 Service。\n\n**新增的当前用户接口（给前端判断角色用）**\n- `backend/src/main/java/com/example/admin/auth/LoginController.java:20`：返回结构 `CurrentUser(id, username, roleName)`，不包含 `passwordHash`。\n- `backend/src/main/java/com/example/admin/auth/LoginController.java:33-34`：接口 `GET /api/auth/me`。\n- `backend/src/main/java/com/example/admin/auth/AuthService.java:33-39`：`currentUser` 查询用户，查不到返回 401。\n\n**前端**\n- `frontend/src/api/user.js:6`：`fetchCurrentUser`。\n- `frontend/src/views/UserList.vue:40`：`isAdmin` 判断。\n- `frontend/src/views/UserList.vue:13`：按钮显示条件为 `isAdmin && row.status === 'ACTIVE' && row.roleName !== 'ADMIN'`。\n- `frontend/src/views/UserList.vue:42` 和 `:73-74`：页面挂载时调用 `loadCurrentUser`。\n\n**测试**\n- `backend/src/test/java/com/example/admin/user/UserServiceTest.java:51-63`：覆盖三种情况——USER 禁用 USER 得 403、USER 禁用不存在的 id 得 403 而非 404、操作者不存在得 403。\n\n知识页 `.devflow/knowledge/pages/user-management.md:41-49` 和上面的源码一致，暂时不需要更新。"
+  }
+}

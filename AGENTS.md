@@ -9,5 +9,5 @@
 - `.devflow/changes/*/events.jsonl` 只能由 devflow 命令追加，不要手改。
 - `devflow approve` 与 `devflow archive` 只能由人在自己的终端中运行，不要代为执行。
 - 改代码之前先出方案：新功能或行为修改用 `devflow-propose` 写成变更，经人审批（`devflow approve`）后再实现。
-- 技能：`devflow-propose`（提出变更方案）、`devflow-scan`（生成或更新知识页）、`devflow-ask`（带引用回答项目问题）。
+- 技能：`devflow-propose`（提出变更方案）、`devflow-apply`（实现已批准的变更并验证）、`devflow-archive`（归档前更新知识页）、`devflow-scan`（生成或更新知识页）、`devflow-ask`（带引用回答项目问题）。
 <!-- devflow:end -->

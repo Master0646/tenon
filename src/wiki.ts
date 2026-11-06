@@ -2,7 +2,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, matchesGlob, normalize } from 'node:path';
 import { parse } from 'yaml';
-import { DF, git, listFiles, type Issue } from './core.ts';
+import { DF, archiveTarget, git, listChanges, listFiles, type Issue } from './core.ts';
 
 const KDIR = `${DF}/knowledge`;
 const SLUG = /^[a-z0-9][a-z0-9-]*$/;
@@ -120,7 +120,8 @@ export function lintWiki(root: string): { issues: Issue[]; pages: Page[] } {
       }
       for (const m of line.matchAll(/\]\(([^)\s#]+\.md)(#[^)]*)?\)/g)) {
         if (/^[a-z]+:/i.test(m[1])) continue;
-        if (!existsSync(join(root, dirname(rel), m[1]))) err(`链接 ${m[1]} 指向的文件不存在`, undefined, parts.bodyLine + i);
+        const target = normalize(join(dirname(rel), m[1])).split('\\').join('/');
+        if (!existsSync(join(root, target)) && !pendingArchiveFile(root, target)) err(`链接 ${m[1]} 指向的文件不存在`, undefined, parts.bodyLine + i);
       }
     });
 
@@ -152,6 +153,13 @@ export function lintWiki(root: string): { issues: Issue[]; pages: Page[] } {
     if (!slugs.has(s)) issues.push({ level: 'error', file: indexRel, message: `列了不存在的页面 pages/${s}.md` });
   }
   return { issues, pages };
+}
+
+/** 链接指向某个进行中变更归档后的位置，且该文件现在就在变更目录里：归档前写好的设计原因链接 */
+function pendingArchiveFile(root: string, target: string): boolean {
+  const m = /^\.devflow\/changes\/archive\/([^/]+)\/(.+)$/.exec(target);
+  if (!m) return false;
+  return listChanges(root).some((id) => archiveTarget(id) === `${DF}/changes/archive/${m[1]}` && existsSync(join(root, DF, 'changes', id, m[2])));
 }
 
 /** 引用文件在 verified_commit 之后（含未提交的修改）有改动 → stale */

@@ -6,6 +6,8 @@ import { detectAgents, installAgents, parseAgents, type AgentResult } from './ag
 import { check } from './check.ts';
 import { lintWiki } from './wiki.ts';
 import { render } from './render.ts';
+import { applyStart, taskDone, verify } from './exec.ts';
+import { commitArchive, discardArchive, pendingTx, stageArchive } from './archive.ts';
 import { resolve } from 'node:path';
 import { DevflowError, listChanges, repoRoot, requireChange, requireInit, reviewedFiles, type Issue } from './core.ts';
 import { init, newChange } from './init.ts';
@@ -23,6 +25,10 @@ const HELP = `用法：devflow <命令> [参数] [--json]
   status [id]          显示变更的派生状态
   render <id> [-o f]   从被审文件生成离线审查页（默认 .devflow/runtime/rendered/<id>.html）
   approve <id>         批准变更并绑定内容哈希（只能由人在交互终端中运行）
+  apply <id> --start   记录开工（状态须为 approved）
+  task done <id> <T>   记录任务完成
+  verify <id>          运行 project.yaml 声明的验证命令并记录结果
+  archive <id>         合并规范增量并归档变更（只能由人在交互终端中运行；中断后重跑即继续）
   check [--staged]     门禁检查（pre-commit hook 与 CI 使用）
 `;
 
@@ -30,10 +36,27 @@ const { values: opts, positionals } = parseArgs({
   allowPositionals: true,
   options: {
     json: { type: 'boolean' }, staged: { type: 'boolean' }, agents: { type: 'string' }, out: { type: 'string', short: 'o' },
+    start: { type: 'boolean' },
     help: { type: 'boolean', short: 'h' },
   },
 });
 const [cmd, arg] = positionals;
+
+/** 人专属命令：Agent 的 shell 工具通常不是 TTY。这不是防篡改，只防 Agent 越级（见设计 §2.2） */
+function requireHuman(cmdName: string): void {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    throw new DevflowError(`${cmdName} 只能由人在交互终端中运行`, '请在你自己的终端里执行该命令，不要让 Agent 代为执行');
+  }
+}
+
+async function confirm(question: string): Promise<boolean> {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  // Ctrl+D / Ctrl+C 会让 question 抛 AbortError，按取消处理
+  const answer = (await rl.question(question).catch(() => '')).trim().toLowerCase();
+  rl.close();
+  if (answer !== 'y') console.log('已取消');
+  return answer === 'y';
+}
 
 function printIssues(issues: Issue[]): void {
   for (const i of issues) {
@@ -119,10 +142,7 @@ async function main(): Promise<number> {
       return 0;
     }
     case 'approve': {
-      // 人专属：Agent 的 shell 工具通常不是 TTY。这不是防篡改，只防 Agent 越级（见设计 §2.2）
-      if (!process.stdin.isTTY || !process.stdout.isTTY) {
-        throw new DevflowError('approve 只能由人在交互终端中运行', '请在你自己的终端里执行该命令，不要让 Agent 代为执行');
-      }
+      requireHuman('approve');
       const id = requireChange(root, arg);
       const ev = prepareApproval(root, id);
       console.log(`变更：${id}`);
@@ -130,16 +150,58 @@ async function main(): Promise<number> {
       console.log(`内容哈希：${ev.hash}`);
       console.log('被审文件：');
       for (const f of reviewedFiles(root, id)) console.log(`  ${f}`);
-      const rl = createInterface({ input: process.stdin, output: process.stdout });
-      // Ctrl+D / Ctrl+C 会让 question 抛 AbortError，按取消处理
-      const answer = (await rl.question('确认批准？输入 y 确认：').catch(() => '')).trim().toLowerCase();
-      rl.close();
-      if (answer !== 'y') {
-        console.log('已取消');
-        return 1;
-      }
+      if (!(await confirm('确认批准？输入 y 确认：'))) return 1;
       approve(root, id, ev.hash);
       console.log(`✓ 已批准 ${id}`);
+      return 0;
+    }
+    case 'apply': {
+      if (!opts.start) throw new DevflowError('用法：devflow apply <id> --start', '记录开工；开工前状态必须为 approved');
+      const ev = applyStart(root, arg!);
+      if (opts.json) console.log(JSON.stringify(ev, null, 2));
+      else console.log(`✓ ${arg} 已开工（基于 ${ev.type === 'apply-started' ? ev.head.slice(0, 7) : ''}）`);
+      return 0;
+    }
+    case 'task': {
+      if (arg !== 'done') throw new DevflowError(`未知子命令：task ${arg ?? ''}`, '用法：devflow task done <id> <任务ID>');
+      const [, , id, task] = positionals;
+      taskDone(root, id, task);
+      const st = deriveStatus(root, id);
+      if (opts.json) console.log(JSON.stringify(st, null, 2));
+      else console.log(`✓ ${task} 已完成；任务 ${st.tasks.done}/${st.tasks.total}`);
+      return 0;
+    }
+    case 'verify': {
+      const r = verify(root, arg!);
+      if (opts.json) console.log(JSON.stringify(r, null, 2));
+      else {
+        for (const c of r.checks) {
+          console.log(`${c.exit === 0 ? '✓' : '✗'} ${c.name}  退出码 ${c.exit ?? '—'}  ${(c.ms / 1000).toFixed(1)}s${c.note ? `  ${c.note}` : ''}`);
+          if (c.exit !== 0) console.log(`    日志：${c.log}`);
+        }
+        console.log(`结果：${r.result}${r.note ? `（${r.note}）` : ''}；状态：${deriveStatus(root, arg!).status}`);
+      }
+      return r.result === 'pass' ? 0 : 1;
+    }
+    case 'archive': {
+      requireHuman('archive');
+      requireInit(root);
+      if (!arg) throw new DevflowError('缺少变更 ID', '用法：devflow archive <id>');
+      if (pendingTx(root, arg)) {
+        console.log(`发现 ${arg} 未完成的归档事务，继续执行剩余步骤`);
+      } else {
+        const tx = stageArchive(root, arg);
+        console.log(`变更：${arg}  归档人：${tx.actor}`);
+        console.log('将写入：');
+        for (const w of tx.writes) console.log(`  ${w.to}`);
+        console.log(`将移动：${tx.move.from} → ${tx.move.to}`);
+        if (!(await confirm('确认归档？输入 y 确认：'))) {
+          discardArchive(root, arg);
+          return 1;
+        }
+      }
+      const r = commitArchive(root, arg);
+      console.log(`✓ 已归档到 ${r.target}${r.specs.length ? `；更新规范：${r.specs.join(', ')}` : ''}`);
       return 0;
     }
     case 'render': {

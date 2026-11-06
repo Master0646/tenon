@@ -1,0 +1,15 @@
+schema_version: 1
+# 只有这里声明的命令会被 devflow verify 执行。本文件由人维护，计入每次批准的哈希。
+verify:
+  - name: backend-test
+    run: mvn -q -B test
+    cwd: backend
+#  - name: backend-test
+#    run: mvn -q test
+#    cwd: backend
+exclude:            # 不得被知识页引用、不得出现在渲染页中
+  - ".env*"
+  - "**/*.pem"
+  - "**/*.key"
+  - "**/node_modules/**"
+enforce: warn       # warn | strict：暂存了未开工变更的代码时，警告还是拒绝提交

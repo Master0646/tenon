@@ -1,0 +1,33 @@
+schema_version: 1
+tasks:
+  - id: T1
+    title: 后端引入测试依赖
+    acceptance:
+      - backend/pom.xml 包含 test scope 的 spring-boot-starter-test
+      - 在 backend 目录运行 mvn -q test 成功
+  - id: T2
+    title: UserService#disable 增加操作者 ADMIN 角色校验
+    depends_on: [T1]
+    acceptance:
+      - UserServiceTest 覆盖：USER 操作者禁用 USER 返回 403，且未调用 updateStatus
+      - UserServiceTest 覆盖：USER 操作者禁用不存在的 id 返回 403 而非 404
+      - UserServiceTest 覆盖：操作者记录不存在返回 403
+      - UserServiceTest 覆盖：ADMIN 禁用 ACTIVE 的 USER 调用 updateStatus(id, DISABLED)
+      - UserServiceTest 覆盖：ADMIN 禁用自己返回 400、禁用 ADMIN 返回 403、禁用不存在的 id 返回 404
+      - mvn -q test 通过
+  - id: T3
+    title: 新增 GET /api/auth/me 返回当前用户 id、用户名、角色名
+    depends_on: [T1]
+    acceptance:
+      - AuthServiceTest 覆盖：存在的用户返回 id、username、roleName
+      - AuthServiceTest 覆盖：用户记录不存在时抛出 code 为 401 的 BusinessException
+      - CurrentUser 返回结构不含 passwordHash 字段
+      - WebConfig 未把 /api/auth/me 排除在登录校验之外
+      - mvn -q test 通过
+  - id: T4
+    title: 用户列表页对非 ADMIN 隐藏禁用按钮
+    depends_on: [T3]
+    acceptance:
+      - frontend/src/api/user.js 导出 fetchCurrentUser，请求 GET /auth/me
+      - UserList.vue 中禁用按钮的 v-if 条件包含 isAdmin
+      - isAdmin 初始为 false，获取当前用户失败时保持 false

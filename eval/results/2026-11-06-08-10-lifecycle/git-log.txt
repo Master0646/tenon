@@ -1,0 +1,96 @@
+== archive 2026-11-06-admin-only-disable
+
+ .../2026-11-06-admin-only-disable/change.yaml      |  0
+ .../2026-11-06-admin-only-disable/design.md        |  0
+ .../2026-11-06-admin-only-disable/events.jsonl     |  1 +
+ .../2026-11-06-admin-only-disable/proposal.md      |  0
+ .../2026-11-06-admin-only-disable/specs/.gitkeep   |  0
+ .../specs/user-management/spec.md                  |  0
+ .../2026-11-06-admin-only-disable/tasks.yaml       |  0
+ .devflow/knowledge/log.md                          |  3 +
+ .devflow/knowledge/pages/auth.md                   | 16 ++++-
+ .devflow/knowledge/pages/project-overview.md       |  8 ++-
+ .devflow/knowledge/pages/user-management.md        | 11 ++--
+ .devflow/specs/specs.lock                          |  4 +-
+ .devflow/specs/user-management/spec.md             | 74 ++++++++++++++++++++++
+ 13 files changed, 106 insertions(+), 11 deletions(-)
+== implement 2026-11-06-admin-only-disable
+
+ .../2026-11-06-admin-only-disable/events.jsonl     |  6 ++
+ backend/pom.xml                                    |  5 ++
+ .../java/com/example/admin/auth/AuthService.java   |  9 +++
+ .../com/example/admin/auth/LoginController.java    | 10 +++
+ .../java/com/example/admin/user/UserService.java   | 10 ++-
+ .../com/example/admin/auth/AuthServiceTest.java    | 53 +++++++++++++
+ .../com/example/admin/user/UserServiceTest.java    | 86 ++++++++++++++++++++++
+ frontend/src/api/user.js                           |  3 +-
+ frontend/src/views/UserList.vue                    | 22 +++++-
+ 9 files changed, 197 insertions(+), 7 deletions(-)
+== proposal 2026-11-06-admin-only-disable
+
+ .../2026-11-06-admin-only-disable/change.yaml      |  9 +++
+ .../2026-11-06-admin-only-disable/design.md        | 72 ++++++++++++++++++++++
+ .../2026-11-06-admin-only-disable/events.jsonl     |  1 +
+ .../2026-11-06-admin-only-disable/proposal.md      | 41 ++++++++++++
+ .../2026-11-06-admin-only-disable/specs/.gitkeep   |  0
+ .../specs/user-management/spec.md                  | 72 ++++++++++++++++++++++
+ .../2026-11-06-admin-only-disable/tasks.yaml       | 33 ++++++++++
+ 7 files changed, 228 insertions(+)
+== knowledge
+
+ .devflow/knowledge/index.md                  |  4 ++
+ .devflow/knowledge/log.md                    |  4 ++
+ .devflow/knowledge/pages/api-conventions.md  | 41 ++++++++++++++++++++
+ .devflow/knowledge/pages/auth.md             | 53 ++++++++++++++++++++++++++
+ .devflow/knowledge/pages/project-overview.md | 47 +++++++++++++++++++++++
+ .devflow/knowledge/pages/user-management.md  | 56 ++++++++++++++++++++++++++++
+ 6 files changed, 205 insertions(+)
+== devflow init
+
+ .claude/settings.json                   |  12 ++++
+ .claude/skills/devflow-apply/SKILL.md   |  31 ++++++++++
+ .claude/skills/devflow-archive/SKILL.md |  25 ++++++++
+ .claude/skills/devflow-ask/SKILL.md     |  30 +++++++++
+ .claude/skills/devflow-propose/SKILL.md | 105 ++++++++++++++++++++++++++++++++
+ .claude/skills/devflow-scan/SKILL.md    |  64 +++++++++++++++++++
+ .devflow/changes/archive/.gitkeep       |   0
+ .devflow/knowledge/index.md             |   3 +
+ .devflow/knowledge/log.md               |   1 +
+ .devflow/knowledge/pages/.gitkeep       |   0
+ .devflow/project.yaml                   |  15 +++++
+ .devflow/specs/specs.lock               |   1 +
+ .gitignore                              |   1 +
+ CLAUDE.md                               |  13 ++++
+ 14 files changed, 301 insertions(+)
+== demo
+
+ .gitignore                                         |  3 ++
+ backend/pom.xml                                    | 39 ++++++++++++++
+ .../java/com/example/admin/AdminApplication.java   | 13 +++++
+ .../com/example/admin/auth/AuthInterceptor.java    | 29 ++++++++++
+ .../java/com/example/admin/auth/AuthService.java   | 31 +++++++++++
+ .../com/example/admin/auth/LoginController.java    | 27 ++++++++++
+ .../java/com/example/admin/auth/TokenService.java  | 34 ++++++++++++
+ .../java/com/example/admin/auth/WebConfig.java     | 21 ++++++++
+ .../java/com/example/admin/common/ApiResponse.java | 12 +++++
+ .../example/admin/common/BusinessException.java    | 12 +++++
+ .../admin/common/GlobalExceptionHandler.java       | 25 +++++++++
+ .../java/com/example/admin/common/PageResult.java  |  5 ++
+ .../src/main/java/com/example/admin/role/Role.java | 15 ++++++
+ .../java/com/example/admin/role/RoleMapper.java    | 11 ++++
+ .../src/main/java/com/example/admin/user/User.java | 33 ++++++++++++
+ .../com/example/admin/user/UserController.java     | 41 ++++++++++++++
+ .../java/com/example/admin/user/UserMapper.java    | 18 +++++++
+ .../java/com/example/admin/user/UserService.java   | 43 +++++++++++++++
+ backend/src/main/resources/application.yml         | 13 +++++
+ backend/src/main/resources/mapper/UserMapper.xml   | 46 ++++++++++++++++
+ backend/src/main/resources/schema.sql              | 18 +++++++
+ frontend/package.json                              | 19 +++++++
+ frontend/src/api/request.js                        | 29 ++++++++++
+ frontend/src/api/user.js                           |  6 +++
+ frontend/src/router/index.js                       | 20 +++++++
+ frontend/src/views/Login.vue                       | 33 ++++++++++++
+ frontend/src/views/UserDetail.vue                  | 21 ++++++++
+ frontend/src/views/UserList.vue                    | 63 ++++++++++++++++++++++
+ frontend/vite.config.js                            | 12 +++++
+ 29 files changed, 692 insertions(+)
