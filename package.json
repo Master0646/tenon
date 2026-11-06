@@ -1,0 +1,24 @@
+{
+  "name": "devflow",
+  "version": "0.0.0",
+  "private": true,
+  "description": "规范驱动、带项目长期知识的 AI 软件工程内核（嵌入现有 Agent 使用）",
+  "type": "module",
+  "bin": {
+    "devflow": "./src/cli.ts"
+  },
+  "engines": {
+    "node": ">=23.6"
+  },
+  "scripts": {
+    "test": "node --test \"test/**/*.test.ts\"",
+    "typecheck": "tsc"
+  },
+  "dependencies": {
+    "yaml": "^2.9.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "typescript": "^7.0.2"
+  }
+}
