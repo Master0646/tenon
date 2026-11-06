@@ -1,0 +1,96 @@
+# DevFlow
+
+嵌入现有 AI 编码 Agent（Claude Code、Codex）使用的软件工程内核：先出方案、人审批，再实现、验证、归档；项目规范与知识以文件形式留在仓库里，换一个会话也能接着做。
+
+DevFlow 自己不调用任何模型。读代码、写方案、写代码由你已有的 Agent 完成；`devflow` 命令只做确定性的事：校验格式、绑定批准哈希、判定状态、运行验证命令、合并规范、渲染审查页、在提交时把关。
+
+## 安装
+
+要求：Node 22 或更高版本、git。
+
+```bash
+cd devflow && pnpm install && pnpm pack
+```
+
+```bash
+npm install -g ./devflow-0.1.0.tgz
+```
+
+```bash
+devflow --version
+```
+
+> 开发时可以不打包，直接运行 `node src/cli.ts <命令>`（需要 Node 23.6 或更高版本）。
+
+## 五分钟上手
+
+在一个已有提交的 Git 项目里：
+
+```bash
+devflow init --agents claude,codex
+```
+
+它会创建 `.devflow/`，安装 pre-commit hook，并为 Claude Code（`.claude/skills/`、`CLAUDE.md`）和 Codex（`.agents/skills/`、`AGENTS.md`、`.codex/rules/`）生成技能与说明。然后：
+
+1. **声明验证命令**（由人维护）：编辑 `.devflow/project.yaml` 的 `verify`，例如 `mvn -q test`、`pnpm test`。
+2. **自检**：`devflow doctor`。
+3. **提方案**：在 Agent 里说"用 devflow-propose 提一个变更：……"。Agent 写好方案后运行 `devflow render <id>`，给你一个离线审查页。
+4. **审批**：你在**自己的终端**运行 `devflow approve <id>`，核对哈希与审查页一致后输入 `y`。
+5. **实现与验证**：在 Agent 里说"用 devflow-apply 实现变更 <id>"。它会开工、逐个完成任务，并运行 `devflow verify <id>` 直到通过。
+6. **提交代码**：由你决定何时提交。
+7. **归档准备**：在 Agent 里说"用 devflow-archive 为变更 <id> 做归档准备"。它会更新知识页。
+8. **归档**：你在自己的终端运行 `devflow archive <id>`。规范增量合并进 `.devflow/specs/`，变更移到 `.devflow/changes/archive/`。
+
+以后任何新会话，Agent 都能从 `.devflow/` 找回当时的需求、规范和设计原因。
+
+## 人与 Agent 的分工
+
+| 谁 | 做什么 |
+| --- | --- |
+| 人 | 审查方案、`devflow approve`、提交代码、`devflow archive`、维护 `project.yaml` 中的验证命令 |
+| Agent | 读代码、写方案（propose）、实现与测试（apply）、更新知识页（archive 准备、scan）、带引用回答问题（ask） |
+| devflow | 校验、哈希批准、派生状态、运行验证命令、合并规范、渲染审查页、pre-commit 门禁 |
+
+## 命令
+
+| 命令 | 作用 |
+| --- | --- |
+| `devflow init [--agents claude,codex]` | 初始化 `.devflow/`、hook 与 Agent 文件 |
+| `devflow update [--agents …]` | 升级 devflow 后重新生成 Agent 文件 |
+| `devflow doctor` | 自检，并给出修复命令 |
+| `devflow new <id>` | 生成变更目录骨架 |
+| `devflow validate <id>` | 校验变更文件，并对当前规范做合并试算 |
+| `devflow render <id> [-o 文件]` | 生成离线审查页 |
+| `devflow status [id]` | 显示派生状态与任务进度 |
+| `devflow approve <id>` | 批准并绑定内容哈希（只能由人在交互终端运行） |
+| `devflow apply <id> --start` | 记录开工 |
+| `devflow task done <id> <任务>` | 记录任务完成 |
+| `devflow verify <id>` | 运行 `project.yaml` 中的验证命令 |
+| `devflow archive <id>` | 合并规范并归档（只能由人在交互终端运行；中断后重跑即继续） |
+| `devflow wiki lint` | 校验知识页的引用、链接，并检查是否过期 |
+| `devflow check [--staged]` | 门禁检查（hook 与 CI 使用） |
+
+所有命令支持 `--json`。
+
+## 状态
+
+状态不存盘，每次由变更文件、`events.jsonl` 和 git 现算：
+
+`draft` → `approved` → `applying` → `ready_to_archive` → `archived`。另有两个旁支：`rebase_required`（批准后，有别的提交改动了影响路径）和 `needs_fix`（验证失败或结果未知）。
+
+- 批准后修改方案文件或 `project.yaml`，批准自动失效，状态回到 `draft`。
+- 验证通过后再改代码，需要重新验证。
+- 验证命令无法运行、没有声明命令、验证期间工作树发生变化，结果都记为 `unknown`，不算通过。
+
+## 安全模型与已知限制
+
+- **防的是失误与越级，不防恶意篡改。** 有写权限的 Agent 理论上能改任何文件。
+- **人专属命令**：`approve`、`archive` 要求交互终端（TTY）。Claude Code 的 shell 不是 TTY，此防线有效；Codex 可以让模型选择分配 TTY，此防线在 Codex 下**可被绕过**。
+- **禁止规则**：`init` 为 Claude Code 写入 deny 规则（已实测拦截 `devflow approve`），为 Codex 写入 `.codex/rules/devflow.rules`（只在项目被信任时加载，属实验性功能）。
+- **最后一道防线**是 git：pre-commit 与 CI 中的 `devflow check` 会拒绝手改 `.devflow/specs/`、改写已提交的事件日志等行为；批准记录随 `events.jsonl` 进入代码审查。
+- `check` 检查的是工作树内容而不是暂存区内容；用 `git add -p` 部分暂存时，可能误拦或漏过。
+- 在小项目上，知识页对"代码里能直接搜到的事实"没有带来准确率提升（见 `docs/tasks/2026-11-06-devflow-m1.md`）；它的价值在于设计原因和历史变更这类代码里看不出来的知识。
+
+## 第三方许可证
+
+见 [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md)。devflow 本身尚未选择开源许可证。

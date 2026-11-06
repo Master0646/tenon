@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 // devflow 命令行入口。所有命令支持 --json；出错时退出码为 1
+import { readFileSync } from 'node:fs';
 import { createInterface } from 'node:readline/promises';
+import { doctor } from './doctor.ts';
 import { parseArgs } from 'node:util';
 import { detectAgents, installAgents, parseAgents, type AgentResult } from './agents.ts';
 import { check } from './check.ts';
@@ -14,8 +16,13 @@ import { init, newChange } from './init.ts';
 import { approve, deriveStatus, prepareApproval } from './status.ts';
 import { validateChange, validateProject } from './validate.ts';
 
-const HELP = `用法：devflow <命令> [参数] [--json]
+const VERSION: string = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
 
+const HELP = `devflow ${VERSION}
+用法：devflow <命令> [参数] [--json]
+
+  doctor               检查环境、hook、Agent 文件与验证命令，并给出修复命令
+  --version            显示版本号
   init [--agents a,b]  在当前 Git 项目创建 .devflow/、安装 pre-commit hook，
                        并为 Agent 生成技能与入口片段（默认 claude,codex）
   update [--agents]    重新生成 Agent 文件（默认：已安装过的 Agent）
@@ -36,7 +43,7 @@ const { values: opts, positionals } = parseArgs({
   allowPositionals: true,
   options: {
     json: { type: 'boolean' }, staged: { type: 'boolean' }, agents: { type: 'string' }, out: { type: 'string', short: 'o' },
-    start: { type: 'boolean' },
+    start: { type: 'boolean' }, version: { type: 'boolean', short: 'v' },
     help: { type: 'boolean', short: 'h' },
   },
 });
@@ -83,9 +90,24 @@ function report(issues: Issue[], okText: string): number {
 }
 
 async function main(): Promise<number> {
+  if (opts.version) {
+    console.log(VERSION);
+    return 0;
+  }
   if (opts.help || !cmd || cmd === 'help') {
     console.log(HELP);
     return 0;
+  }
+  if (cmd === 'doctor') {
+    const findings = doctor(process.cwd());
+    if (opts.json) console.log(JSON.stringify(findings, null, 2));
+    else {
+      for (const f of findings) {
+        console.log(`${{ ok: '✓', warn: '!', error: '✗' }[f.level]} ${f.item}：${f.message}`);
+        if (f.hint && f.level !== 'ok') console.log(`    修复：${f.hint}`);
+      }
+    }
+    return findings.some((f) => f.level === 'error') ? 1 : 0;
   }
   const root = repoRoot(process.cwd());
 

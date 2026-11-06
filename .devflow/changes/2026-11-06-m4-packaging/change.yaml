@@ -1,0 +1,13 @@
+schema_version: 1
+title: 可安装的发行包、devflow doctor 与使用文档
+affected_paths:
+  - package.json
+  - pnpm-lock.yaml
+  - tsconfig.json
+  - tsconfig.build.json
+  - .gitignore
+  - src/**
+  - test/**
+  - scripts/**
+  - README.md
+  - THIRD_PARTY_LICENSES.md

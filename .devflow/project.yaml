@@ -1,6 +1,10 @@
 schema_version: 1
 # 只有这里声明的命令会被 devflow verify 执行。本文件由人维护，计入每次批准的哈希。
-verify: []
+verify:
+  - name: unit-tests
+    run: pnpm -s test
+  - name: typecheck
+    run: pnpm -s typecheck
 #  - name: backend-test
 #    run: mvn -q test
 #    cwd: backend

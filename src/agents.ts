@@ -47,11 +47,28 @@ export function upsertBlock(text: string, block: string): string {
 
 export interface AgentResult { written: string[]; warnings: string[] }
 
+const templateSkills = () => readdirSync(join(TPL, 'skills')).filter((s) => existsSync(join(TPL, 'skills', s, 'SKILL.md')));
+
+/** 与当前版本模板不一致（缺失或被改动）的 Agent 文件 */
+export function agentDrift(root: string, agent: Agent): string[] {
+  const drift: string[] = [];
+  for (const s of templateSkills()) {
+    const rel = `${SKILL_DIR[agent]}/${s}/SKILL.md`;
+    const f = join(root, rel);
+    if (!existsSync(f) || readFileSync(f, 'utf8') !== readFileSync(join(TPL, 'skills', s, 'SKILL.md'), 'utf8')) drift.push(rel);
+  }
+  const ef = join(root, ENTRY_FILE[agent]);
+  const entry = readFileSync(join(TPL, 'entry.md'), 'utf8');
+  const text = existsSync(ef) ? readFileSync(ef, 'utf8') : '';
+  if (upsertBlock(text, entry) !== text) drift.push(ENTRY_FILE[agent]);
+  return drift;
+}
+
 export function installAgents(root: string, agents: Agent[]): AgentResult {
   const written: string[] = [];
   const warnings: string[] = [];
   const entry = readFileSync(join(TPL, 'entry.md'), 'utf8');
-  const skills = readdirSync(join(TPL, 'skills')).filter((s) => existsSync(join(TPL, 'skills', s, 'SKILL.md')));
+  const skills = templateSkills();
 
   for (const a of agents) {
     for (const s of skills) {

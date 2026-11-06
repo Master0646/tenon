@@ -29,7 +29,8 @@ const SKELETON: Record<string, string> = {
 
 export const HOOK_MARK = '# devflow-hook';
 const IGNORE_LINE = `${DF}/runtime/`;
-const CLI = fileURLToPath(new URL('./cli.ts', import.meta.url));
+// 开发时运行 src/*.ts，安装后运行 dist/*.js：hook 指向与当前文件同扩展名的 cli
+export const CLI = fileURLToPath(new URL(import.meta.url.endsWith('.ts') ? './cli.ts' : './cli.js', import.meta.url));
 const shq = (s: string): string => `'${s.replaceAll("'", `'\\''`)}'`;
 
 export interface InitResult {
