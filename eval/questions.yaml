@@ -1,0 +1,123 @@
+# 演示项目 examples/user-admin 的评测题库（v1）
+# must：每一项是一组可互相替代的文件，回答必须至少引用组内一个；ok：额外允许引用、不扣准确率的文件
+# unanswerable：项目中不存在的内容，期望回答"未知"
+# 路径前缀 B = backend/src/main/java/com/example/admin
+schema_version: 1
+prefix:
+  B: backend/src/main/java/com/example/admin
+  R: backend/src/main/resources
+  F: frontend/src
+questions:
+  - id: q01
+    q: 用户列表接口的 URL 是什么？由哪个 Controller 方法处理？
+    must: [[B/user/UserController.java]]
+    ok: [B/user/UserService.java, F/api/user.js]
+  - id: q02
+    q: 用户列表查询的 SQL 写在哪里？查询了哪些表？
+    must: [[R/mapper/UserMapper.xml]]
+    ok: [B/user/UserMapper.java, B/user/UserService.java, R/schema.sql]
+  - id: q03
+    q: 禁用用户有哪些限制条件？
+    must: [[B/user/UserService.java]]
+    ok: [B/user/UserController.java, F/views/UserList.vue, B/common/BusinessException.java, B/common/GlobalExceptionHandler.java]
+  - id: q04
+    q: 登录 token 的有效期是多长？在哪里定义？
+    must: [[B/auth/TokenService.java]]
+    ok: [B/auth/AuthService.java]
+  - id: q05
+    q: 前端如何把登录 token 传给后端？
+    must: [[F/api/request.js]]
+    ok: [B/auth/AuthInterceptor.java, F/views/Login.vue]
+  - id: q06
+    q: 后端返回 401 时，前端如何处理？
+    must: [[F/api/request.js]]
+    ok: [F/router/index.js, B/auth/AuthInterceptor.java]
+  - id: q07
+    q: 用户列表默认每页多少条？最多能返回多少条？
+    must: [[B/user/UserController.java], [B/user/UserService.java]]
+    ok: [F/views/UserList.vue]
+  - id: q08
+    q: users 表有哪些字段？
+    must: [[R/schema.sql]]
+    ok: [B/user/User.java, R/mapper/UserMapper.xml]
+  - id: q09
+    q: 用户状态有哪些取值？
+    must: [[B/user/User.java, R/schema.sql]]
+    ok: [R/mapper/UserMapper.xml, F/views/UserList.vue, B/user/UserService.java]
+  - id: q10
+    q: 用户详情页对应哪个前端路由和组件？
+    must: [[F/router/index.js], [F/views/UserDetail.vue]]
+    ok: [F/api/user.js]
+  - id: q11
+    q: 后端服务端口是多少？前端开发服务器如何转发 /api 请求？
+    must: [[R/application.yml], [frontend/vite.config.js]]
+    ok: []
+  - id: q12
+    q: 后端接口的统一响应格式是什么？
+    must: [[B/common/ApiResponse.java]]
+    ok: [B/common/GlobalExceptionHandler.java, F/api/request.js, B/common/PageResult.java]
+  - id: q13
+    q: 业务异常是如何转换成 HTTP 响应的？
+    must: [[B/common/GlobalExceptionHandler.java]]
+    ok: [B/common/BusinessException.java, B/common/ApiResponse.java]
+  - id: q14
+    q: 用户和角色是什么关系？用户列表里的角色名是怎么查出来的？
+    must: [[R/schema.sql, B/user/User.java], [R/mapper/UserMapper.xml]]
+    ok: [B/role/Role.java, B/role/RoleMapper.java]
+  - id: q15
+    q: 用户列表页的"禁用"按钮调用哪个后端接口？什么情况下按钮不显示？
+    must: [[F/views/UserList.vue], [F/api/user.js, B/user/UserController.java]]
+    ok: [B/user/UserService.java]
+  - id: q16
+    q: 登录时密码如何校验？被禁用的用户能登录吗？
+    must: [[B/auth/AuthService.java]]
+    ok: [B/auth/LoginController.java, R/schema.sql, B/user/User.java]
+  - id: q17
+    q: 哪些后端接口不需要登录就能访问？
+    must: [[B/auth/WebConfig.java]]
+    ok: [B/auth/AuthInterceptor.java, B/auth/LoginController.java, F/router/index.js]
+  # v2：跨文件推理题。expect：回答必须匹配的正则（全部匹配才算结论正确）
+  - id: q21
+    q: 用户被禁用后，他之前登录拿到的 token 还能继续访问接口吗？
+    must: [[B/auth/TokenService.java, B/auth/AuthInterceptor.java]]
+    ok: [B/auth/AuthService.java, B/user/UserService.java, B/user/User.java, B/auth/WebConfig.java, B/user/UserMapper.java, R/mapper/UserMapper.xml, B/user/UserController.java]
+    expect: ["(仍|还|依然|继续|照样)[^。；\\n]{0,8}(能|可以|有效)"]
+  - id: q22
+    q: 后端服务重启后，已登录的用户需要重新登录吗？为什么？
+    must: [[B/auth/TokenService.java]]
+    ok: [B/auth/AuthInterceptor.java, F/api/request.js, B/auth/AuthService.java, F/router/index.js]
+    expect: ["内存|ConcurrentHashMap", "重新登录|失效"]
+  - id: q23
+    q: 普通用户（USER 角色）登录后，能调用禁用接口禁用另一个普通用户吗？
+    must: [[B/user/UserService.java], [B/user/UserController.java, B/auth/WebConfig.java, B/auth/AuthInterceptor.java]]
+    ok: [F/views/UserList.vue, B/user/User.java, R/mapper/UserMapper.xml, B/auth/TokenService.java, F/api/user.js]
+    expect: ["(没有|未|不|无)[^。；\\n]{0,10}(校验|检查|判断|限制|区分)[^。；\\n]{0,12}(角色|权限|ADMIN|操作者|调用者)"]
+  - id: q24
+    q: 调用用户列表接口时传 size=500，实际最多返回多少条？
+    must: [[B/user/UserService.java]]
+    ok: [B/user/UserController.java, R/mapper/UserMapper.xml, B/user/UserMapper.java]
+    expect: ["100"]
+  - id: q25
+    q: 用户列表的关键字搜索是精确匹配还是模糊匹配？会搜索哪些字段？
+    must: [[R/mapper/UserMapper.xml]]
+    ok: [B/user/UserService.java, B/user/UserController.java, F/views/UserList.vue, B/user/UserMapper.java, F/api/user.js]
+    expect: ["LIKE|模糊", "邮箱|email"]
+  - id: q26
+    q: 前端隐藏"禁用"按钮的条件，和后端拒绝禁用的条件完全一致吗？
+    must: [[F/views/UserList.vue], [B/user/UserService.java]]
+    ok: [B/user/UserController.java, F/api/user.js, B/user/User.java]
+    expect: ["自己|当前登录|本人|operatorId"]
+  - id: q27
+    q: 登录时密码输错，前端最终会给用户显示什么提示？
+    must: [[F/views/Login.vue, F/api/request.js], [B/auth/AuthService.java]]
+    ok: [B/common/GlobalExceptionHandler.java, B/common/BusinessException.java, B/common/ApiResponse.java, F/api/user.js, B/auth/LoginController.java, F/router/index.js]
+    expect: ["用户名或密码错误"]
+  - id: q18
+    q: 系统使用的是哪个消息队列？
+    unanswerable: true
+  - id: q19
+    q: 用户导出 Excel 的功能在哪里实现？
+    unanswerable: true
+  - id: q20
+    q: Redis 缓存的过期时间是多少？
+    unanswerable: true

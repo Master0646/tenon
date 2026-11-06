@@ -7,6 +7,7 @@ import {
 } from './core.ts';
 import { deriveStatus } from './status.ts';
 import { enforceLevel, loadChangeMeta, validateChange, validateProject } from './validate.ts';
+import { lintWiki } from './wiki.ts';
 
 const STARTED = new Set(['applying', 'needs_fix', 'ready_to_archive']);
 
@@ -28,6 +29,8 @@ export function check(root: string, opts: { staged: boolean }): Issue[] {
 
   issues.push(...checkSpecLock(root));
   if (opts.staged) issues.push(...checkStagedCode(root));
+  // 知识页问题不拦提交：删了被引用的代码文件不应阻止提交，由 wiki lint 与 archive 把关
+  issues.push(...lintWiki(root).issues.map((i) => ({ ...i, level: 'warn' as const })));
   return issues;
 }
 

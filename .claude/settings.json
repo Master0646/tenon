@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "deny": [
+      "Bash(devflow approve *)",
+      "Bash(devflow archive *)",
+      "Edit(/.devflow/specs/**)",
+      "Write(/.devflow/specs/**)",
+      "Edit(/.devflow/changes/**/events.jsonl)",
+      "Write(/.devflow/changes/**/events.jsonl)"
+    ]
+  }
+}

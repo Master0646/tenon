@@ -2,7 +2,9 @@
 // devflow 命令行入口。所有命令支持 --json；出错时退出码为 1
 import { createInterface } from 'node:readline/promises';
 import { parseArgs } from 'node:util';
+import { detectAgents, installAgents, parseAgents, type AgentResult } from './agents.ts';
 import { check } from './check.ts';
+import { lintWiki } from './wiki.ts';
 import { DevflowError, listChanges, repoRoot, requireChange, requireInit, reviewedFiles, type Issue } from './core.ts';
 import { init, newChange } from './init.ts';
 import { approve, deriveStatus, prepareApproval } from './status.ts';
@@ -10,8 +12,11 @@ import { validateChange, validateProject } from './validate.ts';
 
 const HELP = `用法：devflow <命令> [参数] [--json]
 
-  init                 在当前 Git 项目创建 .devflow/ 并安装 pre-commit hook
+  init [--agents a,b]  在当前 Git 项目创建 .devflow/、安装 pre-commit hook，
+                       并为 Agent 生成技能与入口片段（默认 claude,codex）
+  update [--agents]    重新生成 Agent 文件（默认：已安装过的 Agent）
   new <id>             生成变更目录骨架
+  wiki lint            校验知识页的引用、链接与是否过期
   validate <id>        校验变更文件是否齐全、格式正确
   status [id]          显示变更的派生状态
   approve <id>         批准变更并绑定内容哈希（只能由人在交互终端中运行）
@@ -20,7 +25,9 @@ const HELP = `用法：devflow <命令> [参数] [--json]
 
 const { values: opts, positionals } = parseArgs({
   allowPositionals: true,
-  options: { json: { type: 'boolean' }, staged: { type: 'boolean' }, help: { type: 'boolean', short: 'h' } },
+  options: {
+    json: { type: 'boolean' }, staged: { type: 'boolean' }, agents: { type: 'string' }, help: { type: 'boolean', short: 'h' },
+  },
 });
 const [cmd, arg] = positionals;
 
@@ -30,6 +37,11 @@ function printIssues(issues: Issue[]): void {
     out(`${i.level === 'error' ? '✗' : '!'} ${i.file}: ${i.message}`);
     if (i.hint) out(i.hint.replace(/^/gm, '    '));
   }
+}
+
+function printAgents(a: AgentResult): void {
+  for (const f of a.written) console.log(`✓ ${f}`);
+  for (const w of a.warnings) console.warn(`! ${w}`);
 }
 
 /** 输出校验结果；有错误时返回退出码 1 */
@@ -52,15 +64,33 @@ async function main(): Promise<number> {
 
   switch (cmd) {
     case 'init': {
+      const agents = parseAgents(opts.agents);
       const r = init(root);
-      if (opts.json) console.log(JSON.stringify(r, null, 2));
+      const a = installAgents(root, agents);
+      if (opts.json) console.log(JSON.stringify({ ...r, agents: a }, null, 2));
       else {
         for (const f of r.created) console.log(`+ ${f}`);
         if (r.hook === 'foreign') {
           console.warn(`! ${r.hookPath} 已有其他 hook，未覆盖。请在其中加一行：devflow check --staged`);
         } else console.log(`✓ pre-commit hook 已${r.hook === 'installed' ? '安装' : '更新'}：${r.hookPath}`);
+        printAgents(a);
       }
       return 0;
+    }
+    case 'update': {
+      requireInit(root);
+      const agents = opts.agents ? parseAgents(opts.agents) : detectAgents(root);
+      if (!agents.length) throw new DevflowError('没有找到已安装的 Agent 文件', '用 devflow update --agents claude,codex 指定');
+      const a = installAgents(root, agents);
+      if (opts.json) console.log(JSON.stringify(a, null, 2));
+      else printAgents(a);
+      return 0;
+    }
+    case 'wiki': {
+      requireInit(root);
+      if (arg !== 'lint') throw new DevflowError(`未知子命令：wiki ${arg ?? ''}`, '用法：devflow wiki lint');
+      const { issues, pages } = lintWiki(root);
+      return report(issues, `✓ ${pages.length} 个知识页校验通过`);
     }
     case 'new': {
       const files = newChange(root, arg);

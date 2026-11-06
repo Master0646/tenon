@@ -1,0 +1,270 @@
+{
+  "answers": [
+    {
+      "id": "q01",
+      "q": "用户列表接口的 URL 是什么？由哪个 Controller 方法处理？",
+      "answer": "用户列表接口是 **`GET /api/users`**。\n\n- **URL**：类上的 `@RequestMapping(\"/api/users\")`（`backend/src/main/java/com/example/admin/user/UserController.java:15`）加上方法上不带路径的 `@GetMapping`（`UserController.java:23`），合起来就是 `GET /api/users`。\n- **处理方法**：`UserController#list`（`UserController.java:24-29`）。它把参数交给 `userService.list(keyword, page, size)`，返回值是 `ApiResponse<PageResult<User>>`。\n- **查询参数**（`UserController.java:25-27`）：\n  - `keyword`：可选，没有默认值。\n  - `page`：默认 `1`。\n  - `size`：默认 `20`。\n\n关键词怎么匹配、怎么分页，在 `UserService#list` 里，这次没有去看。",
+      "is_error": false,
+      "turns": 3,
+      "cost": 0.0886652
+    },
+    {
+      "id": "q02",
+      "q": "用户列表查询的 SQL 写在哪里？查询了哪些表？",
+      "answer": "用户列表的 SQL 写在 MyBatis 的 XML 映射文件 `backend/src/main/resources/mapper/UserMapper.xml` 里，没有用注解。它查了两张表：`users` 和 `roles`。\n\n**调用链**\n`UserService` 会依次调用两个语句，一个取当前页数据，一个取总数，然后组装成 `PageResult`（`backend/src/main/java/com/example/admin/user/UserService.java:21`）。两个方法的 Mapper 接口在 `backend/src/main/java/com/example/admin/user/UserMapper.java:9`。\n\n**1. 分页查询 `selectPage`**（`UserMapper.xml:9-20`）\n```sql\nSELECT u.id, u.username, u.email, u.password_hash, u.status, u.role_id, r.name AS role_name, u.created_at\nFROM users u\nLEFT JOIN roles r ON r.id = u.role_id\nWHERE (u.username LIKE CONCAT('%', #{keyword}, '%') OR u.email LIKE CONCAT('%', #{keyword}, '%'))  -- 只在 keyword 不为空时加上\nORDER BY u.created_at DESC\nLIMIT #{offset}, #{limit}\n```\n- 查询的字段定义在 `<sql id=\"columns\">` 片段里（`UserMapper.xml:5-7`）。\n- `users` 是主表，别名 `u`。\n- `roles` 是左连接的表，别名 `r`，只用来取 `r.name AS role_name`。\n\n**2. 总数查询 `count`**（`UserMapper.xml:22-29`）\n```sql\nSELECT COUNT(*) FROM users u\nWHERE (u.username LIKE ... OR u.email LIKE ...)  -- 条件和上面一样\n```\n- 只查 `users` 表，不连接 `roles`。\n\n**注意**：列表查询的字段里带了 `u.password_hash`（`UserMapper.xml:6`）。这个字段会不会随列表接口返回给前端，要看 `User` 实体或 Controller 有没有把它过滤掉。这一点我还没查。",
+      "is_error": false,
+      "turns": 3,
+      "cost": 0.1038618
+    },
+    {
+      "id": "q03",
+      "q": "禁用用户有哪些限制条件？",
+      "answer": "**后端只有两条限制：不能禁用自己，也不能禁用 ADMIN 角色的用户。** 两条都写在 `backend/src/main/java/com/example/admin/user/UserService.java#disable` 里。\n\n**后端（接口是 `POST /api/users/{id}/disable`，见 `backend/src/main/java/com/example/admin/user/UserController.java:36-40`）**\n\n1. **调用者必须已登录**：所有 `/api/**` 请求都要带 `Authorization: Bearer <token>`，否则返回 401（`backend/src/main/java/com/example/admin/auth/WebConfig.java:18-19`、`backend/src/main/java/com/example/admin/auth/AuthInterceptor.java:19-25`）。这一步还会得到当前操作者的 ID（`operatorId`）。\n2. **不能禁用自己**：要禁用的 `id` 等于 `operatorId` 时，返回 400 \"不能禁用当前登录的用户\"（`UserService.java:34-36`）。\n3. **目标用户必须存在**：不存在时返回 404 \"用户不存在\"（`UserService.java:37`，通过 `get()` 在 `UserService.java:24-29` 判断）。\n4. **不能禁用 ADMIN**：目标用户的 `roleName` 是 `\"ADMIN\"` 时，返回 403 \"不能禁用管理员\"（`UserService.java:38-40`）。\n\n全部通过后，用户状态改为 `DISABLED`（`UserService.java:41`；状态取值见 `backend/src/main/java/com/example/admin/user/User.java:6`）。\n\n**前端（`frontend/src/views/UserList.vue:13`）**\n\n- 只有状态是 `ACTIVE` 且角色不是 `ADMIN` 的行才显示\"禁用\"按钮。点击后会先弹窗确认（`UserList.vue:52`）。\n\n**禁用后的效果**\n\n- 被禁用的用户再登录会收到 403 \"用户已被禁用\"（`backend/src/main/java/com/example/admin/auth/AuthService.java:26-28`）。\n\n**代码中没有的限制（我看过的范围内没找到，需要时请自行确认）**\n\n- **没有限制谁能禁用**：后端只检查是否登录，不检查操作者的角色，所以任何登录用户都能调这个接口。\n- **不检查目标是否已经被禁用**：重复禁用会再写一次 `DISABLED`，不会报错。\n- **禁用不会让已发出的 token 失效**：`AuthInterceptor` 只检查 token 是否有效，不查用户状态。所以被禁用的用户在 token 过期前可能仍能访问接口。这一点是根据 `AuthInterceptor.java:21` 推断的，我没看 `TokenService` 的实现。\n\n我没有核对知识页和源码是否一致，以上结论都以源码为准。",
+      "is_error": false,
+      "turns": 11,
+      "cost": 0.1804042
+    },
+    {
+      "id": "q04",
+      "q": "登录 token 的有效期是多长？在哪里定义？",
+      "answer": "登录 token 的有效期是 **2 小时**。\n\n**定义位置**：`backend/src/main/java/com/example/admin/auth/TokenService.java:14`\n```java\nstatic final Duration TTL = Duration.ofHours(2);\n```\n\n**使用方式**：\n- 签发时，过期时间设为 `Instant.now().plus(TTL)`，和用户 ID 一起存进内存（`TokenService.java:21-22`）。\n- 校验时，token 不存在或已过期都返回 `null`（`TokenService.java:27-29`）。`AuthInterceptor` 从 `Authorization: Bearer <token>` 请求头取出 token 来校验（`AuthInterceptor.java:20-21`）。\n\n**补充说明**：\n- 这个时长直接写在代码里，不是从配置文件读取的。\n- token 只存在内存中，**服务重启后所有 token 都会失效**（`TokenService.java:10` 的注释）。\n- 有效期是从签发时起固定算 2 小时，代码里没有每次请求后延长有效期的逻辑。\n- 前端把 token 存在 localStorage 的 `ua_token` 里（`frontend/src/api/request.js:4`）。请求出错时，`request.js:22` 会调用 `clearToken()` 清除 token；我没有查看触发这一步的具体条件。",
+      "is_error": false,
+      "turns": 2,
+      "cost": 0.09088679999999999
+    },
+    {
+      "id": "q05",
+      "q": "前端如何把登录 token 传给后端？",
+      "answer": "前端先把 token 存进 `localStorage`，之后由 axios 请求拦截器在每个请求上加 HTTP 头 `Authorization: Bearer <token>`。后端拦截器读取这个头来校验。\n\n### 1. 登录拿到 token 并保存\n- 登录接口返回 `{ \"token\": ... }`，放在响应的 `data` 里（`backend/src/main/java/com/example/admin/auth/LoginController.java:25`）。\n- `Login.vue` 从登录结果中取出 `token`，调用 `setToken(token)`（`frontend/src/views/Login.vue:24-25`）。\n- `setToken` 把 token 写进 `localStorage`，键名是 `ua_token`（`frontend/src/api/request.js:4`、`:7`）。\n\n### 2. 每个请求自动带上 token\n- axios 实例的 `baseURL` 是 `'/api'`（`frontend/src/api/request.js:10`）。\n- 请求拦截器在有 token 时设置 `config.headers.Authorization = \\`Bearer ${token}\\``（`frontend/src/api/request.js:12-16`）。\n\n### 3. 后端校验\n- `WebConfig` 让 `AuthInterceptor` 拦截 `/api/**`，但不拦截 `/api/auth/login`（`backend/src/main/java/com/example/admin/auth/WebConfig.java:17-19`）。\n- `AuthInterceptor#preHandle` 读取 `Authorization` 头，只接受以 `\"Bearer \"` 开头的值，截掉这个前缀得到 token，再交给 `TokenService#verify` 校验（`backend/src/main/java/com/example/admin/auth/AuthInterceptor.java:19-21`）。\n- 校验失败时返回 401 并中止请求（`AuthInterceptor.java:22-25`）。校验通过时把用户 ID 放进请求属性 `TokenService.USER_ID_ATTR`（`AuthInterceptor.java:26`），比如 `UserController#disable` 就用 `@RequestAttribute` 读取它（`backend/src/main/java/com/example/admin/user/UserController.java:37`）。\n\n### 4. 收到 401 时\n- 响应拦截器遇到 401 会清除 token，并跳转到 `/login?redirect=<当前路径>`（`frontend/src/api/request.js:21-24`）。\n\n知识页 `.devflow/knowledge/pages/auth.md` 对这部分的描述和源码一致，没有发现过期内容。",
+      "is_error": false,
+      "turns": 8,
+      "cost": 0.16100920000000002
+    },
+    {
+      "id": "q06",
+      "q": "后端返回 401 时，前端如何处理？",
+      "answer": "401 由 axios 的统一响应拦截器处理，入口在 `frontend/src/api/request.js:18-27`：\n\n1. **清除 token**：响应状态是 401 时调用 `clearToken()`，删掉 localStorage 里的 `ua_token`（`frontend/src/api/request.js:21-22`，键名在 `:4`，删除逻辑在 `:8`）。\n2. **跳转登录页**：把当前页面地址放进 `redirect` 参数，跳到 `/login?redirect=<当前 fullPath>`（`frontend/src/api/request.js:23`）。\n3. **继续抛出错误**：不管是不是 401，都执行 `Promise.reject(err.response?.data ?? err)`，所以调用方的 `catch` 仍会收到错误（`frontend/src/api/request.js:25`）。有响应体时收到的是响应体，没有时收到原始 axios 错误。\n4. **登录后回到原页面**：登录成功后执行 `router.push(route.query.redirect || '/users')`（`frontend/src/views/Login.vue:26`）。\n\n**后端两种 401 的区别：**\n- **token 无效或缺失**：`AuthInterceptor` 只设置状态码 401 就返回 false，不写响应体（`backend/src/main/java/com/example/admin/auth/AuthInterceptor.java:22-24`）。因此前端 reject 时 `err.response.data` 多半为空。\n- **用户名或密码错误**：登录失败时抛出 `BusinessException(401, \"用户名或密码错误\")`（`backend/src/main/java/com/example/admin/auth/AuthService.java:24`）。`GlobalExceptionHandler` 会把它转成 HTTP 状态码与 `code` 一致的响应，也就是 HTTP 401（`backend/src/main/java/com/example/admin/common/GlobalExceptionHandler.java:8-12`）。这时拦截器同样会清 token 并跳转 `/login`。我推测用户本来就在登录页，影响只是 URL 多出一个 `redirect` 参数，这一点没有实际运行验证。\n\n**相关的路由守卫：** `router.beforeEach` 会在请求发出前拦截。目标路由不是 `meta.public`、且本地没有 token 时，直接跳到 `/login?redirect=...`（`frontend/src/router/index.js:15-16`）。所以 401 拦截器主要应对两种情况：本地有 token，但 token 已过期或无效。\n\n**代码里没有的处理：** 拦截器里看不到 token 刷新、401 重试，也没有弹出提示消息。",
+      "is_error": false,
+      "turns": 6,
+      "cost": 0.1217958
+    },
+    {
+      "id": "q07",
+      "q": "用户列表默认每页多少条？最多能返回多少条？",
+      "answer": "用户列表默认每页 **20 条**，单页最多返回 **100 条**。\n\n- **默认 20 条**：后端接口参数 `size` 的默认值是 `\"20\"`（`backend/src/main/java/com/example/admin/user/UserController.java:27`）。前端也固定传 `size: 20`（`frontend/src/views/UserList.vue:32`、`:42`）。\n- **最多 100 条**：上限是 `MAX_PAGE_SIZE = 100`（`backend/src/main/java/com/example/admin/user/UserService.java:10`）。传入的 `size` 会被限制在 1 到 100 之间（`UserService.java:19`），所以传 0 或负数时按 1 条算，超过 100 时按 100 条算。页码 `page` 小于 1 时按第 1 页算（`UserService.java:20`）。",
+      "is_error": false,
+      "turns": 3,
+      "cost": 0.0850572
+    },
+    {
+      "id": "q08",
+      "q": "users 表有哪些字段？",
+      "answer": "`users` 表定义在 `backend/src/main/resources/schema.sql:7-16`，有 7 个字段：\n\n| 字段 | 类型 | 约束 / 默认值 | 说明 |\n|---|---|---|---|\n| `id` | BIGINT | 主键，自增 | |\n| `username` | VARCHAR(64) | NOT NULL，UNIQUE | |\n| `email` | VARCHAR(128) | NOT NULL | 没有唯一约束 |\n| `password_hash` | VARCHAR(100) | NOT NULL | 注释为 `BCrypt` |\n| `status` | VARCHAR(16) | NOT NULL，默认 `'ACTIVE'` | 取值 `ACTIVE` 或 `DISABLED` |\n| `role_id` | BIGINT | NOT NULL | 外键 `fk_users_role`，指向 `roles(id)`（`schema.sql:15`） |\n| `created_at` | DATETIME | NOT NULL，默认 `CURRENT_TIMESTAMP` | |\n\n`roles` 表在同一文件第 1-5 行，初始有两条数据：`ADMIN`（管理员）和 `USER`（普通用户），见 `schema.sql:18`。\n\n现有代码里，只有禁用用户会更新这张表，它只改 `status` 字段（`backend/src/main/resources/mapper/UserMapper.xml:44`）。",
+      "is_error": false,
+      "turns": 3,
+      "cost": 0.09681959999999999
+    },
+    {
+      "id": "q09",
+      "q": "用户状态有哪些取值？",
+      "answer": "用户状态只有两个取值：**`ACTIVE`** 和 **`DISABLED`**。\n\n**定义在哪里：**\n- 后端枚举：`backend/src/main/java/com/example/admin/user/User.java:6`，代码是 `public enum Status { ACTIVE, DISABLED }`。\n- 数据库字段：`backend/src/main/resources/schema.sql:12`，`status VARCHAR(16) NOT NULL DEFAULT 'ACTIVE'`，注释写的是 \"ACTIVE 或 DISABLED\"。新用户默认是 `ACTIVE`。\n\n**在哪里用到：**\n- **禁用用户**：`UserService.java:41` 调用 `updateStatus(id, User.Status.DISABLED)` 把用户设为禁用，对应的 SQL 在 `UserMapper.xml:43-44`。\n- **登录检查**：`AuthService.java:26` 会判断用户是不是 `DISABLED`，是的话就拦截登录。\n- **前端按钮**：`frontend/src/views/UserList.vue:13` 只在 `row.status === 'ACTIVE'` 并且用户不是 ADMIN 角色时显示操作按钮（从上下文看应该是\"禁用\"按钮）。\n\n源码里没有把 `DISABLED` 改回 `ACTIVE` 的方法，也就是说没有启用或恢复用户的功能。",
+      "is_error": false,
+      "turns": 2,
+      "cost": 0.082309
+    },
+    {
+      "id": "q10",
+      "q": "用户详情页对应哪个前端路由和组件？",
+      "answer": "用户详情页的路由是 **`/users/:id`**，组件是 **`frontend/src/views/UserDetail.vue`**。\n\n- **路由定义**：`{ path: '/users/:id', component: () => import('../views/UserDetail.vue'), props: true }`（`frontend/src/router/index.js:8`）。组件是懒加载的。因为设了 `props: true`，路由里的 `:id` 会作为 prop 直接传进 `UserDetail.vue`。\n- **怎么进入**：在用户列表页 `UserList.vue` 里点\"详情\"链接，跳到 `` `/users/${row.id}` ``（`frontend/src/views/UserList.vue:11`）。\n- **怎么返回**：详情页上有\"返回列表\"链接，回到 `/users`（`frontend/src/views/UserDetail.vue:8`）。\n- **访问限制**：这个路由没有设 `meta.public`。没有 token 时，全局守卫会把它重定向到 `/login?redirect=...`（`frontend/src/router/index.js:14-16`）。",
+      "is_error": false,
+      "turns": 2,
+      "cost": 0.08500640000000001
+    },
+    {
+      "id": "q11",
+      "q": "后端服务端口是多少？前端开发服务器如何转发 /api 请求？",
+      "answer": "**后端端口是 8081**，在 `backend/src/main/resources/application.yml:2`（`server.port: 8081`）配置。\n\n**前端 `/api` 的转发方式：**\n\n1. **Vite 开发服务器代理**：开发服务器跑在 5173 端口，把所有以 `/api` 开头的请求转发到 `http://localhost:8081`（`frontend/vite.config.js:7-10`）。这里用的是字符串简写，没有配 `rewrite`，所以路径原样转发，`/api` 前缀不会被去掉。\n2. **axios 实例**：`baseURL` 设为 `'/api'`，超时 10 秒（`frontend/src/api/request.js:10`）。前端发出的请求都是同源相对路径，经上面的代理到达后端。\n3. **后端路由与之对应**：控制器路径本身就带 `/api` 前缀，比如 `@RequestMapping(\"/api/auth\")`（`backend/src/main/java/com/example/admin/auth/LoginController.java:13`）和 `@RequestMapping(\"/api/users\")`（`backend/src/main/java/com/example/admin/user/UserController.java:15`）。所以代理不需要改写路径。\n\n一个请求的完整链路：浏览器请求 `http://localhost:5173/api/users`，Vite 代理转发到 `http://localhost:8081/api/users`，由 `UserController` 处理。\n\n另外两点：\n- 请求拦截器会从 localStorage 的 `ua_token` 读取 token，加上 `Authorization: Bearer <token>` 请求头（`frontend/src/api/request.js:12-16`）。\n- 后端 `AuthInterceptor` 拦截 `/api/**`，但放行 `/api/auth/login`（`backend/src/main/java/com/example/admin/auth/WebConfig.java:18-19`）。\n- 后端返回 401 时，前端会清除 token，并跳转到 `/login?redirect=...`（`frontend/src/api/request.js:21-24`）。\n\n以上只涉及开发环境。生产环境里 `/api` 怎么转发（比如 Nginx 配置），我在仓库里没找到相关配置，目前未知。",
+      "is_error": false,
+      "turns": 6,
+      "cost": 0.1318954
+    },
+    {
+      "id": "q12",
+      "q": "后端接口的统一响应格式是什么？",
+      "answer": "后端接口统一返回 `ApiResponse<T>`，结构是 `{ code, message, data }`。\n\n**定义**（`backend/src/main/java/com/example/admin/common/ApiResponse.java:4`）\n\n```java\npublic record ApiResponse<T>(int code, String message, T data)\n```\n\n| 字段 | 含义 |\n|---|---|\n| `code` | `0` 表示成功，其他值是错误码 |\n| `message` | 成功时固定为 `\"ok\"`，失败时是错误说明 |\n| `data` | 业务数据，失败时为 `null` |\n\n- **成功**：`ApiResponse.ok(data)` 返回 `{code: 0, message: \"ok\", data}`（`ApiResponse.java:5-7`）。\n- **失败**：`ApiResponse.error(code, message)` 返回 `{code, message, data: null}`（`ApiResponse.java:9-11`）。\n\n**分页数据**：`data` 是 `PageResult<T>(List<T> items, long total)`（`common/PageResult.java:5`），例如用户列表接口返回 `ApiResponse<PageResult<User>>`（`user/UserController.java:24`）。\n\n**错误处理**（`common/GlobalExceptionHandler.java`）：HTTP 状态码和 `code` 字段保持一致。\n- `BusinessException`：HTTP 状态码和 `code` 都取异常里的 code（`:12-13`）。\n- 参数校验失败：返回 HTTP 400，`{code: 400, message: \"参数校验失败\"}`（`:17-18`）。\n- 其他异常：返回 HTTP 500，`{code: 500, message: \"服务器内部错误\"}`（`:22-23`）。\n\n**例外**：鉴权拦截器在 token 无效时只设置 HTTP 401 就返回，不写响应体（`auth/AuthInterceptor.java:22-24`）。所以 401 响应没有 `ApiResponse` 结构，前端要单独按 HTTP 状态码处理。",
+      "is_error": false,
+      "turns": 8,
+      "cost": 0.1341172
+    },
+    {
+      "id": "q13",
+      "q": "业务异常是如何转换成 HTTP 响应的？",
+      "answer": "**结论：** 业务代码抛出 `BusinessException(code, message)`，由全局异常处理器 `GlobalExceptionHandler` 接住，转成 `ApiResponse` 响应体。HTTP 状态码直接用异常里的 `code`，所以状态码和响应体里的 `code` 字段总是一样。\n\n## 依据\n\n**1. 异常定义**\n`BusinessException` 继承 `RuntimeException`，带一个 `int code` 和一条 message（`backend/src/main/java/com/example/admin/common/BusinessException.java:3-12`）。\n\n**2. 统一处理**\n`GlobalExceptionHandler` 上标了 `@RestControllerAdvice`（`backend/src/main/java/com/example/admin/common/GlobalExceptionHandler.java:9`），按异常类型分三种处理：\n\n| 异常 | HTTP 状态 | 响应体 | 位置 |\n|---|---|---|---|\n| `BusinessException` | `e.getCode()` | `ApiResponse.error(e.getCode(), e.getMessage())` | `GlobalExceptionHandler.java:11-14` |\n| `MethodArgumentNotValidException` | 400 | `code=400, message=\"参数校验失败\"` | `GlobalExceptionHandler.java:16-19` |\n| 其他 `Exception` | 500 | `code=500, message=\"服务器内部错误\"` | `GlobalExceptionHandler.java:21-24` |\n\n**3. 响应体格式**\n`ApiResponse(code, message, data)` 是一个 record。成功时 `code=0, message=\"ok\"`。出错时由 `error()` 生成，`data` 为 `null`（`backend/src/main/java/com/example/admin/common/ApiResponse.java:4-11`）。\n\n**4. 实际抛出的地方**\n- `UserService`：404 \"用户不存在\"、400 \"不能禁用当前登录的用户\"、403 \"不能禁用管理员\"（`backend/src/main/java/com/example/admin/user/UserService.java:27,35,39`）\n- `AuthService`：401 \"用户名或密码错误\"、403 \"用户已被禁用\"（`backend/src/main/java/com/example/admin/auth/AuthService.java:24,27`）\n\n**5. 前端怎么接**\naxios 响应拦截器在成功时返回 `res.data.data`。失败时 reject `err.response.data`，也就是 `ApiResponse`，可以从里面读 `message`。如果状态码是 401，会先清掉 token，再跳转到 `/login`（`frontend/src/api/request.js:18-27`）。\n\n## 注意点\n- **有些 401 不走这条链路**：token 校验失败时，`AuthInterceptor` 直接 `response.setStatus(401)` 后返回 `false`，不会经过 `GlobalExceptionHandler`。这时响应体为空，不是 `ApiResponse` 格式（`backend/src/main/java/com/example/admin/auth/AuthInterceptor.java:22-24`）。\n- **登录密码错误也会触发前端的 401 跳转**：`AuthService` 对\"用户名或密码错误\"用的是 401（`AuthService.java:24`），而前端拦截器看到任何 401 都会清 token 并跳转登录页（`request.js:21-23`）。人在登录页时这一般不影响使用，但它和\"token 失效\"走的是同一个分支。\n- **兜底分支没有日志**：`other()` 只返回固定文案，没有记录异常详情（`GlobalExceptionHandler.java:21-24`）。\n\n知识页 `.devflow/knowledge/pages/infrastructure.md` 的描述和源码一致，不用更新。",
+      "is_error": false,
+      "turns": 14,
+      "cost": 0.18205879999999997
+    },
+    {
+      "id": "q14",
+      "q": "用户和角色是什么关系？用户列表里的角色名是怎么查出来的？",
+      "answer": "## 结论\n\n**用户和角色是多对一关系**：每个用户只属于一个角色，一个角色可以分给多个用户。没有中间表，`users.role_id` 直接用外键指向 `roles.id`。\n\n**角色名是查询时用 SQL 关联出来的**：用户表里没有存角色名。查询用户时，`users` 左连 `roles`，再把 `r.name` 起别名为 `role_name`，MyBatis 自动映射到 `User.roleName` 字段。\n\n## 依据\n\n### 1. 表结构（多对一）\n- `roles` 表：`id`、`name`（唯一，注释写着 `ADMIN 或 USER`）、`description`。见 `backend/src/main/resources/schema.sql:1-5`。\n- `users` 表的 `role_id BIGINT NOT NULL` 带外键 `fk_users_role FOREIGN KEY (role_id) REFERENCES roles (id)`。见 `backend/src/main/resources/schema.sql:13,15`。\n  - `NOT NULL` 说明每个用户必须有角色。\n  - 外键在 `users` 一侧，所以是多对一。\n- 初始化时只插入了两个角色：`ADMIN`（管理员）和 `USER`（普通用户）。见 `backend/src/main/resources/schema.sql:18`。\n\n### 2. 用户列表里角色名的查询链路\n1. 公共列片段里，`r.name AS role_name` 把角色名带出来。见 `backend/src/main/resources/mapper/UserMapper.xml:5-7`。\n2. 列表查询 `selectPage` 用的是 `FROM users u LEFT JOIN roles r ON r.id = u.role_id`。见 `backend/src/main/resources/mapper/UserMapper.xml:9-20`。\n   - 详情查询 `selectById` 和 `selectByUsername` 也用同样的关联。见 `UserMapper.xml:31-41`。\n3. 开启了 `map-underscore-to-camel-case: true`，所以 `role_name` 会自动映射成 `roleName`。见 `backend/src/main/resources/application.yml:13`。\n4. 实体字段是 `private String roleName; // 由 UserMapper.xml 关联 roles 表查询得到`，不对应任何表列。见 `backend/src/main/java/com/example/admin/user/User.java:14`。\n5. 调用顺序：`UserService#list` → `userMapper.selectPage(...)`。见 `backend/src/main/java/com/example/admin/user/UserService.java:18-22`。\n6. 前端表格直接显示这个字段：`<el-table-column prop=\"roleName\" label=\"角色\" />`。见 `frontend/src/views/UserList.vue:7`。\n\n### 3. 角色名的其他用途\n- 后端禁用用户前会检查 `\"ADMIN\".equals(user.getRoleName())`，是管理员就返回 403。见 `UserService.java:38-40`。\n- 前端只在 `row.roleName !== 'ADMIN'` 时显示\"禁用\"按钮。见 `frontend/src/views/UserList.vue:13`。\n\n## 补充\n- `RoleMapper#selectAll` 已经定义（`backend/src/main/java/com/example/admin/role/RoleMapper.java:9-10`），但我在代码里没搜到任何调用方。用户列表的角色名不是通过它查的。\n- 用于统计总数的 `count` 查询没有关联 `roles`（`UserMapper.xml:22-29`）。目前过滤条件只涉及 `username` 和 `email`，所以不影响结果。\n\n知识页 `.devflow/knowledge/pages/user-management.md` 的写法和源码一致，不用更新。",
+      "is_error": false,
+      "turns": 11,
+      "cost": 0.18080040000000003
+    },
+    {
+      "id": "q15",
+      "q": "用户列表页的\"禁用\"按钮调用哪个后端接口？什么情况下按钮不显示？",
+      "answer": "## 调用的接口\n\n**`POST /api/users/{id}/disable`**\n\n调用路径：\n1. 点击按钮会触发 `onDisable(row)`。先弹出确认框\"确认禁用 xxx？\"，确认后调用 `disableUser(row.id)`（`frontend/src/views/UserList.vue:51-60`）。\n2. `disableUser` 发出 `request.post(`/users/${id}/disable`)`（`frontend/src/api/user.js:5`）。axios 的 `baseURL` 是 `/api`（`frontend/src/api/request.js:10`），所以完整路径是 `/api/users/{id}/disable`。\n3. 后端对应 `UserController#disable`，即 `@PostMapping(\"/{id}/disable\")`，挂在 `/api/users` 下（`backend/src/main/java/com/example/admin/user/UserController.java:15,36-40`）。操作人 ID 从请求属性 `TokenService.USER_ID_ATTR` 里取。\n4. 再调用 `UserService#disable`，把状态改成 `DISABLED`（`backend/src/main/java/com/example/admin/user/UserService.java:33-42`）。\n\n## 按钮什么时候不显示\n\n按钮上的条件是 `v-if=\"row.status === 'ACTIVE' && row.roleName !== 'ADMIN'\"`（`frontend/src/views/UserList.vue:13`）。满足下面任一条就不显示：\n- 用户状态不是 `ACTIVE`，也就是已经被禁用（`DISABLED`）\n- 用户角色是 `ADMIN`\n\n## 补充：前后端校验不一致\n\n后端拒绝两种情况（`UserService.java:34-40`）：\n- 禁用当前登录的自己，返回 400\"不能禁用当前登录的用户\"\n- 禁用 ADMIN 用户，返回 403\"不能禁用管理员\"\n\n前端只判断了 ADMIN，没有判断\"是不是当前登录用户\"。所以如果当前登录的是非 ADMIN 用户，他在列表里自己那一行也能看到\"禁用\"按钮。点了之后会被后端拒绝，前端用 `ElMessage.error` 显示错误信息（`UserList.vue:57-58`）。",
+      "is_error": false,
+      "turns": 6,
+      "cost": 0.1334576
+    },
+    {
+      "id": "q16",
+      "q": "登录时密码如何校验？被禁用的用户能登录吗？",
+      "answer": "## 密码怎么校验\n\n登录入口是 `POST /api/auth/login`（`backend/src/main/java/com/example/admin/auth/LoginController.java:23-25`）。请求体里的 `username` 和 `password` 都标了 `@NotBlank`，所以空值会被直接拒绝（`LoginController.java:15`）。\n\n真正的校验在 `AuthService#login`（`backend/src/main/java/com/example/admin/auth/AuthService.java:21-30`），按顺序做三件事：\n\n1. 用 `userMapper.selectByUsername(username)` 按用户名查出用户（第 22 行）。\n2. 用 `BCryptPasswordEncoder.matches(明文密码, user.getPasswordHash())` 比对密码（第 13、23 行）。库里只存 BCrypt 哈希，见 `backend/src/main/resources/schema.sql:11`。\n3. 如果用户不存在或密码不对，都返回 **401「用户名或密码错误」**（第 24 行）。两种情况提示一样，外人没法据此判断某个用户名是否存在。\n\n全部通过后，`TokenService.issue` 会签发一个 UUID token，有效期 2 小时，存在内存里，服务重启后全部失效（`backend/src/main/java/com/example/admin/auth/TokenService.java:14,20-24`）。\n\n## 被禁用的用户能登录吗？\n\n**不能。** 密码校验通过之后，代码还会检查 `user.getStatus() == User.Status.DISABLED`。是禁用状态就返回 **403「用户已被禁用」**（`AuthService.java:26-28`）。\n\n注意判断顺序：先验密码，再看是否禁用。所以只有密码输对了，才会看到「已被禁用」这个提示；密码错了一律是 401。\n\n## 一个需要注意的地方\n\n上面的禁用检查只在登录时做一次：\n\n- 禁用用户时，`UserService#disable` 只改了数据库里的 status 字段，没有作废这个用户已有的 token（`backend/src/main/java/com/example/admin/user/UserService.java:33-42`）。\n- 后续请求的鉴权拦截器 `AuthInterceptor#preHandle` 只检查 token 是否存在、是否过期，不再查用户状态（`backend/src/main/java/com/example/admin/auth/AuthInterceptor.java:18-27`，`TokenService.java:27-33`）。\n\n结果是：用户被禁用前拿到的 token，在剩下的有效期内（最长 2 小时）仍然可以正常调用接口，直到过期或服务重启。被禁用的用户不能重新登录，但已登录的会话不会立刻失效。",
+      "is_error": false,
+      "turns": 6,
+      "cost": 0.14214659999999998
+    },
+    {
+      "id": "q17",
+      "q": "哪些后端接口不需要登录就能访问？",
+      "answer": "**结论：只有 `POST /api/auth/login` 不需要登录。** 后端其他接口都要在请求头带上 `Authorization: Bearer <token>`。\n\n**依据**\n\n1. **登录拦截的范围**：`AuthInterceptor` 拦截所有 `/api/**` 请求，只排除了 `/api/auth/login`（`backend/src/main/java/com/example/admin/auth/WebConfig.java:17-19`）。\n2. **怎么校验**：拦截器从 `Authorization: Bearer <token>` 里取出 token，交给 `TokenService.verify` 校验。校验不通过就返回 401；通过的话，把用户 ID 存进请求属性 `currentUserId`（`backend/src/main/java/com/example/admin/auth/AuthInterceptor.java:19-26`，`backend/src/main/java/com/example/admin/auth/TokenService.java:13`）。\n3. **后端全部接口**（源码里只有两个 Controller）：\n\n| 接口 | 需要登录 | 出处 |\n|---|---|---|\n| `POST /api/auth/login` | 否 | `backend/src/main/java/com/example/admin/auth/LoginController.java:13,23` |\n| `GET /api/users` | 是 | `backend/src/main/java/com/example/admin/user/UserController.java:15,23` |\n| `GET /api/users/{id}` | 是 | `backend/src/main/java/com/example/admin/user/UserController.java:31` |\n| `POST /api/users/{id}/disable` | 是 | `backend/src/main/java/com/example/admin/user/UserController.java:36` |\n\n**补充**\n- 源码里没有搜到 Spring Security 配置（搜过 `permitAll`、`anonymous`、`Filter` 等关键词），所以登录校验全靠上面这个拦截器。\n- `/api/**` 以外的路径不经过这个拦截器，但目前那些路径下没有任何业务接口。\n- 前端 `frontend/src/router/index.js:5` 里的 `meta: { public: true }` 只控制前端页面 `/login` 能不能直接打开，跟后端接口要不要登录无关。",
+      "is_error": false,
+      "turns": 7,
+      "cost": 0.15182240000000002
+    },
+    {
+      "id": "q21",
+      "q": "用户被禁用后，他之前登录拿到的 token 还能继续访问接口吗？",
+      "answer": "**能。** 用户被禁用后，之前拿到的 token 在过期前还能正常访问所有 `/api/**` 接口，最长 2 小时。只有重新登录时才会被拦下。\n\n**依据**\n\n1. **禁用只改了数据库里的状态，没有让 token 失效。** `UserService#disable` 最后只执行了 `userMapper.updateStatus(id, User.Status.DISABLED)`（`backend/src/main/java/com/example/admin/user/UserService.java:41`），没有调用 `TokenService` 去删除这个用户的 token。`TokenService` 本身也只有 `issue` 和 `verify` 两个方法，没有删除或吊销 token 的方法（`backend/src/main/java/com/example/admin/auth/TokenService.java:20-33`）。\n2. **拦截器只检查 token，不查用户状态。** `AuthInterceptor#preHandle` 取出 Bearer token 后调用 `tokenService.verify(token)`，只要返回的 userId 不为 null 就放行（`backend/src/main/java/com/example/admin/auth/AuthInterceptor.java:19-27`）。`verify` 只看 token 是否存在、是否过期（`TokenService.java:27-33`）。\n3. **只有登录时才检查禁用状态。** 整个后端只有 `AuthService.java:26` 会判断 `user.getStatus() == User.Status.DISABLED`，所以被禁用的用户只是无法再登录、拿不到新 token。\n4. **旧 token 什么时候失效：** 签发满 `TTL = Duration.ofHours(2)` 后过期（`TokenService.java:14,22`），或者服务重启（token 存在内存的 `ConcurrentHashMap` 里，`TokenService.java:10,18`）。\n\n**补充**\n\n后端没有角色级的权限校验（`.devflow/knowledge/pages/auth.md:60`）。所以被禁用的普通用户在这段时间里，还能调用 `/api/users/**` 下的全部接口，包括禁用别人的接口。不过它不能禁用管理员（`UserService.java:38-40`）。\n\n如果要修复，可以在 `AuthInterceptor#preHandle` 里加一步查询用户状态，或者在 `disable` 时调用 `TokenService` 删除这个用户的所有 token（需要新增删除方法）。\n\n知识页 `.devflow/knowledge/pages/auth.md:59` 的说法和源码一致，不需要更新。",
+      "is_error": false,
+      "turns": 9,
+      "cost": 0.1622668
+    },
+    {
+      "id": "q22",
+      "q": "后端服务重启后，已登录的用户需要重新登录吗？为什么？",
+      "answer": "**需要重新登录。** 后端重启后，之前发出的 token 全部失效。\n\n**原因：token 只存在后端进程的内存里**\n\n- token 存在 `TokenService` 的一个 `ConcurrentHashMap` 字段里（`backend/src/main/java/com/example/admin/auth/TokenService.java:18`），没有写入数据库、Redis 或其他持久化存储。类注释也写明了：“内存中的 token 存储：服务重启后所有 token 失效”（`TokenService.java:10`）。\n- token 是随机生成的 UUID（`TokenService.java:21`），本身不带任何信息，也没有签名，不是 JWT。所以 Map 一清空，后端就无法认出旧 token。\n- 重启后 Map 是空的，`verify` 查不到旧 token，返回 `null`（`TokenService.java:28-30`）。`AuthInterceptor` 因此直接返回 HTTP 401（`backend/src/main/java/com/example/admin/auth/AuthInterceptor.java:21-24`）。\n\n**前端会怎么表现**\n\n1. 浏览器 `localStorage` 里的 `ua_token` 还在（`frontend/src/api/request.js:4-8`）。根据知识页，路由守卫只检查本地有没有 token，所以页面跳转本身不会被拦下（`frontend/src/router/index.js`，这一点我没打开文件核实）。\n2. 第一次调用 `/api/**` 时会收到 401，响应拦截器会清掉本地 token，跳转到 `/login?redirect=<当前路径>`（`request.js:21-23`）。\n3. 重新登录后，会回到 `redirect` 指定的页面（`frontend/src/views/Login.vue`）。\n\n所以用户看到的现象是：重启后第一次操作（比如加载用户列表）时被跳回登录页。\n\n**补充**\n\n- 即使不重启，token 也只有 2 小时有效期（`TokenService.java:14`），过期后同样要重新登录。\n- 如果部署多个实例，每个实例各自维护自己的 Map，在一个实例登录得到的 token 在另一个实例上也会被拒。这是从代码结构推出来的，知识页把它标为“未核实”。\n- 如果希望重启后不用重新登录，需要把会话存到外部（比如 Redis 或数据库），或者改用带签名的无状态 token（比如 JWT，签名密钥要固定配置）。",
+      "is_error": false,
+      "turns": 6,
+      "cost": 0.13312039999999997
+    },
+    {
+      "id": "q23",
+      "q": "普通用户（USER 角色）登录后，能调用禁用接口禁用另一个普通用户吗？",
+      "answer": "**能。** 按现在的代码，USER 角色登录后可以成功禁用另一个普通用户。后端整条链路都没有检查\"操作人是什么角色\"。\n\n**链路逐层看：**\n\n1. **拦截器只检查是否登录。** `WebConfig.java:17-19` 给 `/api/**`（除登录接口外）挂了 `AuthInterceptor`。`AuthInterceptor.java:18-27` 只验证 Bearer token，然后把 `userId` 放进请求属性，不读取、也不判断角色。\n2. **Controller 没有权限注解。** `UserController.java:36-40` 的 `POST /api/users/{id}/disable` 拿到 `operatorId` 就直接调用 Service，没有任何角色判断。项目里也搜不到 `@PreAuthorize` 之类的注解。\n3. **Service 只检查被禁用的人。** `UserService.java:33-42` 有两条规则：\n   - 不能禁用自己（`id.equals(operatorId)`，返回 400）\n   - 不能禁用 **目标** 是 ADMIN 的用户（`user.getRoleName()`，返回 403）\n\n   这两条都没有检查操作人的角色。\n4. **前端也没有按角色限制。** `UserList.vue:13` 只按被操作行的状态和角色决定是否显示\"禁用\"按钮。前端没有按当前登录人角色控制的逻辑，所以普通用户在页面上也能看到并点击这个按钮。前端的判断本来也只影响界面显示，挡不住直接调接口。\n\n**结果：** USER 角色只要 token 有效，就能禁用任何不是自己、也不是 ADMIN 的用户，包括其他普通用户。\n\n这个结果是不是符合预期，代码和注释里都没有说明（`UserService.java:32` 的注释只写了\"不能禁用自己，也不能禁用 ADMIN\"），所以设计意图未知。如果本意是\"只有管理员才能禁用\"，那现在缺了一个对操作人的检查：在 `UserService#disable` 里按 `operatorId` 查出操作人，确认其 `roleName` 是 `ADMIN`，否则返回 403。",
+      "is_error": false,
+      "turns": 9,
+      "cost": 0.168779
+    },
+    {
+      "id": "q24",
+      "q": "调用用户列表接口时传 size=500，实际最多返回多少条？",
+      "answer": "最多返回 **100 条**。\n\n- `backend/src/main/java/com/example/admin/user/UserService.java:10` 定义了 `MAX_PAGE_SIZE = 100`。\n- `UserService.java:19` 计算 `limit = Math.min(Math.max(size, 1), MAX_PAGE_SIZE)`。传 `size=500` 时，`limit` 会被截成 100。\n- `backend/src/main/resources/mapper/UserMapper.xml:19` 用这个截断后的值执行 `LIMIT #{offset}, #{limit}`。\n\n需要注意两点：\n\n1. **翻页偏移也按 100 算。** `UserService.java:20` 中 `offset = (page - 1) * limit`。所以 `page=2&size=500` 取的是第 101–200 条，不是第 501–1000 条。\n2. **`total` 不受这个上限影响。** `UserService.java:21` 的 `count(keyword)` 返回的是符合条件的全部记录数。调用方如果按自己传的 `size=500` 计算总页数，结果会偏少，后面的数据会取不到。\n\n另外，`size` 小于 1 时会按 1 处理，不传时默认是 20（`UserController.java:27`）。",
+      "is_error": false,
+      "turns": 2,
+      "cost": 0.0655558
+    },
+    {
+      "id": "q25",
+      "q": "用户列表的关键字搜索是精确匹配还是模糊匹配？会搜索哪些字段？",
+      "answer": "结论：是**模糊匹配**（包含匹配），会搜**用户名 `username`** 和**邮箱 `email`** 两个字段，任意一个命中就返回。\n\n**依据**\n\n- SQL 条件在 `backend/src/main/resources/mapper/UserMapper.xml:15`：\n  ```sql\n  (u.username LIKE CONCAT('%', #{keyword}, '%') OR u.email LIKE CONCAT('%', #{keyword}, '%'))\n  ```\n  关键字前后都加了 `%`，所以只要字段里包含这个关键字就算匹配，不要求完全相等。\n- 统计总数的 `count` 查询用的是同一个条件（`UserMapper.xml:26`），所以分页的总数和列表结果是一致的。\n- 关键字为 `null` 或空字符串时不加这个条件，直接返回全部用户（`UserMapper.xml:14`）。\n- 调用路径：`UserController.java:25` 接收可选参数 `keyword`，经过 `UserService.java:21` 传给 `UserMapper` 的 `selectPage` 和 `count`。\n- 前端：`frontend/src/views/UserList.vue:3` 的输入框提示文字是\"用户名或邮箱\"，内容变化时从第 1 页重新查询。\n\n**补充**\n\n- 结果按 `created_at` 倒序排列（`UserMapper.xml:18`）。\n- 是否区分大小写，项目里查不到答案，所以是未知。这取决于 MySQL 表或库的排序规则（collation），而 `schema.sql` 和 `application.yml` 里的 JDBC URL 都没有指定。如果用的是 MySQL 默认的 `*_ci` 排序规则，就不区分大小写。\n- 关键字中的 `%` 和 `_` 没有转义，会被当作 LIKE 通配符。比如搜 `_` 会匹配所有非空的值。",
+      "is_error": false,
+      "turns": 4,
+      "cost": 0.1095502
+    },
+    {
+      "id": "q26",
+      "q": "前端隐藏\"禁用\"按钮的条件，和后端拒绝禁用的条件完全一致吗？",
+      "answer": "不完全一致。两边都拦了\"ADMIN 角色\"，但还各有一条对方没有的条件。\n\n**前端**：只有满足下面两个条件才显示按钮（`frontend/src/views/UserList.vue:13`）：\n```vue\nv-if=\"row.status === 'ACTIVE' && row.roleName !== 'ADMIN'\"\n```\n\n**后端**：遇到下面两种情况会拒绝（`backend/src/main/java/com/example/admin/user/UserService.java:33-41`）：\n1. `id.equals(operatorId)`，也就是禁用自己 → 400 \"不能禁用当前登录的用户\"\n2. `\"ADMIN\".equals(user.getRoleName())` → 403 \"不能禁用管理员\"\n\n| 条件 | 前端 | 后端 |\n|---|---|---|\n| 目标是 ADMIN | 隐藏按钮 | 返回 403 |\n| 目标已是 DISABLED | 隐藏按钮 | **不检查**，照样执行 `updateStatus(id, DISABLED)`，结果相当于重复写入一次，接口返回成功 |\n| 目标是当前登录用户 | **不检查**（前端代码里没有保存或比较当前用户 id） | 返回 400 |\n\n**会造成什么影响：**\n- **禁用自己**：如果当前登录的是 ADMIN，自己那一行本来就因为 ADMIN 条件看不到按钮，所以没影响。但 `AuthInterceptor`（`backend/src/main/java/com/example/admin/auth/AuthInterceptor.java:21-26`）只校验 token 是否有效，不校验角色。所以普通 USER 登录后也能进列表页，而且能在自己那一行看到\"禁用\"按钮。点了之后会弹出确认框，确认后才收到后端的 400 报错，前端用 `UserList.vue:58` 把错误提示出来。\n- **已禁用的用户**：这条只在前端拦，后端没有状态校验。有人绕过界面直接调 `POST /users/{id}/disable`，也只会得到一个没有实际效果的成功响应，不会出什么问题。\n\n另外，前端拿到的 `roleName` 来自 `UserMapper.xml:6` 里的 `r.name AS role_name`，再由 `application.yml:13` 的 `map-underscore-to-camel-case` 映射成 `roleName`。所以两边判断 ADMIN 用的是同一个数据来源，这一条确实是一致的。\n\n如果要让两边完全对齐，可以做两件事：前端加上\"不是当前用户\"的判断（得先把登录用户的 id 存下来）；后端对已经是 DISABLED 的用户返回明确的错误，或者在文档里写明这个接口是幂等的。",
+      "is_error": false,
+      "turns": 6,
+      "cost": 0.14825480000000002
+    },
+    {
+      "id": "q27",
+      "q": "登录时密码输错，前端最终会给用户显示什么提示？",
+      "answer": "前端会弹出一条错误提示：**\"用户名或密码错误\"**（Element Plus 的 `ElMessage.error`）。\n\n## 依据（调用链）\n\n1. **后端抛业务异常**：用户不存在，或 BCrypt 校验密码不匹配时，抛出 `BusinessException(401, \"用户名或密码错误\")`。`backend/src/main/java/com/example/admin/auth/AuthService.java:23-24`\n2. **转成 HTTP 响应**：`GlobalExceptionHandler#business` 返回 HTTP 401，响应体是 `{code: 401, message: \"用户名或密码错误\", data: null}`。`backend/src/main/java/com/example/admin/common/GlobalExceptionHandler.java:11-14`，`backend/src/main/java/com/example/admin/common/ApiResponse.java:9-11`\n3. **前端响应拦截器**：遇到 401 时，先清除 token，再跳转到 `/login?redirect=<当前路径>`，然后用 `err.response.data`（即上面的响应体）把 Promise 置为失败。`frontend/src/api/request.js:21-25`\n4. **登录页捕获异常**：`onSubmit` 的 catch 执行 `ElMessage.error(e.message ?? '登录失败')`。因为 `e.message` 是 \"用户名或密码错误\"，所以显示的就是这句。只有响应里没有 `message` 时（比如网络错误），才会退回显示 \"登录失败\"。`frontend/src/views/Login.vue:27-28`\n\n## 补充：一个可能的副作用（根据代码推断，没有实际运行验证）\n\n登录接口返回 401 时，同样会经过第 3 步的全局 401 处理，于是用户在登录页上又被跳转到 `/login`，`redirect` 参数也被改成了登录页本身：\n\n- 如果原地址是 `/login`，会变成 `/login?redirect=/login`。\n- 如果原地址是 `/login?redirect=/users`，会变成嵌套的 `/login?redirect=/login?redirect=/users`（URL 编码后的形式）。\n\n之后再次登录成功时，`router.push(route.query.redirect || '/users')`（`frontend/src/views/Login.vue:26`）会跳回 `/login`。`/login` 是公开路由（`meta.public`），路由守卫也不会因为已有 token 就把用户从登录页带走（`frontend/src/router/index.js:5,14-18`）。所以用户密码输错一次之后，即使登录成功，也可能仍停留在登录页。如果你想确认这一点，可以在浏览器里实际操作一次。\n\n知识页 `.devflow/knowledge/pages/auth.md` 里的相关描述和源码一致。",
+      "is_error": false,
+      "turns": 11,
+      "cost": 0.20481999999999997
+    },
+    {
+      "id": "q18",
+      "q": "系统使用的是哪个消息队列？",
+      "answer": "**结论：未知。在源码里找不到任何消息队列。**\n\n我查过的地方：\n\n- **后端依赖** `backend/pom.xml:15-38`：只有 `spring-boot-starter-web`、`spring-boot-starter-validation`、`mybatis-spring-boot-starter`、`mysql-connector-j` 和 `spring-security-crypto`。没有 Kafka、RabbitMQ/AMQP、RocketMQ、Redis、ActiveMQ、Pulsar 等客户端。\n- **配置** `backend/src/main/resources/application.yml:1-13`：只配了端口 `8081`、MySQL 数据源和 MyBatis，没有任何 MQ 的连接配置。\n- **全仓搜索**（不含 `.devflow/`）：搜了 `kafka|rabbitmq|amqp|rocketmq|redis|nats|sqs|pulsar|activemq|queue|mq` 等关键词，一个都没搜到。\n\n从代码看，这个系统是 Spring Boot + MyBatis + MySQL 的单体后台，前端是 Vue（`frontend/`），模块之间直接同步调用。如果你在别的服务或部署文档里见过 MQ，那部分不在这个仓库里。",
+      "is_error": false,
+      "turns": 5,
+      "cost": 0.1014084
+    },
+    {
+      "id": "q19",
+      "q": "用户导出 Excel 的功能在哪里实现？",
+      "answer": "这个项目里没有找到用户导出 Excel 的功能。按项目规则，答案是**未知**，代码里目前看不到这个功能。\n\n我查了这些地方：\n\n- **后端接口**：用户相关的只有三个接口，都在 `/api/users` 下（`backend/src/main/java/com/example/admin/user/UserController.java:15`）：\n  - `GET /api/users`：分页列表（`UserController.java:23`）\n  - `GET /api/users/{id}`：用户详情（`UserController.java:31`）\n  - `POST /api/users/{id}/disable`：禁用用户（`UserController.java:36`）\n\n  另外只有登录接口 `POST /api/auth/login`（`LoginController.java:23`），没有导出或下载接口。\n- **前端 API**：`frontend/src/api/user.js:3-6` 里只封装了 `fetchUsers`、`fetchUser`、`disableUser`、`login`，没有导出方法。\n- **依赖**：`backend/pom.xml` 和 `frontend/package.json` 里没有 Apache POI、EasyExcel、xlsx 这类 Excel 库。\n- **全文搜索**：在源码和 `.devflow/knowledge/`、`.devflow/specs/` 中搜索 `excel`、`xlsx`、`csv`、`导出`，都没有相关结果。\n\n如果你在别的分支或仓库见过这个功能，可以告诉我位置，我再去看。需要新增导出功能的话，最自然的位置是在 `UserController` 里加一个导出接口，复用 `UserService` 的列表查询。",
+      "is_error": false,
+      "turns": 5,
+      "cost": 0.1124408
+    },
+    {
+      "id": "q20",
+      "q": "Redis 缓存的过期时间是多少？",
+      "answer": "**答案：未知。这个项目没有用 Redis。**\n\n我在整个仓库里搜了 `redis`（不区分大小写），源码、配置、依赖和 `.devflow/` 知识页里都没有，所以没有\"Redis 缓存过期时间\"可查。\n\n和\"缓存/过期\"沾边的只有登录 token，它存在应用内存里，不在 Redis 里：\n\n- **过期时间是 2 小时**：`TTL = Duration.ofHours(2)`，见 `backend/src/main/java/com/example/admin/auth/TokenService.java:14`\n- **存储方式**：用 `ConcurrentHashMap` 存在内存里（`TokenService.java:18`），所以服务重启后所有 token 都会失效（`TokenService.java:10`）\n- **过期判断**：只在校验时检查，过期就返回 `null`（`TokenService.java:29`）。没有定时清理，过期的 token 会一直留在 Map 里。\n\n如果你说的是别的仓库，或者是还没合进来的 Redis 改动，告诉我位置，我再去查。",
+      "is_error": false,
+      "turns": 4,
+      "cost": 0.0749946
+    }
+  ],
+  "files": [
+    ".DS_Store",
+    ".claude/settings.json",
+    ".claude/skills/devflow-ask/SKILL.md",
+    ".claude/skills/devflow-scan/SKILL.md",
+    ".devflow/changes/archive/.gitkeep",
+    ".devflow/knowledge/index.md",
+    ".devflow/knowledge/log.md",
+    ".devflow/knowledge/pages/.gitkeep",
+    ".devflow/knowledge/pages/auth.md",
+    ".devflow/knowledge/pages/infrastructure.md",
+    ".devflow/knowledge/pages/user-management.md",
+    ".devflow/project.yaml",
+    ".devflow/specs/specs.lock",
+    ".gitignore",
+    "CLAUDE.md",
+    "backend/.DS_Store",
+    "backend/pom.xml",
+    "backend/src/.DS_Store",
+    "backend/src/main/.DS_Store",
+    "backend/src/main/java/com/example/admin/AdminApplication.java",
+    "backend/src/main/java/com/example/admin/auth/AuthInterceptor.java",
+    "backend/src/main/java/com/example/admin/auth/AuthService.java",
+    "backend/src/main/java/com/example/admin/auth/LoginController.java",
+    "backend/src/main/java/com/example/admin/auth/TokenService.java",
+    "backend/src/main/java/com/example/admin/auth/WebConfig.java",
+    "backend/src/main/java/com/example/admin/common/ApiResponse.java",
+    "backend/src/main/java/com/example/admin/common/BusinessException.java",
+    "backend/src/main/java/com/example/admin/common/GlobalExceptionHandler.java",
+    "backend/src/main/java/com/example/admin/common/PageResult.java",
+    "backend/src/main/java/com/example/admin/role/Role.java",
+    "backend/src/main/java/com/example/admin/role/RoleMapper.java",
+    "backend/src/main/java/com/example/admin/user/User.java",
+    "backend/src/main/java/com/example/admin/user/UserController.java",
+    "backend/src/main/java/com/example/admin/user/UserMapper.java",
+    "backend/src/main/java/com/example/admin/user/UserService.java",
+    "backend/src/main/resources/application.yml",
+    "backend/src/main/resources/mapper/UserMapper.xml",
+    "backend/src/main/resources/schema.sql",
+    "frontend/.DS_Store",
+    "frontend/package.json",
+    "frontend/src/.DS_Store",
+    "frontend/src/api/request.js",
+    "frontend/src/api/user.js",
+    "frontend/src/router/index.js",
+    "frontend/src/views/Login.vue",
+    "frontend/src/views/UserDetail.vue",
+    "frontend/src/views/UserList.vue",
+    "frontend/vite.config.js"
+  ]
+}

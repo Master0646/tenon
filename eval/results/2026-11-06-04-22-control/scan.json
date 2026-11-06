@@ -1,0 +1,11 @@
+{
+  "model": null,
+  "control": true,
+  "cost": 2.8716787999999998,
+  "scan": {},
+  "lint": null,
+  "pages": [],
+  "probe": {
+    "denied": false
+  }
+}

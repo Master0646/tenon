@@ -1,0 +1,412 @@
+{
+  "summary": {
+    "answerable": 24,
+    "unanswerable": 3,
+    "recall": 1,
+    "precision": 0.742609126984127,
+    "noCitationRate": 0,
+    "unknownCorrectRate": 1,
+    "unresolvedCitations": 0,
+    "reasoning": 7,
+    "conclusionRate": 1
+  },
+  "usage": {
+    "avgTurns": 4.814814814814815,
+    "avgCost": 0.10635847407407406,
+    "answerCost": 2.8716787999999998
+  },
+  "scores": [
+    {
+      "id": "q01",
+      "cited": [
+        "backend/src/main/java/com/example/admin/user/UserController.java",
+        "frontend/src/api/request.js",
+        "frontend/src/api/user.js",
+        "frontend/src/router/index.js",
+        "frontend/src/views/UserList.vue"
+      ],
+      "unresolved": [],
+      "saidUnknown": false,
+      "recall": 1,
+      "precision": 0.4,
+      "noCitation": false
+    },
+    {
+      "id": "q02",
+      "cited": [
+        "backend/src/main/java/com/example/admin/user/UserMapper.java",
+        "backend/src/main/java/com/example/admin/user/UserService.java",
+        "backend/src/main/resources/mapper/UserMapper.xml"
+      ],
+      "unresolved": [],
+      "saidUnknown": false,
+      "recall": 1,
+      "precision": 1,
+      "noCitation": false
+    },
+    {
+      "id": "q03",
+      "cited": [
+        "backend/src/main/java/com/example/admin/auth/AuthService.java",
+        "backend/src/main/java/com/example/admin/user/UserController.java",
+        "backend/src/main/java/com/example/admin/user/UserService.java",
+        "frontend/src/views/UserList.vue"
+      ],
+      "unresolved": [],
+      "saidUnknown": true,
+      "recall": 1,
+      "precision": 0.75,
+      "noCitation": false
+    },
+    {
+      "id": "q04",
+      "cited": [
+        "backend/src/main/java/com/example/admin/auth/AuthService.java",
+        "backend/src/main/java/com/example/admin/auth/TokenService.java",
+        "backend/src/main/resources/application.yml",
+        "frontend/src/api/request.js"
+      ],
+      "unresolved": [],
+      "saidUnknown": true,
+      "recall": 1,
+      "precision": 0.5,
+      "noCitation": false
+    },
+    {
+      "id": "q05",
+      "cited": [
+        "backend/src/main/java/com/example/admin/auth/AuthInterceptor.java",
+        "backend/src/main/java/com/example/admin/auth/LoginController.java",
+        "backend/src/main/java/com/example/admin/auth/TokenService.java",
+        "backend/src/main/java/com/example/admin/auth/WebConfig.java",
+        "backend/src/main/java/com/example/admin/user/UserController.java",
+        "frontend/src/api/request.js",
+        "frontend/src/router/index.js",
+        "frontend/src/views/Login.vue"
+      ],
+      "unresolved": [],
+      "saidUnknown": false,
+      "recall": 1,
+      "precision": 0.375,
+      "noCitation": false
+    },
+    {
+      "id": "q06",
+      "cited": [
+        "backend/src/main/java/com/example/admin/auth/AuthInterceptor.java",
+        "backend/src/main/java/com/example/admin/auth/AuthService.java",
+        "frontend/src/api/request.js",
+        "frontend/src/router/index.js",
+        "frontend/src/views/Login.vue"
+      ],
+      "unresolved": [],
+      "saidUnknown": true,
+      "recall": 1,
+      "precision": 0.6,
+      "noCitation": false
+    },
+    {
+      "id": "q07",
+      "cited": [
+        "backend/src/main/java/com/example/admin/user/UserController.java",
+        "backend/src/main/java/com/example/admin/user/UserService.java",
+        "frontend/src/views/UserList.vue"
+      ],
+      "unresolved": [],
+      "saidUnknown": false,
+      "recall": 1,
+      "precision": 1,
+      "noCitation": false
+    },
+    {
+      "id": "q08",
+      "cited": [
+        "backend/src/main/resources/mapper/UserMapper.xml",
+        "backend/src/main/resources/schema.sql"
+      ],
+      "unresolved": [],
+      "saidUnknown": false,
+      "recall": 1,
+      "precision": 1,
+      "noCitation": false
+    },
+    {
+      "id": "q09",
+      "cited": [
+        "backend/src/main/java/com/example/admin/auth/AuthService.java",
+        "backend/src/main/java/com/example/admin/user/User.java",
+        "backend/src/main/java/com/example/admin/user/UserService.java",
+        "backend/src/main/resources/schema.sql",
+        "frontend/src/views/UserList.vue"
+      ],
+      "unresolved": [],
+      "saidUnknown": true,
+      "recall": 1,
+      "precision": 0.8,
+      "noCitation": false
+    },
+    {
+      "id": "q10",
+      "cited": [
+        "frontend/src/router/index.js",
+        "frontend/src/views/UserDetail.vue"
+      ],
+      "unresolved": [],
+      "saidUnknown": false,
+      "recall": 1,
+      "precision": 1,
+      "noCitation": false
+    },
+    {
+      "id": "q11",
+      "cited": [
+        "backend/src/main/java/com/example/admin/auth/LoginController.java",
+        "backend/src/main/java/com/example/admin/auth/WebConfig.java",
+        "backend/src/main/java/com/example/admin/user/UserController.java",
+        "backend/src/main/resources/application.yml",
+        "frontend/src/api/request.js",
+        "frontend/src/api/user.js",
+        "frontend/vite.config.js"
+      ],
+      "unresolved": [],
+      "saidUnknown": true,
+      "recall": 1,
+      "precision": 0.2857142857142857,
+      "noCitation": false
+    },
+    {
+      "id": "q12",
+      "cited": [
+        "backend/src/main/java/com/example/admin/auth/AuthInterceptor.java",
+        "backend/src/main/java/com/example/admin/common/ApiResponse.java",
+        "backend/src/main/java/com/example/admin/common/GlobalExceptionHandler.java",
+        "backend/src/main/java/com/example/admin/common/PageResult.java",
+        "frontend/src/api/request.js"
+      ],
+      "unresolved": [],
+      "saidUnknown": false,
+      "recall": 1,
+      "precision": 0.8,
+      "noCitation": false
+    },
+    {
+      "id": "q13",
+      "cited": [
+        "backend/src/main/java/com/example/admin/auth/AuthService.java",
+        "backend/src/main/java/com/example/admin/common/ApiResponse.java",
+        "backend/src/main/java/com/example/admin/common/BusinessException.java",
+        "backend/src/main/java/com/example/admin/common/GlobalExceptionHandler.java",
+        "backend/src/main/java/com/example/admin/user/UserService.java"
+      ],
+      "unresolved": [],
+      "saidUnknown": true,
+      "recall": 1,
+      "precision": 0.6,
+      "noCitation": false
+    },
+    {
+      "id": "q14",
+      "cited": [
+        "backend/src/main/java/com/example/admin/user/User.java",
+        "backend/src/main/java/com/example/admin/user/UserMapper.java",
+        "backend/src/main/java/com/example/admin/user/UserService.java",
+        "backend/src/main/resources/application.yml",
+        "backend/src/main/resources/mapper/UserMapper.xml",
+        "backend/src/main/resources/schema.sql",
+        "frontend/src/views/UserList.vue"
+      ],
+      "unresolved": [],
+      "saidUnknown": false,
+      "recall": 1,
+      "precision": 0.42857142857142855,
+      "noCitation": false
+    },
+    {
+      "id": "q15",
+      "cited": [
+        "backend/src/main/java/com/example/admin/user/User.java",
+        "backend/src/main/java/com/example/admin/user/UserController.java",
+        "backend/src/main/java/com/example/admin/user/UserService.java",
+        "frontend/src/api/request.js",
+        "frontend/src/api/user.js",
+        "frontend/src/views/UserList.vue"
+      ],
+      "unresolved": [],
+      "saidUnknown": false,
+      "recall": 1,
+      "precision": 0.6666666666666666,
+      "noCitation": false
+    },
+    {
+      "id": "q16",
+      "cited": [
+        "backend/src/main/java/com/example/admin/auth/AuthInterceptor.java",
+        "backend/src/main/java/com/example/admin/auth/AuthService.java",
+        "backend/src/main/java/com/example/admin/auth/LoginController.java",
+        "backend/src/main/resources/schema.sql"
+      ],
+      "unresolved": [],
+      "saidUnknown": true,
+      "recall": 1,
+      "precision": 0.75,
+      "noCitation": false
+    },
+    {
+      "id": "q17",
+      "cited": [
+        "backend/pom.xml",
+        "backend/src/main/java/com/example/admin/auth/AuthInterceptor.java",
+        "backend/src/main/java/com/example/admin/auth/LoginController.java",
+        "backend/src/main/java/com/example/admin/auth/WebConfig.java",
+        "backend/src/main/java/com/example/admin/user/UserController.java"
+      ],
+      "unresolved": [],
+      "saidUnknown": false,
+      "recall": 1,
+      "precision": 0.6,
+      "noCitation": false
+    },
+    {
+      "id": "q21",
+      "cited": [
+        "backend/src/main/java/com/example/admin/auth/AuthInterceptor.java",
+        "backend/src/main/java/com/example/admin/auth/AuthService.java",
+        "backend/src/main/java/com/example/admin/auth/TokenService.java",
+        "backend/src/main/java/com/example/admin/user/UserService.java"
+      ],
+      "unresolved": [],
+      "saidUnknown": false,
+      "recall": 1,
+      "precision": 1,
+      "noCitation": false,
+      "conclusion": true
+    },
+    {
+      "id": "q22",
+      "cited": [
+        "backend/src/main/java/com/example/admin/auth/AuthInterceptor.java",
+        "backend/src/main/java/com/example/admin/auth/TokenService.java",
+        "frontend/src/api/request.js",
+        "frontend/src/router/index.js"
+      ],
+      "unresolved": [],
+      "saidUnknown": false,
+      "recall": 1,
+      "precision": 1,
+      "noCitation": false,
+      "conclusion": true
+    },
+    {
+      "id": "q23",
+      "cited": [
+        "backend/src/main/java/com/example/admin/auth/AuthInterceptor.java",
+        "backend/src/main/java/com/example/admin/auth/WebConfig.java",
+        "backend/src/main/java/com/example/admin/user/UserController.java",
+        "backend/src/main/java/com/example/admin/user/UserService.java",
+        "frontend/src/views/UserList.vue"
+      ],
+      "unresolved": [],
+      "saidUnknown": true,
+      "recall": 1,
+      "precision": 1,
+      "noCitation": false,
+      "conclusion": true
+    },
+    {
+      "id": "q24",
+      "cited": [
+        "backend/src/main/java/com/example/admin/user/UserController.java",
+        "backend/src/main/java/com/example/admin/user/UserService.java",
+        "backend/src/main/resources/mapper/UserMapper.xml"
+      ],
+      "unresolved": [],
+      "saidUnknown": false,
+      "recall": 1,
+      "precision": 1,
+      "noCitation": false,
+      "conclusion": true
+    },
+    {
+      "id": "q25",
+      "cited": [
+        "backend/src/main/java/com/example/admin/user/UserController.java",
+        "backend/src/main/java/com/example/admin/user/UserMapper.java",
+        "backend/src/main/java/com/example/admin/user/UserService.java",
+        "backend/src/main/resources/mapper/UserMapper.xml",
+        "backend/src/main/resources/schema.sql",
+        "frontend/src/views/UserList.vue"
+      ],
+      "unresolved": [],
+      "saidUnknown": true,
+      "recall": 1,
+      "precision": 0.8333333333333334,
+      "noCitation": false,
+      "conclusion": true
+    },
+    {
+      "id": "q26",
+      "cited": [
+        "backend/src/main/java/com/example/admin/user/User.java",
+        "backend/src/main/java/com/example/admin/user/UserService.java",
+        "backend/src/main/resources/application.yml",
+        "backend/src/main/resources/mapper/UserMapper.xml",
+        "frontend/src/views/UserList.vue"
+      ],
+      "unresolved": [],
+      "saidUnknown": true,
+      "recall": 1,
+      "precision": 0.6,
+      "noCitation": false,
+      "conclusion": true
+    },
+    {
+      "id": "q27",
+      "cited": [
+        "backend/src/main/java/com/example/admin/auth/AuthService.java",
+        "backend/src/main/java/com/example/admin/auth/WebConfig.java",
+        "backend/src/main/java/com/example/admin/common/ApiResponse.java",
+        "backend/src/main/java/com/example/admin/common/GlobalExceptionHandler.java",
+        "frontend/src/api/request.js",
+        "frontend/src/views/Login.vue"
+      ],
+      "unresolved": [],
+      "saidUnknown": true,
+      "recall": 1,
+      "precision": 0.8333333333333334,
+      "noCitation": false,
+      "conclusion": true
+    },
+    {
+      "id": "q18",
+      "cited": [
+        "backend/pom.xml",
+        "backend/src/main/resources/application.yml",
+        "frontend/vite.config.js"
+      ],
+      "unresolved": [],
+      "saidUnknown": true,
+      "correct": true
+    },
+    {
+      "id": "q19",
+      "cited": [
+        "backend/pom.xml",
+        "backend/src/main/java/com/example/admin/auth/LoginController.java",
+        "backend/src/main/java/com/example/admin/user/UserController.java",
+        "frontend/src/api/user.js"
+      ],
+      "unresolved": [],
+      "saidUnknown": true,
+      "correct": true
+    },
+    {
+      "id": "q20",
+      "cited": [
+        "backend/src/main/java/com/example/admin/auth/TokenService.java"
+      ],
+      "unresolved": [],
+      "saidUnknown": true,
+      "correct": true
+    }
+  ]
+}

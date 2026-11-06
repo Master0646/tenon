@@ -1,0 +1,452 @@
+{
+  "answers": [
+    {
+      "id": "q01",
+      "q": "用户列表接口的 URL 是什么？由哪个 Controller 方法处理？",
+      "answer": "**结论：** 用户列表接口是 `GET /api/users`，由 `UserController#list` 处理。\n\n**依据：**\n\n- **URL**：类上标注了 `@RequestMapping(\"/api/users\")`（`backend/src/main/java/com/example/admin/user/UserController.java:15`），`list` 方法上的 `@GetMapping` 没有附加路径（`UserController.java:23`），所以完整路径就是 `GET /api/users`。\n- **处理方法**：`UserController#list`（`UserController.java:24-29`），它调用 `userService.list(keyword, page, size)`，返回值包装为 `ApiResponse<PageResult<User>>`（`UserController.java:28`）。\n- **查询参数**（全部可选）：\n  - `keyword`：没有默认值（`UserController.java:25`）\n  - `page`：默认 1（`UserController.java:26`）\n  - `size`：默认 20（`UserController.java:27`）\n- **前端调用**：`fetchUsers` 请求的是 `request.get('/users', { params })`（`frontend/src/api/user.js:3`）。axios 实例的 `baseURL` 是 `'/api'`（`frontend/src/api/request.js:10`），两者拼接后正好是 `/api/users`。\n\n知识页 `.devflow/knowledge/pages/user-management.md` 中的相关内容与源码一致。",
+      "is_error": false,
+      "turns": 8,
+      "cost": 0.1419384
+    },
+    {
+      "id": "q02",
+      "q": "用户列表查询的 SQL 写在哪里？查询了哪些表？",
+      "answer": "用户列表的 SQL 在 MyBatis 的 XML 映射文件 `backend/src/main/resources/mapper/UserMapper.xml` 里，没有写在 Java 代码中。查询涉及两张表：`users` 和 `roles`。分页查询把两张表连起来查，统计总数只查 `users`。\n\n## SQL 位置\n\n`UserService#list` 调用了 Mapper 的两个方法（`backend/src/main/java/com/example/admin/user/UserService.java:21`）：\n\n| Mapper 方法 | 接口声明 | XML 中的 SQL |\n|---|---|---|\n| `selectPage(keyword, offset, limit)` | `backend/src/main/java/com/example/admin/user/UserMapper.java:9` | `backend/src/main/resources/mapper/UserMapper.xml:9-20` |\n| `count(keyword)` | `backend/src/main/java/com/example/admin/user/UserMapper.java:11` | `backend/src/main/resources/mapper/UserMapper.xml:22-29` |\n\n## 查询了哪些表\n\n**1. `selectPage`：取当前页的数据，`users u LEFT JOIN roles r ON r.id = u.role_id`**（`UserMapper.xml:11-12`）\n- 查询列来自公共片段 `<sql id=\"columns\">`：`u.id, u.username, u.email, u.password_hash, u.status, u.role_id, r.name AS role_name, u.created_at`（`UserMapper.xml:5-7`）。`roles` 表只用来取角色名 `role_name`。\n- `keyword` 不为空时，对 `u.username` 或 `u.email` 做 `LIKE CONCAT('%', #{keyword}, '%')`（`UserMapper.xml:14-16`）。\n- 按 `u.created_at DESC` 排序，用 `LIMIT #{offset}, #{limit}` 分页（`UserMapper.xml:18-19`）。`offset` 和 `limit` 由 Service 算出，`limit` 被限制在 1 到 100 之间（`UserService.java:19-20`）。\n\n**2. `count`：统计总数，只查 `users u`，不连 `roles`**（`UserMapper.xml:23`）\n- 筛选条件和 `selectPage` 一样（`UserMapper.xml:25-27`）。\n\n## 补充\n\n- 知识页 `.devflow/knowledge/pages/user-management.md` 第 35 行写的是 \"`selectPage` + `count` → 表 `users` LEFT JOIN `roles`\"，容易让人以为 `count` 也连了 `roles`。源码里 `count` 只查 `users`（`UserMapper.xml:23`）。其他内容和源码一致，以源码为准。需要的话可以用 devflow-scan 修正这一句。\n- 查询列里有 `u.password_hash`（`UserMapper.xml:6`）。知识页\"已知限制\"一节提到，列表接口的响应可能因此包含密码哈希。",
+      "is_error": false,
+      "turns": 8,
+      "cost": 0.156022
+    },
+    {
+      "id": "q03",
+      "q": "禁用用户有哪些限制条件？",
+      "answer": "禁用用户由后端 `UserService#disable` 做三项校验。全部通过后，才把用户状态改为 `DISABLED`。\n\n## 后端校验（按执行顺序）\n\n| # | 条件 | 结果 | 出处 |\n|---|---|---|---|\n| 1 | 不能禁用自己：目标 `id` 等于当前操作人 `operatorId` | 400 \"不能禁用当前登录的用户\" | `backend/src/main/java/com/example/admin/user/UserService.java:34-36` |\n| 2 | 目标用户必须存在 | 404 \"用户不存在\" | `UserService.java:37`，经 `UserService#get` 在 `UserService.java:26-28` 抛出 |\n| 3 | 不能禁用角色为 `ADMIN` 的用户 | 403 \"不能禁用管理员\" | `UserService.java:38-40` |\n\n三项都通过后执行 `updateStatus(id, DISABLED)`（`UserService.java:41`），对应的 SQL 是 `UPDATE users SET status = ... WHERE id = ...`（`backend/src/main/resources/mapper/UserMapper.xml:43-45`）。\n\n几点细节：\n- **操作人 ID 的来源：** 从请求属性 `TokenService.USER_ID_ATTR` 取得（`backend/src/main/java/com/example/admin/user/UserController.java:37`）。这个属性由 `AuthInterceptor` 在 token 校验通过后写入（`backend/src/main/java/com/example/admin/auth/AuthInterceptor.java:21-26`）。没有有效 token 时直接返回 401（`AuthInterceptor.java:22-24`）。\n- **ADMIN 的判断方式：** 用的是 `roleName`，它来自 SQL 里 `roles.name AS role_name` 这个关联字段（`UserMapper.xml:6`）。\n\n## 前端限制\n\n- 只有 `status === 'ACTIVE'` 且 `roleName !== 'ADMIN'` 的行才显示\"禁用\"按钮（`frontend/src/views/UserList.vue:13`）。\n- 点击后会先弹出确认框 `ElMessageBox.confirm`（`UserList.vue:52`）。\n- 前端不会隐藏当前登录用户自己那一行的禁用按钮。这条规则只在后端校验。\n\n## 没有做的限制（依据代码）\n\n- **不检查操作人的角色：** 只要登录，任何用户都能调用禁用接口。`AuthInterceptor` 只验证 token（`AuthInterceptor.java:18-28`），`UserService#disable` 也不检查操作人角色（`UserService.java:33-42`）。\n- **后端不检查目标是否已被禁用：** 对已是 `DISABLED` 的用户再次调用会照常成功。\"只能禁用 ACTIVE 用户\"这条限制只在前端按钮上（`UserList.vue:13`）。\n- **已签发的 token 不会失效：** 用户被禁用后，之前拿到的 token 依然可用，因为 `AuthInterceptor` 不检查用户状态（`AuthInterceptor.java:18-28`）。\n- **没有恢复接口：** 无法把用户改回 `ACTIVE`（`UserController.java`）。\n\n知识页 `.devflow/knowledge/pages/user-management.md` 与源码一致。不过它没写到上面前两点（不检查操作人角色、不检查是否已被禁用），可以用 devflow-scan 补充。",
+      "is_error": false,
+      "turns": 10,
+      "cost": 0.1856042
+    },
+    {
+      "id": "q04",
+      "q": "登录 token 的有效期是多长？在哪里定义？",
+      "answer": "**登录 token 的有效期是 2 小时**，写死在后端代码里的一个常量中，没有放在配置文件里。\n\n**定义位置**\n- `backend/src/main/java/com/example/admin/auth/TokenService.java:14`：`static final Duration TTL = Duration.ofHours(2);`\n\n**生效方式**\n- 签发：登录成功后，`TokenService#issue` 生成一个随机 UUID 作为 token，过期时间设为\"当前时间 + TTL\"，存入内存中的 `ConcurrentHashMap`（`TokenService.java:18,20-23`）。\n- 校验：`TokenService#verify` 发现 token 不存在或已过期时返回 null（`TokenService.java:27-31`），拦截器随后返回 HTTP 401（`backend/src/main/java/com/example/admin/auth/AuthInterceptor.java:22-25`）。\n- 2 小时从签发时算起，每次请求不会顺延；源码中也没有刷新 token 的逻辑（`TokenService.java:22,29`）。\n\n**补充说明**\n- 在 `application` 配置等其他源码中搜索 `ttl`、`expire`、`有效期`，都没有找到其他相关定义。要修改有效期，只能改这个常量，再重新编译。\n- token 只保存在进程内存里，服务重启后全部失效（`TokenService.java:10`）。\n\n知识页 `.devflow/knowledge/pages/auth.md:41` 的描述和源码一致，不需要更新。",
+      "is_error": false,
+      "turns": 7,
+      "cost": 0.1263072
+    },
+    {
+      "id": "q05",
+      "q": "前端如何把登录 token 传给后端？",
+      "answer": "前端把 token 放进 HTTP 请求头 `Authorization: Bearer <token>`，再发给后端。这个请求头由 axios 请求拦截器统一加上，不需要每个接口自己处理。\n\n**1. 登录拿到 token，存进 localStorage**\n- `Login.vue#onSubmit` 调用 `login(username, password)`，拿到返回的 `{ token }`，然后调用 `setToken(token)`（`frontend/src/views/Login.vue:24-25`）。\n- `setToken` 把 token 写进 `localStorage`，键名是 `ua_token`（`frontend/src/api/request.js:4,7`）。\n\n**2. 每次请求自动带上 token**\n- 所有请求都通过 `axios.create({ baseURL: '/api' })` 创建的同一个实例发出（`frontend/src/api/request.js:10`）。\n- 请求拦截器从 localStorage 读出 token。有 token 时，设置 `config.headers.Authorization = \\`Bearer ${token}\\``（`frontend/src/api/request.js:12-16`）。\n\n**3. 后端读取并校验**\n- `AuthInterceptor#preHandle` 读取 `Authorization` 头，确认以 `\"Bearer \"` 开头后取出后面的 token，再交给 `tokenService.verify` 校验（`backend/src/main/java/com/example/admin/auth/AuthInterceptor.java:19-21`）。\n- 校验失败返回 401（`AuthInterceptor.java:22-25`）。校验通过后，用户 ID 写入请求属性 `TokenService.USER_ID_ATTR`（`AuthInterceptor.java:26`）。\n- 这个拦截器作用于 `/api/**`，但不拦截 `/api/auth/login`（`backend/src/main/java/com/example/admin/auth/WebConfig.java:17-19`）。\n\n**4. token 失效时**\n- 任何接口返回 401，前端都会调用 `clearToken()`，并跳转到 `/login?redirect=<当前路径>`（`frontend/src/api/request.js:21-24`）。\n\ntoken 不通过 Cookie 或 URL 参数传递。知识页 `.devflow/knowledge/pages/auth.md` 的描述和源码一致。",
+      "is_error": false,
+      "turns": 9,
+      "cost": 0.1507842
+    },
+    {
+      "id": "q06",
+      "q": "后端返回 401 时，前端如何处理？",
+      "answer": "## 结论\n\n所有 401 都在 axios 响应拦截器里统一处理。前端做三件事：\n\n1. **清除本地 token**：调用 `clearToken()`，删除 `localStorage` 中的 `ua_token`（`frontend/src/api/request.js:22`，定义见 `request.js:4-8`）。\n2. **跳转到登录页**：`router.push` 到 `/login`，并把当前页面的 `fullPath` 放进 `redirect` 参数（`request.js:23`）。\n3. **继续把错误抛给调用方**：`Promise.reject(err.response?.data ?? err)`，调用方仍会进入自己的 `catch`（`request.js:25`）。\n\n登录成功后，`Login.vue` 会跳回 `redirect` 指向的页面；没有 `redirect` 时进入 `/users`（`frontend/src/views/Login.vue:26`）。\n\n## 依据：401 从哪里来\n\n后端有两种情况会返回 401：\n\n- **token 无效或过期**：`AuthInterceptor#preHandle` 校验失败后执行 `response.setStatus(401)`，然后直接返回 `false`。这个响应没有响应体（`backend/src/main/java/com/example/admin/auth/AuthInterceptor.java:22-25`）。\n- **登录时用户名或密码错误**：`AuthService` 抛出 `BusinessException(401, \"用户名或密码错误\")`（`backend/src/main/java/com/example/admin/auth/AuthService.java:24`）。`GlobalExceptionHandler` 把它转成 HTTP 401，响应体是 `ApiResponse`（`backend/src/main/java/com/example/admin/common/GlobalExceptionHandler.java:11-14`）。\n\n## 需要注意的细节\n\n- **登录失败也会走同一套处理**。密码错误时同样会清 token、执行 `router.push('/login', { redirect: 当前 fullPath })`（`request.js:21-24`）。因为用户本来就在 `/login`，`redirect` 参数会变成 `/login...`。`Login.vue` 的 `catch` 会弹出后端返回的 `message`，也就是\"用户名或密码错误\"（`Login.vue:27-28`）。\n- **token 过期时拿不到错误信息**。拦截器返回的 401 没有响应体，所以 `reject` 出去的对象不是 `ApiResponse` 格式，调用方读不到 `message` 字段。这一点和知识页 `auth.md` 的\"已知限制\"一致。\n\n知识页 `.devflow/knowledge/pages/auth.md` 的描述和源码一致，不需要更新。",
+      "is_error": false,
+      "turns": 8,
+      "cost": 0.160604
+    },
+    {
+      "id": "q07",
+      "q": "用户列表默认每页多少条？最多能返回多少条？",
+      "answer": "**结论：默认每页 20 条，每页最多返回 100 条。**\n\n依据：\n\n- **默认 20 条**：后端接口的 `size` 参数默认是 20，`page` 默认是 1（`backend/src/main/java/com/example/admin/user/UserController.java:26-27`）。前端写死了每页 20 条（`frontend/src/views/UserList.vue:32`），请求时把它作为 `size` 传给后端（`frontend/src/views/UserList.vue:42`）。\n- **最多 100 条**：`MAX_PAGE_SIZE = 100`（`backend/src/main/java/com/example/admin/user/UserService.java:10`）。`size` 会被限制在 1 到 100 之间：传超过 100 的值不会报错，按 100 处理；传小于 1 的值按 1 处理（`backend/src/main/java/com/example/admin/user/UserService.java:19`）。\n- 另外，`page` 小于 1 时按第 1 页处理（`backend/src/main/java/com/example/admin/user/UserService.java:20`）。返回结果里带有符合条件的总条数 `total`（`backend/src/main/java/com/example/admin/user/UserService.java:21`）。\n\n知识页 `.devflow/knowledge/pages/user-management.md:44-47` 的描述和源码一致，不需要更新。",
+      "is_error": false,
+      "turns": 7,
+      "cost": 0.121299
+    },
+    {
+      "id": "q08",
+      "q": "users 表有哪些字段？",
+      "answer": "`users` 表有 7 个字段，定义在 `backend/src/main/resources/schema.sql:7-16`：\n\n| 字段 | 类型 | 约束 / 说明 | 出处 |\n|---|---|---|---|\n| `id` | BIGINT | 主键，自增 | `schema.sql:8` |\n| `username` | VARCHAR(64) | NOT NULL，唯一 | `schema.sql:9` |\n| `email` | VARCHAR(128) | NOT NULL | `schema.sql:10` |\n| `password_hash` | VARCHAR(100) | NOT NULL，注释为 `BCrypt` | `schema.sql:11` |\n| `status` | VARCHAR(16) | NOT NULL，默认 `'ACTIVE'`，取值 `ACTIVE` 或 `DISABLED` | `schema.sql:12` |\n| `role_id` | BIGINT | NOT NULL，外键 `fk_users_role` 指向 `roles(id)` | `schema.sql:13,15` |\n| `created_at` | DATETIME | NOT NULL，默认 `CURRENT_TIMESTAMP` | `schema.sql:14` |\n\n**相关信息：**\n- `role_id` 对应的 `roles` 表有三个字段：`id`、`name`（唯一，取值 `ADMIN` 或 `USER`）、`description`，见 `schema.sql:1-5`。两个角色由 `schema.sql:18` 插入。\n- 实体 `User` 里的 `roleName` 不是 `users` 表的字段。它来自查询时关联 `roles` 表得到的 `roles.name AS role_name`（`backend/src/main/resources/mapper/UserMapper.xml:6`）。\n\n知识页 `.devflow/knowledge/pages/user-management.md:60` 写的内容和源码一致。",
+      "is_error": false,
+      "turns": 7,
+      "cost": 0.1314642
+    },
+    {
+      "id": "q09",
+      "q": "用户状态有哪些取值？",
+      "answer": "用户状态只有两个取值：**`ACTIVE`**（正常）和 **`DISABLED`**（已禁用）。\n\n**依据**\n- 后端枚举是 `public enum Status { ACTIVE, DISABLED }`（`backend/src/main/java/com/example/admin/user/User.java:6`），`User` 的 `status` 字段就是这个类型（`User.java:12`）。\n- 数据库列 `users.status` 的类型是 `VARCHAR(16)`，默认值 `'ACTIVE'`，注释写的是 \"ACTIVE 或 DISABLED\"（`backend/src/main/resources/schema.sql:12`）。\n\n**状态在哪里用到**\n- **改为 `DISABLED`：** 只有禁用接口会这样改，`UserService#disable` 调用 `updateStatus(id, User.Status.DISABLED)`（`backend/src/main/java/com/example/admin/user/UserService.java:41`）。代码里没有把状态改回 `ACTIVE` 的接口（`UserController.java`）。\n- **登录时检查：** `AuthService` 会判断用户状态是不是 `DISABLED`（`backend/src/main/java/com/example/admin/auth/AuthService.java:26`）。\n- **列表页的禁用按钮：** 只有 `status === 'ACTIVE'` 且不是 `ADMIN` 的用户才显示（`frontend/src/views/UserList.vue:13`）。\n- **前端显示：** 列表页和详情页都直接显示原始值，没有转成中文（`UserList.vue:8`，`frontend/src/views/UserDetail.vue:5`）。\n\n知识页 `.devflow/knowledge/pages/user-management.md:55` 的说法和源码一致。",
+      "is_error": false,
+      "turns": 6,
+      "cost": 0.136068
+    },
+    {
+      "id": "q10",
+      "q": "用户详情页对应哪个前端路由和组件？",
+      "answer": "用户详情页的前端路由是 `/users/:id`，对应组件是 `frontend/src/views/UserDetail.vue`。\n\n**依据**\n\n- **路由定义**：`{ path: '/users/:id', component: () => import('../views/UserDetail.vue'), props: true }`，在 `frontend/src/router/index.js:8`。组件是懒加载的。`props: true` 让路由参数 `id` 直接作为组件 prop 传进去。\n- **组件接收参数**：`UserDetail.vue` 声明了 `defineProps({ id: { type: String, required: true } })`，在 `frontend/src/views/UserDetail.vue:15`。\n- **数据加载**：组件挂载时调用 `fetchUser(props.id)`（`frontend/src/views/UserDetail.vue:18-20`）。它请求 `GET /users/${id}`（`frontend/src/api/user.js:4`），后端由 `UserController#detail` 处理。\n- **页面内容**：用 `el-descriptions` 显示用户名（作标题）、邮箱、角色、状态、创建时间（`frontend/src/views/UserDetail.vue:2-6`）。页面底部有“返回列表”链接，指向 `/users`（`:8`）。\n- **入口**：用户列表每行的“详情”链接 `` :to=\"`/users/${row.id}`\" ``（`frontend/src/views/UserList.vue:11`）。\n- **登录要求**：这个路由没有设置 `meta.public`，所以未登录访问会被全局守卫重定向到 `/login?redirect=...`（`frontend/src/router/index.js:14-18`）。\n\n我对照了知识页 `.devflow/knowledge/pages/user-management.md` 和源码，内容一致。",
+      "is_error": false,
+      "turns": 9,
+      "cost": 0.15289919999999999
+    },
+    {
+      "id": "q11",
+      "q": "后端服务端口是多少？前端开发服务器如何转发 /api 请求？",
+      "answer": "后端服务端口是 **8081**。开发时，前端的 Vite 开发服务器跑在 **5173** 端口，它把所有以 `/api` 开头的请求原样转发到 `http://localhost:8081`。\n\n**1. 后端端口**\n- `server.port: 8081`（`backend/src/main/resources/application.yml:2`）\n\n**2. 前端怎么转发 `/api`**\n- **前端请求统一加 `/api` 前缀**：axios 实例设置了 `baseURL: '/api'`、`timeout: 10000`（`frontend/src/api/request.js:10`）。例如 `fetchUsers` 调用 `request.get('/users')`，实际请求的是 `/api/users`（`frontend/src/api/user.js:3`）。\n- **Vite 代理转发**：开发服务器端口为 `5173`，`proxy` 配置为 `'/api': 'http://localhost:8081'`（`frontend/vite.config.js:6-10`）。这是字符串形式的简写，没有配置 `rewrite`，所以路径中的 `/api` 前缀会保留。\n- **后端接口也以 `/api` 开头**：例如 `LoginController` 的路径是 `@RequestMapping(\"/api/auth\")`（`backend/src/main/java/com/example/admin/auth/LoginController.java:13`）。登录拦截器对 `/api/**` 生效，`/api/auth/login` 除外（`backend/src/main/java/com/example/admin/auth/WebConfig.java:18-19`）。\n\n所以一次请求的路径是：浏览器 → `localhost:5173/api/users` → Vite 代理 → `localhost:8081/api/users`。\n\n**补充**\n- 这个代理只在 Vite 开发服务器中生效。生产环境下 `/api` 怎么转发，仓库里没有找到配置，这部分是\"未知\"。后端也没有 CORS 配置（`.devflow/knowledge/pages/api-conventions.md:49-50`）。\n- 知识页 `api-conventions.md` 中的端口和代理信息与源码一致，不需要更新。",
+      "is_error": false,
+      "turns": 10,
+      "cost": 0.17873119999999998
+    },
+    {
+      "id": "q12",
+      "q": "后端接口的统一响应格式是什么？",
+      "answer": "后端所有接口都返回同一种 JSON 结构 `ApiResponse`，包含三个字段 `code`、`message`、`data`。`code` 为 0 表示成功，非 0 时就是错误码。只有一个例外：鉴权拦截器返回的 401 不带响应体。\n\n**结构定义**\n- `ApiResponse<T>(int code, String message, T data)`，`code` 为 0 表示成功，否则为错误码（`backend/src/main/java/com/example/admin/common/ApiResponse.java:3-4`）。\n- 成功时 `code=0`、`message=\"ok\"`，`data` 是业务数据（`ApiResponse.java:5-7`）：\n  ```json\n  { \"code\": 0, \"message\": \"ok\", \"data\": { ... } }\n  ```\n- 失败时 `data` 为 `null`（`ApiResponse.java:9-11`）：\n  ```json\n  { \"code\": 400, \"message\": \"参数校验失败\", \"data\": null }\n  ```\n- 分页数据放在 `data` 里，类型是 `PageResult(items, total)`（`backend/src/main/java/com/example/admin/common/PageResult.java:5`）。例如用户列表接口返回 `ApiResponse<PageResult<User>>`（`backend/src/main/java/com/example/admin/user/UserController.java:24`）。\n\n**异常怎么转换**（`backend/src/main/java/com/example/admin/common/GlobalExceptionHandler.java`），HTTP 状态码和 `code` 字段一致：\n| 异常 | HTTP 状态 / code | message |\n|---|---|---|\n| `BusinessException(code, message)` | 取异常里的 `code` | 取异常里的 message（`:11-14`） |\n| `MethodArgumentNotValidException` | 400 | \"参数校验失败\"（`:16-19`） |\n| 其他 `Exception` | 500 | \"服务器内部错误\"（`:21-24`） |\n\n**例外**\n- token 无效或过期时，`AuthInterceptor` 只设置 HTTP 401 就直接返回 `false`，不写响应体，所以这时不是 `ApiResponse` 格式（`backend/src/main/java/com/example/admin/auth/AuthInterceptor.java:22-25`）。\n\n**前端怎么处理**（`frontend/src/api/request.js`）\n- 请求成功时，拦截器直接返回 `res.data.data`，调用方拿到的就是 `data`（`:19`）。\n- 请求失败时，返回的 Promise 被拒绝，拒绝值是 `err.response.data`（也就是 `ApiResponse`，可以读 `message`）；没有响应体时就是原始错误对象。收到 401 时还会清除 token 并跳转登录页（`:20-26`）。\n\n知识页 `api-conventions.md` 和 `auth.md` 的内容与源码一致，不需要更新。",
+      "is_error": false,
+      "turns": 13,
+      "cost": 0.19651799999999997
+    },
+    {
+      "id": "q13",
+      "q": "业务异常是如何转换成 HTTP 响应的？",
+      "answer": "业务异常由全局异常处理器 `GlobalExceptionHandler` 统一处理。它把 `BusinessException` 里的 `code` 同时用作 HTTP 状态码和响应体的 `code` 字段，响应体是 `ApiResponse(code, message, null)`。\n\n## 依据\n\n**1. 异常定义**\n`BusinessException` 继承 `RuntimeException`，构造时传入 `int code` 和 `String message`。message 交给父类保存，通过 `getCode()` 读取 code（`backend/src/main/java/com/example/admin/common/BusinessException.java:3-11`）。\n\n**2. 转换逻辑**（`backend/src/main/java/com/example/admin/common/GlobalExceptionHandler.java`）\n- 类上标了 `@RestControllerAdvice`，所以对所有 Controller 生效（`:9`）。\n- `BusinessException`：`ResponseEntity.status(e.getCode()).body(ApiResponse.error(e.getCode(), e.getMessage()))`，HTTP 状态码等于 code（`:11-14`）。\n- `MethodArgumentNotValidException`（参数校验失败）：固定返回 400，消息为\"参数校验失败\"（`:16-19`）。\n- 其他所有 `Exception`：固定返回 500，消息为\"服务器内部错误\"（`:21-24`）。\n\n**3. 响应体格式**\n`ApiResponse` 是一个 record，字段为 `(int code, String message, T data)`。`error(code, message)` 返回的 `data` 为 `null`，成功时 `ok(data)` 返回 `code=0`、`message=\"ok\"`（`backend/src/main/java/com/example/admin/common/ApiResponse.java:4-11`）。\n\n例如抛出 `new BusinessException(404, \"用户不存在\")`，客户端会收到 HTTP 404，响应体为：\n```json\n{\"code\": 404, \"message\": \"用户不存在\", \"data\": null}\n```\n\n**4. 代码中实际抛出的业务异常**\n- 404 \"用户不存在\"：`backend/src/main/java/com/example/admin/user/UserService.java:27`\n- 400 \"不能禁用当前登录的用户\"：`UserService.java:35`\n- 403 \"不能禁用管理员\"：`UserService.java:39`\n- 401 \"用户名或密码错误\"：`backend/src/main/java/com/example/admin/auth/AuthService.java:24`\n- 403 \"用户已被禁用\"：`AuthService.java:27`\n\n**5. 前端怎么接**\naxios 响应拦截器在失败时 reject `err.response.data`，也就是上面的 `ApiResponse`，可以读其中的 `message`。没有响应体时 reject 原始错误。HTTP 401 会额外清除 token 并跳转到 `/login`（`frontend/src/api/request.js:18-27`）。\n\n## 补充说明\n- **未登录不经过这套机制**：`AuthInterceptor` 发现 token 无效时只调用 `response.setStatus(401)` 后返回 `false`，不写 `ApiResponse` 响应体（`backend/src/main/java/com/example/admin/auth/AuthInterceptor.java:22-24`）。这种情况下前端 reject 的 `err.response.data` 不是 `ApiResponse`，读不到 `message`。\n- **500 分支没有日志**：`other` 处理器丢掉了异常信息，代码里也看不到日志记录（`GlobalExceptionHandler.java:21-24`）。\n- **知识页基本准确**：`.devflow/knowledge/pages/api-conventions.md` 与源码一致。它的前端拦截器描述没提 401 时会清 token 并跳转登录，也没说明拦截器返回的 401 没有 `ApiResponse` 响应体。可以用 devflow-scan 补上。",
+      "is_error": false,
+      "turns": 12,
+      "cost": 0.18249459999999998
+    },
+    {
+      "id": "q14",
+      "q": "用户和角色是什么关系？用户列表里的角色名是怎么查出来的？",
+      "answer": "## 结论\n\n**用户和角色是多对一关系：每个用户只有一个角色，一个角色可以被多个用户使用。** 关联存放在 `users.role_id` 外键上，没有中间表。用户列表里的角色名是查用户时用 SQL `LEFT JOIN roles` 一起取出来的，不需要单独查一次角色。\n\n## 依据\n\n### 1. 表结构：多对一\n- `users.role_id BIGINT NOT NULL`，外键 `fk_users_role` 指向 `roles(id)`（`backend/src/main/resources/schema.sql:13`、`:15`）。所以每个用户都必须有且只有一个角色。\n- `roles` 表的字段是 `id`、`name`（唯一）、`description`（`schema.sql:1-5`）。\n- 初始化时只插入两个角色：`ADMIN`（管理员）和 `USER`（普通用户）（`schema.sql:18`）。\n\n### 2. 角色名的查询过程\n1. 前端 `UserList.vue#load` 调用 `fetchUsers` 请求 `GET /api/users`（`frontend/src/views/UserList.vue:39-42`）。\n2. 后端依次经过 `UserController#list` → `UserService#list` → `UserMapper#selectPage`。\n3. `selectPage` 的 SQL 如下（`backend/src/main/resources/mapper/UserMapper.xml:9-20`）：\n   ```sql\n   SELECT u.id, u.username, u.email, u.password_hash, u.status, u.role_id,\n          r.name AS role_name, u.created_at\n   FROM users u\n   LEFT JOIN roles r ON r.id = u.role_id\n   ```\n   查询的列定义在公共片段 `columns` 里（`UserMapper.xml:5-7`），其中 `r.name AS role_name` 就是角色名。\n4. 配置了 `map-underscore-to-camel-case: true`（`backend/src/main/resources/application.yml:13`），MyBatis 会把 `role_name` 自动映射到 `User.roleName` 字段（`backend/src/main/java/com/example/admin/user/User.java:14`）。`roleName` 只是查询结果字段，`users` 表里没有这一列。\n5. 前端表格用 `prop=\"roleName\"` 显示\"角色\"这一列（`UserList.vue:7`）。\n\n### 补充\n- 详情接口 `selectById` 和登录用的 `selectByUsername` 也用同样的 `LEFT JOIN` 带出角色名（`UserMapper.xml:31-41`）。\n- 列表总数用的 `count` 查询不关联 `roles`，因为搜索条件只涉及 `username` 和 `email`（`UserMapper.xml:22-29`）。\n- 后端判断\"不能禁用管理员\"、前端决定是否显示\"禁用\"按钮，都是看 `roleName === 'ADMIN'`（`UserList.vue:13`；`UserService.java:38-40`，这一处引用来自知识页，我没有打开源码核对）。\n- `RoleMapper#selectAll` 存在，但代码里没有地方调用它，角色名完全靠 JOIN 获取（`backend/src/main/java/com/example/admin/role/RoleMapper.java:9-10`，这一条也来自知识页）。\n\n我把知识页 `.devflow/knowledge/pages/user-management.md` 和源码对照过，没有发现不一致。",
+      "is_error": false,
+      "turns": 10,
+      "cost": 0.1740076
+    },
+    {
+      "id": "q15",
+      "q": "用户列表页的\"禁用\"按钮调用哪个后端接口？什么情况下按钮不显示？",
+      "answer": "## 结论\n\n1. \"禁用\"按钮调用的是 **`POST /api/users/{id}/disable`**。\n2. 按钮只在用户**状态为 `ACTIVE`** 且**角色不是 `ADMIN`** 时显示。所以两种情况下不显示：用户已经是 `DISABLED`，或者用户是管理员。\n\n## 依据\n\n**调用链**\n- 点击按钮会进入 `onDisable(row)`，先弹出确认框 `确认禁用 ${username}？`，确认后才调用 `disableUser(row.id)`（`frontend/src/views/UserList.vue:14`、`:51-54`）。\n- `disableUser` 的实现是 `request.post(\\`/users/${id}/disable\\`)`（`frontend/src/api/user.js:5`）。axios 实例的 `baseURL` 是 `/api`（`frontend/src/api/request.js:10`），所以完整路径是 `/api/users/{id}/disable`。\n- 后端由 `UserController#disable` 处理：`@RequestMapping(\"/api/users\")` 加 `@PostMapping(\"/{id}/disable\")`，操作人 ID 从请求属性 `TokenService.USER_ID_ATTR` 读取（`backend/src/main/java/com/example/admin/user/UserController.java:15`、`:36-40`）。\n- 接着调用 `UserService#disable`，最终执行 `userMapper.updateStatus(id, User.Status.DISABLED)`（`backend/src/main/java/com/example/admin/user/UserService.java:33-42`）。\n\n**显示条件**\n- `v-if=\"row.status === 'ACTIVE' && row.roleName !== 'ADMIN'\"`（`frontend/src/views/UserList.vue:13`）\n\n## 需要注意\n- 前端**不会**隐藏当前登录用户自己那一行的禁用按钮。这一点只在后端拦截：自己禁用自己会返回 400\"不能禁用当前登录的用户\"（`UserService.java:34-36`），前端用 `ElMessage.error` 显示这条错误（`UserList.vue:57-58`）。\n- 后端还会再查一次 ADMIN：要禁用的是管理员时返回 403\"不能禁用管理员\"（`UserService.java:38-40`）。\n\n我核对过源码，知识页 `.devflow/knowledge/pages/user-management.md` 和代码一致。",
+      "is_error": false,
+      "turns": 7,
+      "cost": 0.1656244
+    },
+    {
+      "id": "q16",
+      "q": "登录时密码如何校验？被禁用的用户能登录吗？",
+      "answer": "## 结论\n\n- **密码校验**：先按用户名查出用户，再用 BCrypt 比对明文密码和库里存的哈希。用户不存在或密码不对，都返回 401“用户名或密码错误”。\n- **被禁用的用户不能登录**：密码校验通过后会检查状态，状态为 `DISABLED` 时返回 403“用户已被禁用”，不签发 token。\n- **但有一个漏洞**：用户被禁用前已经拿到的 token，在 2 小时过期前仍然能用。\n\n## 依据\n\n**登录流程**（`backend/src/main/java/com/example/admin/auth/AuthService.java#login`）\n\n1. 先校验请求体：`username` 和 `password` 都是 `@NotBlank`，为空时返回 400“参数校验失败”（`backend/src/main/java/com/example/admin/auth/LoginController.java:15`，`backend/src/main/java/com/example/admin/common/GlobalExceptionHandler.java:16-19`，此处引用自知识页）。\n2. 按用户名查用户：`userMapper.selectByUsername(username)`（`AuthService.java:22`）。SQL 是 `users LEFT JOIN roles ... WHERE u.username = #{username}`（`backend/src/main/resources/mapper/UserMapper.xml:37-41`）。\n3. 比对密码：`user == null || !encoder.matches(password, user.getPasswordHash())` 时抛出 `BusinessException(401, \"用户名或密码错误\")`（`AuthService.java:23-25`）。`encoder` 是 `new BCryptPasswordEncoder()`（`AuthService.java:13`）。用户不存在和密码错误返回同一条提示，所以无法从提示判断用户名是否存在。\n4. 检查状态：`user.getStatus() == User.Status.DISABLED` 时抛出 `BusinessException(403, \"用户已被禁用\")`（`AuthService.java:26-28`）。\n5. 全部通过后调用 `tokenService.issue(user.getId())`，签发一个随机 UUID 作为 token，有效期 2 小时（`AuthService.java:29`，`TokenService.java:14,20-23`）。\n\n**检查顺序有个后果**：密码校验在状态检查之前。所以只有密码正确时才会看到“用户已被禁用”；密码错误的话，被禁用的用户也只会收到 401。\n\n## 注意：禁用不会让已发的 token 失效\n\n- `TokenService#verify` 只检查 token 是否存在、是否过期，不查用户状态（`backend/src/main/java/com/example/admin/auth/TokenService.java:27-33`）。\n- `AuthInterceptor#preHandle` 只要 `verify` 返回了用户 ID 就放行，同样不查用户状态（`backend/src/main/java/com/example/admin/auth/AuthInterceptor.java:18-27`）。\n- 我在后端源码里搜了 `tokenService`、`sessions.remove`、`revoke`，除认证模块自身外没有其他地方调用 `TokenService`，也没有移除或撤销 token 的逻辑。所以禁用用户时不会清掉他已有的会话。\n\n知识页 `.devflow/knowledge/pages/auth.md` 和源码核对一致，不需要更新。",
+      "is_error": false,
+      "turns": 9,
+      "cost": 0.1741764
+    },
+    {
+      "id": "q17",
+      "q": "哪些后端接口不需要登录就能访问？",
+      "answer": "## 结论\n\n不用登录就能访问的业务接口只有一个：**`POST /api/auth/login`**。\n\n其余后端接口都要在请求头带 `Authorization: Bearer <token>`，否则返回 HTTP 401。\n\n## 依据\n\n**拦截规则**\n- 鉴权拦截器拦截 `/api/**`，只排除了 `/api/auth/login`（`backend/src/main/java/com/example/admin/auth/WebConfig.java:17-19`）。\n- 拦截器读取 `Authorization: Bearer <token>`，token 校验失败就返回 401，不写响应体（`backend/src/main/java/com/example/admin/auth/AuthInterceptor.java:19-25`）。\n\n**后端全部接口**\n| 接口 | 需要登录 | 出处 |\n|---|---|---|\n| `POST /api/auth/login` | 否 | `backend/src/main/java/com/example/admin/auth/LoginController.java:13,23` |\n| `GET /api/users`（分页搜索） | 是 | `backend/src/main/java/com/example/admin/user/UserController.java:15,23` |\n| `GET /api/users/{id}` | 是 | `UserController.java:31` |\n| `POST /api/users/{id}/disable` | 是 | `UserController.java:36` |\n\n后端只有 `LoginController` 和 `UserController` 两个 Controller。我搜过 `@RestController`、`@RequestMapping` 和各类 `@*Mapping` 注解，也搜过 actuator、swagger、springdoc、h2-console、context-path，都没有找到其他公开接口或相关配置。\n\n## 补充\n- 拦截器只管 `/api/**`，这个范围以外的路径（例如 Spring Boot 自带的 `/error`）不经过鉴权。不过代码里没有自定义 `/api` 以外的接口。\n- 登录后任何已登录用户都能调用 `/api/users/**`。拦截器只检查 token 是否有效，不查角色，也不查用户状态（`AuthInterceptor.java:21-27`）。所以用户被禁用后，已签发的 token 到期前仍然能用（`.devflow/knowledge/pages/auth.md:55`）。\n\n知识页 `auth.md` 和源码一致。",
+      "is_error": false,
+      "turns": 9,
+      "cost": 0.15246939999999998
+    },
+    {
+      "id": "q18",
+      "q": "系统使用的是哪个消息队列？",
+      "answer": "答案是\"未知\"。这个项目里没有用任何消息队列，至少代码和配置里找不到。\n\n我查了这些地方：\n\n- **知识索引** `.devflow/knowledge/index.md:3-5`：只有三页，分别是用户管理、认证与会话、接口约定与运行配置，都没提到消息队列。\n- **后端依赖** `backend/pom.xml:18-36`：只有 `spring-boot-starter-web`、`spring-boot-starter-validation`、`mybatis-spring-boot-starter`、`mysql-connector-j` 和 `spring-security-crypto`。没有 Kafka、RabbitMQ、RocketMQ 或 Redis 之类的依赖。\n- **前端依赖** `frontend/package.json:9-18`：只有 axios、element-plus、vue、vue-router、vite。\n- **全仓库搜索**：搜了 kafka、rabbit、amqp、redis、nats、sqs、pulsar、rocketmq、activemq、queue、mq 这些关键词，一个都没搜到（`.devflow/` 目录不在搜索范围内）。\n\n后端只连 MySQL。会话 token 存在内存里，没有放到 Redis 之类的外部存储（见 `.devflow/knowledge/pages/auth.md`）。如果消息队列在别的仓库或部署环境里，这个仓库里查不到。",
+      "is_error": false,
+      "turns": 5,
+      "cost": 0.10431660000000001
+    },
+    {
+      "id": "q19",
+      "q": "用户导出 Excel 的功能在哪里实现？",
+      "answer": "**未知：代码中没有找到用户导出 Excel 的功能。** 这个项目目前看不出实现了这个功能。\n\n**依据**\n\n1. **知识页**：`.devflow/knowledge/pages/user-management.md` 只写了三个用户功能：分页搜索、查看详情、禁用，没有提到导出。\n2. **后端接口**：`/api/users` 下只有三个接口：\n   - `GET /api/users`（`backend/src/main/java/com/example/admin/user/UserController.java:24`）\n   - `GET /api/users/{id}`（`UserController.java:31`）\n   - `POST /api/users/{id}/disable`（`UserController.java:36`）\n\n   除此之外只有登录接口 `POST /api/auth/login`（`backend/src/main/java/com/example/admin/auth/LoginController.java:23`）。\n3. **前端 API**：`frontend/src/api/user.js:3-6` 只有 `fetchUsers`、`fetchUser`、`disableUser`、`login` 四个函数，没有导出或下载相关的调用。\n\n**搜索过的关键词**（不区分大小写，排除了 `.devflow/` 目录，范围是整个仓库的 `backend/` 和 `frontend/`）：\n- `excel`、`xlsx`、`csv`、`poi`、`easyexcel`、`workbook`、`sheet`\n- `export`、`download`\n- `导出`、`报表`、`表格`、`文件`\n\n`export` 只搜到 JS 的 `export` 语句（`frontend/src/api/user.js`、`frontend/src/api/request.js`、`frontend/src/router/index.js`、`frontend/vite.config.js`），和导出功能无关。其他关键词在源码里都没有搜到。\n\n如果这个功能在别的分支或别的仓库，请告诉我位置。如果打算新增这个功能，可以先走 DevFlow 的变更流程（change/spec）。",
+      "is_error": false,
+      "turns": 7,
+      "cost": 0.1421138
+    },
+    {
+      "id": "q20",
+      "q": "Redis 缓存的过期时间是多少？",
+      "answer": "**未知：代码里没有找到 Redis 缓存，所以也没有它的过期时间。**\n\n项目里唯一的过期设置是登录 token，存在内存中，不在 Redis：\n\n- `TokenService` 用 `ConcurrentHashMap` 存 token（`backend/src/main/java/com/example/admin/auth/TokenService.java:18`），注释写明\"内存中的 token 存储：服务重启后所有 token 失效\"（`TokenService.java:10`）。\n- token 有效期是 **2 小时**：`static final Duration TTL = Duration.ofHours(2);`（`TokenService.java:14`）。签发时设为当前时间加 TTL（`TokenService.java:22`），校验时过期就返回 null（`TokenService.java:29`）。\n- 知识页 `.devflow/knowledge/pages/auth.md` 也写的是\"内存 Bearer token（2 小时）\"（`.devflow/knowledge/index.md:4`），和源码一致。\n\n**我搜过的内容：**\n- 在全部源码中（不含 `.devflow/`）搜了 `redis`、`cache`、`ttl`、`expire`、`缓存`、`过期`，只在 `TokenService.java` 里找到结果。\n- 在 `pom.xml`、`build.gradle*`、`*.yml`/`*.yaml`/`*.properties`、`package.json` 里搜了 `redis`、`lettuce`、`jedis`、`spring-boot-starter-cache`、`caffeine`，没有结果。也就是说项目没有 Redis 依赖，也没有 Redis 配置。\n\n如果你问的其实是登录会话多久过期，答案是 2 小时。如果 Redis 在其他仓库或部署配置里，需要你提供那部分代码我才能查。",
+      "is_error": false,
+      "turns": 7,
+      "cost": 0.112221
+    }
+  ],
+  "scores": [
+    {
+      "id": "q01",
+      "cited": [
+        "backend/src/main/java/com/example/admin/user/UserController.java",
+        "frontend/src/api/request.js",
+        "frontend/src/api/user.js"
+      ],
+      "unresolved": [],
+      "saidUnknown": false,
+      "recall": 1,
+      "precision": 0.6666666666666666,
+      "noCitation": false
+    },
+    {
+      "id": "q02",
+      "cited": [
+        "backend/src/main/java/com/example/admin/user/UserMapper.java",
+        "backend/src/main/java/com/example/admin/user/UserService.java",
+        "backend/src/main/resources/mapper/UserMapper.xml"
+      ],
+      "unresolved": [],
+      "saidUnknown": false,
+      "recall": 1,
+      "precision": 1,
+      "noCitation": false
+    },
+    {
+      "id": "q03",
+      "cited": [
+        "backend/src/main/java/com/example/admin/auth/AuthInterceptor.java",
+        "backend/src/main/java/com/example/admin/user/UserController.java",
+        "backend/src/main/java/com/example/admin/user/UserService.java",
+        "backend/src/main/resources/mapper/UserMapper.xml",
+        "frontend/src/views/UserList.vue"
+      ],
+      "unresolved": [],
+      "saidUnknown": true,
+      "recall": 1,
+      "precision": 0.6,
+      "noCitation": false
+    },
+    {
+      "id": "q04",
+      "cited": [
+        "backend/src/main/java/com/example/admin/auth/AuthInterceptor.java",
+        "backend/src/main/java/com/example/admin/auth/TokenService.java"
+      ],
+      "unresolved": [],
+      "saidUnknown": true,
+      "recall": 1,
+      "precision": 0.5,
+      "noCitation": false
+    },
+    {
+      "id": "q05",
+      "cited": [
+        "backend/src/main/java/com/example/admin/auth/AuthInterceptor.java",
+        "backend/src/main/java/com/example/admin/auth/WebConfig.java",
+        "frontend/src/api/request.js",
+        "frontend/src/views/Login.vue"
+      ],
+      "unresolved": [],
+      "saidUnknown": false,
+      "recall": 1,
+      "precision": 0.75,
+      "noCitation": false
+    },
+    {
+      "id": "q06",
+      "cited": [
+        "backend/src/main/java/com/example/admin/auth/AuthInterceptor.java",
+        "backend/src/main/java/com/example/admin/auth/AuthService.java",
+        "backend/src/main/java/com/example/admin/common/GlobalExceptionHandler.java",
+        "frontend/src/api/request.js",
+        "frontend/src/views/Login.vue"
+      ],
+      "unresolved": [],
+      "saidUnknown": false,
+      "recall": 1,
+      "precision": 0.4,
+      "noCitation": false
+    },
+    {
+      "id": "q07",
+      "cited": [
+        "backend/src/main/java/com/example/admin/user/UserController.java",
+        "backend/src/main/java/com/example/admin/user/UserService.java",
+        "frontend/src/views/UserList.vue"
+      ],
+      "unresolved": [],
+      "saidUnknown": false,
+      "recall": 1,
+      "precision": 1,
+      "noCitation": false
+    },
+    {
+      "id": "q08",
+      "cited": [
+        "backend/src/main/resources/mapper/UserMapper.xml",
+        "backend/src/main/resources/schema.sql"
+      ],
+      "unresolved": [],
+      "saidUnknown": false,
+      "recall": 1,
+      "precision": 1,
+      "noCitation": false
+    },
+    {
+      "id": "q09",
+      "cited": [
+        "backend/src/main/java/com/example/admin/auth/AuthService.java",
+        "backend/src/main/java/com/example/admin/user/User.java",
+        "backend/src/main/java/com/example/admin/user/UserController.java",
+        "backend/src/main/java/com/example/admin/user/UserService.java",
+        "backend/src/main/resources/schema.sql",
+        "frontend/src/views/UserDetail.vue",
+        "frontend/src/views/UserList.vue"
+      ],
+      "unresolved": [],
+      "saidUnknown": false,
+      "recall": 1,
+      "precision": 0.5714285714285714,
+      "noCitation": false
+    },
+    {
+      "id": "q10",
+      "cited": [
+        "frontend/src/api/user.js",
+        "frontend/src/router/index.js",
+        "frontend/src/views/UserDetail.vue",
+        "frontend/src/views/UserList.vue"
+      ],
+      "unresolved": [
+        "../views/UserDetail.vue"
+      ],
+      "saidUnknown": false,
+      "recall": 1,
+      "precision": 0.75,
+      "noCitation": false
+    },
+    {
+      "id": "q11",
+      "cited": [
+        "backend/src/main/java/com/example/admin/auth/LoginController.java",
+        "backend/src/main/java/com/example/admin/auth/WebConfig.java",
+        "backend/src/main/resources/application.yml",
+        "frontend/src/api/request.js",
+        "frontend/src/api/user.js",
+        "frontend/vite.config.js"
+      ],
+      "unresolved": [],
+      "saidUnknown": true,
+      "recall": 1,
+      "precision": 0.3333333333333333,
+      "noCitation": false
+    },
+    {
+      "id": "q12",
+      "cited": [
+        "backend/src/main/java/com/example/admin/auth/AuthInterceptor.java",
+        "backend/src/main/java/com/example/admin/common/ApiResponse.java",
+        "backend/src/main/java/com/example/admin/common/GlobalExceptionHandler.java",
+        "backend/src/main/java/com/example/admin/common/PageResult.java",
+        "backend/src/main/java/com/example/admin/user/UserController.java",
+        "frontend/src/api/request.js"
+      ],
+      "unresolved": [],
+      "saidUnknown": false,
+      "recall": 1,
+      "precision": 0.6666666666666666,
+      "noCitation": false
+    },
+    {
+      "id": "q13",
+      "cited": [
+        "backend/src/main/java/com/example/admin/auth/AuthInterceptor.java",
+        "backend/src/main/java/com/example/admin/auth/AuthService.java",
+        "backend/src/main/java/com/example/admin/common/ApiResponse.java",
+        "backend/src/main/java/com/example/admin/common/BusinessException.java",
+        "backend/src/main/java/com/example/admin/common/GlobalExceptionHandler.java",
+        "backend/src/main/java/com/example/admin/user/UserService.java",
+        "frontend/src/api/request.js"
+      ],
+      "unresolved": [],
+      "saidUnknown": true,
+      "recall": 1,
+      "precision": 0.42857142857142855,
+      "noCitation": false
+    },
+    {
+      "id": "q14",
+      "cited": [
+        "backend/src/main/java/com/example/admin/role/RoleMapper.java",
+        "backend/src/main/java/com/example/admin/user/User.java",
+        "backend/src/main/java/com/example/admin/user/UserService.java",
+        "backend/src/main/resources/application.yml",
+        "backend/src/main/resources/mapper/UserMapper.xml",
+        "backend/src/main/resources/schema.sql",
+        "frontend/src/views/UserList.vue"
+      ],
+      "unresolved": [],
+      "saidUnknown": true,
+      "recall": 1,
+      "precision": 0.5714285714285714,
+      "noCitation": false
+    },
+    {
+      "id": "q15",
+      "cited": [
+        "backend/src/main/java/com/example/admin/user/UserController.java",
+        "backend/src/main/java/com/example/admin/user/UserService.java",
+        "frontend/src/api/request.js",
+        "frontend/src/api/user.js",
+        "frontend/src/views/UserList.vue"
+      ],
+      "unresolved": [],
+      "saidUnknown": false,
+      "recall": 1,
+      "precision": 0.8,
+      "noCitation": false
+    },
+    {
+      "id": "q16",
+      "cited": [
+        "backend/src/main/java/com/example/admin/auth/AuthInterceptor.java",
+        "backend/src/main/java/com/example/admin/auth/AuthService.java",
+        "backend/src/main/java/com/example/admin/auth/LoginController.java",
+        "backend/src/main/java/com/example/admin/auth/TokenService.java",
+        "backend/src/main/java/com/example/admin/common/GlobalExceptionHandler.java",
+        "backend/src/main/resources/mapper/UserMapper.xml"
+      ],
+      "unresolved": [],
+      "saidUnknown": true,
+      "recall": 1,
+      "precision": 0.3333333333333333,
+      "noCitation": false
+    },
+    {
+      "id": "q17",
+      "cited": [
+        "backend/src/main/java/com/example/admin/auth/AuthInterceptor.java",
+        "backend/src/main/java/com/example/admin/auth/LoginController.java",
+        "backend/src/main/java/com/example/admin/auth/WebConfig.java",
+        "backend/src/main/java/com/example/admin/user/UserController.java"
+      ],
+      "unresolved": [],
+      "saidUnknown": true,
+      "recall": 1,
+      "precision": 0.75,
+      "noCitation": false
+    },
+    {
+      "id": "q18",
+      "cited": [
+        "backend/pom.xml",
+        "frontend/package.json"
+      ],
+      "unresolved": [],
+      "saidUnknown": true,
+      "correct": true
+    },
+    {
+      "id": "q19",
+      "cited": [
+        "backend/src/main/java/com/example/admin/auth/LoginController.java",
+        "backend/src/main/java/com/example/admin/user/UserController.java",
+        "frontend/src/api/request.js",
+        "frontend/src/api/user.js",
+        "frontend/src/router/index.js",
+        "frontend/vite.config.js"
+      ],
+      "unresolved": [],
+      "saidUnknown": true,
+      "correct": true
+    },
+    {
+      "id": "q20",
+      "cited": [
+        "backend/pom.xml",
+        "backend/src/main/java/com/example/admin/auth/TokenService.java",
+        "frontend/package.json"
+      ],
+      "unresolved": [],
+      "saidUnknown": true,
+      "correct": true
+    }
+  ]
+}
