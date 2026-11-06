@@ -4,16 +4,16 @@ import { readFileSync } from 'node:fs';
 import { createInterface } from 'node:readline/promises';
 import { doctor } from './doctor.ts';
 import { parseArgs } from 'node:util';
-import { detectAgents, installAgents, parseAgents, type AgentResult } from './agents.ts';
+import { AGENTS, detectAgents, guessAgents, installAgents, parseAgents, type AgentResult } from './agents.ts';
 import { check } from './check.ts';
 import { lintWiki } from './wiki.ts';
-import { render } from './render.ts';
+import { render, reviewIssues } from './render.ts';
 import { applyStart, taskDone, verify } from './exec.ts';
 import { commitArchive, discardArchive, pendingTx, stageArchive } from './archive.ts';
 import { resolve } from 'node:path';
 import { DevflowError, listChanges, repoRoot, requireChange, requireInit, reviewedFiles, type Issue } from './core.ts';
 import { init, newChange } from './init.ts';
-import { approve, deriveStatus, prepareApproval } from './status.ts';
+import { approve, deriveStatus, listArchived, prepareApproval } from './status.ts';
 import { validateChange, validateProject } from './validate.ts';
 
 const VERSION: string = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
@@ -24,12 +24,13 @@ const HELP = `devflow ${VERSION}
   doctor               检查环境、hook、Agent 文件与验证命令，并给出修复命令
   --version            显示版本号
   init [--agents a,b]  在当前 Git 项目创建 .devflow/、安装 pre-commit hook，
-                       并为 Agent 生成技能与入口片段（默认 claude,codex）
+                       并为 Agent 生成技能与入口片段（默认：检测到的 Agent；
+                       一个都没检测到时 claude,codex）
   update [--agents]    重新生成 Agent 文件（默认：已安装过的 Agent）
   new <id>             生成变更目录骨架
   wiki lint            校验知识页的引用、链接与是否过期
   validate <id>        校验变更文件是否齐全、格式正确
-  status [id]          显示变更的派生状态
+  status [id] [--all]  显示变更的派生状态；--all 同时列出已归档的变更
   render <id> [-o f]   从被审文件生成离线审查页（默认 .devflow/runtime/rendered/<id>.html）
   approve <id>         批准变更并绑定内容哈希（只能由人在交互终端中运行）
   apply <id> --start   记录开工（状态须为 approved）
@@ -43,7 +44,7 @@ const { values: opts, positionals } = parseArgs({
   allowPositionals: true,
   options: {
     json: { type: 'boolean' }, staged: { type: 'boolean' }, agents: { type: 'string' }, out: { type: 'string', short: 'o' },
-    start: { type: 'boolean' }, version: { type: 'boolean', short: 'v' },
+    start: { type: 'boolean' }, all: { type: 'boolean' }, version: { type: 'boolean', short: 'v' },
     help: { type: 'boolean', short: 'h' },
   },
 });
@@ -56,12 +57,12 @@ function requireHuman(cmdName: string): void {
   }
 }
 
-async function confirm(question: string): Promise<boolean> {
+async function confirm(question: string, cancelText = '已取消'): Promise<boolean> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   // Ctrl+D / Ctrl+C 会让 question 抛 AbortError，按取消处理
   const answer = (await rl.question(question).catch(() => '')).trim().toLowerCase();
   rl.close();
-  if (answer !== 'y') console.log('已取消');
+  if (answer !== 'y' && cancelText) console.log(cancelText);
   return answer === 'y';
 }
 
@@ -113,7 +114,8 @@ async function main(): Promise<number> {
 
   switch (cmd) {
     case 'init': {
-      const agents = parseAgents(opts.agents);
+      const guessed = opts.agents ? null : guessAgents(root);
+      const agents = opts.agents ? parseAgents(opts.agents) : guessed ?? [...AGENTS];
       const r = init(root);
       const a = installAgents(root, agents);
       if (opts.json) console.log(JSON.stringify({ ...r, agents: a }, null, 2));
@@ -123,6 +125,7 @@ async function main(): Promise<number> {
           console.warn(`! ${r.hookPath} 已有其他 hook，未覆盖。请在其中加一行：devflow check --staged`);
         } else console.log(`✓ pre-commit hook 已${r.hook === 'installed' ? '安装' : '更新'}：${r.hookPath}`);
         printAgents(a);
+        if (!opts.agents && !guessed) console.warn(`! 未检测到 Agent，已为全部安装（${AGENTS.join(', ')}）；可用 --agents claude 或 --agents codex 只装一种`);
       }
       return 0;
     }
@@ -139,6 +142,8 @@ async function main(): Promise<number> {
       requireInit(root);
       if (arg !== 'lint') throw new DevflowError(`未知子命令：wiki ${arg ?? ''}`, '用法：devflow wiki lint');
       const { issues, pages } = lintWiki(root);
+      // 只在 wiki lint 与 doctor 提醒；check 也用 lintWiki，不能每次提交都提醒
+      if (!pages.length) issues.push({ level: 'warn', file: '.devflow/knowledge/pages/', message: '知识页为空', hint: '用 devflow-scan 技能生成知识页；小项目可以跳过' });
       return report(issues, `✓ ${pages.length} 个知识页校验通过`);
     }
     case 'new': {
@@ -153,14 +158,18 @@ async function main(): Promise<number> {
     case 'validate': {
       requireInit(root);
       const id = requireChange(root, arg);
-      return report([...validateProject(root), ...validateChange(root, id, true)], `✓ ${id} 校验通过`);
+      return report([...validateProject(root), ...validateChange(root, id, true), ...reviewIssues(root, id)], `✓ ${id} 校验通过`);
     }
     case 'status': {
       requireInit(root);
       const list = (arg ? [requireChange(root, arg)] : listChanges(root)).map((id) => deriveStatus(root, id));
-      if (opts.json) console.log(JSON.stringify(list, null, 2));
-      else if (!list.length) console.log('没有进行中的变更。用 devflow new <id> 新建');
-      else for (const s of list) console.log(`${s.id}  ${s.status}  任务 ${s.tasks.done}/${s.tasks.total}  ${s.reason}`);
+      const archived = opts.all && !arg ? listArchived(root) : [];
+      if (opts.json) console.log(JSON.stringify([...list, ...archived], null, 2));
+      else if (!list.length && !archived.length) console.log('没有进行中的变更。用 devflow new <id> 新建');
+      else {
+        for (const s of list) console.log(`${s.id}  ${s.status}  任务 ${s.tasks.done}/${s.tasks.total}  ${s.reason}`);
+        for (const a of archived) console.log(`${a.id}  archived  ${a.archived_at ? a.archived_at.slice(0, 16).replace('T', ' ') + ' UTC' : '归档时间未知'}`);
+      }
       return 0;
     }
     case 'approve': {
@@ -172,9 +181,14 @@ async function main(): Promise<number> {
       console.log(`内容哈希：${ev.hash}`);
       console.log('被审文件：');
       for (const f of reviewedFiles(root, id)) console.log(`  ${f}`);
-      if (!(await confirm('确认批准？输入 y 确认：'))) return 1;
+      if (!(await confirm('确认批准？输入 y 确认：', ''))) {
+        const st = deriveStatus(root, id);
+        console.log(`✗ 未批准：${id} 状态仍为 ${st.status}（${st.reason}）。要批准，请重新运行并输入 y`);
+        return 1;
+      }
       approve(root, id, ev.hash);
       console.log(`✓ 已批准 ${id}`);
+      console.log(`下一步：在 Agent 里说"用 devflow-apply 实现变更 ${id}"`);
       return 0;
     }
     case 'apply': {

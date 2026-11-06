@@ -1,0 +1,13 @@
+schema_version: 1
+title: CLI 体验修复：批准提示、按检测装 Agent、审查页展示验证命令、历史查看、图语法校验、空知识页提醒
+affected_paths:
+  - src/cli.ts
+  - src/agents.ts
+  - src/render.ts
+  - src/doctor.ts
+  - test/**
+  - templates/skills/devflow-propose/SKILL.md
+  - .claude/skills/devflow-propose/SKILL.md
+  - .agents/skills/devflow-propose/SKILL.md
+  - docs/使用手册.md
+  - README.md

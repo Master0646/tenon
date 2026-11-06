@@ -5,6 +5,7 @@ import { agentDrift, detectAgents } from './agents.ts';
 import { DF, git } from './core.ts';
 import { HOOK_MARK } from './init.ts';
 import { validateProject } from './validate.ts';
+import { lintWiki } from './wiki.ts';
 
 export interface Finding { level: 'ok' | 'warn' | 'error'; item: string; message: string; hint?: string }
 
@@ -71,6 +72,10 @@ export function doctor(cwd: string, nodeVersion = process.versions.node): Findin
     if (/^verify:\s*\[\s*\]\s*$/m.test(p)) add('warn', 'project.yaml', '没有声明验证命令，devflow verify 的结果只会是 unknown', '在 .devflow/project.yaml 的 verify 中加入测试命令（由人维护）');
     else add('ok', 'project.yaml', '已声明验证命令');
   }
+
+  const pages = lintWiki(root).pages.length;
+  if (pages) add('ok', '知识页', `${pages} 个`);
+  else add('warn', '知识页', '知识页为空，devflow-archive 没有页面可更新', '用 devflow-scan 技能生成知识页；小项目可以跳过');
 
   const gi = join(root, '.gitignore');
   if (existsSync(gi) && readFileSync(gi, 'utf8').split('\n').some((l) => l.trim() === `${DF}/runtime/`)) add('ok', '.gitignore', `已忽略 ${DF}/runtime/`);

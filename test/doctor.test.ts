@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { installAgents } from '../src/agents.ts';
 import { doctor, type Finding } from '../src/doctor.ts';
-import { cli, makeRepo, write } from './fixture.ts';
+import { cli, g, makeRepo, write } from './fixture.ts';
 
 const levelOf = (fs: Finding[], item: string) => fs.find((f) => f.item === item)?.level;
 const setVerify = (dir: string) => {
@@ -17,6 +17,8 @@ test('doctor：全部正常时没有 warn / error，CLI 退出码 0', () => {
   const dir = makeRepo();
   installAgents(dir, ['claude', 'codex']);
   setVerify(dir);
+  write(dir, '.devflow/knowledge/pages/readme.md', `---\nschema_version: 1\ntitle: 说明\nverified_commit: "${g(dir, 'rev-parse', '--short', 'HEAD').trim()}"\nsources:\n  - path: docs/readme.md\n---\n# 说明\n`);
+  write(dir, '.devflow/knowledge/index.md', '# 知识索引\n\n- [说明](pages/readme.md) — 说明\n');
   const fs = doctor(dir);
   assert.deepEqual(fs.filter((f) => f.level !== 'ok'), []);
   assert.equal(cli(dir, 'doctor').status, 0);

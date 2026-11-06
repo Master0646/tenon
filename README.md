@@ -29,10 +29,10 @@ devflow --version
 先完成上面的全局安装，确认 `devflow --version` 有输出。然后在一个已有提交的 Git 项目里：
 
 ```bash
-devflow init --agents claude,codex
+devflow init
 ```
 
-它会创建 `.devflow/`，安装 pre-commit hook，并为 Claude Code（`.claude/skills/`、`CLAUDE.md`）和 Codex（`.agents/skills/`、`AGENTS.md`、`.codex/rules/`）生成技能与说明。然后：
+它会创建 `.devflow/`，安装 pre-commit hook，并为检测到的 Agent 生成技能与说明：Claude Code（`.claude/skills/`、`CLAUDE.md`）、Codex（`.agents/skills/`、`AGENTS.md`、`.codex/rules/`）。一个都检测不到时两个都装；用 `--agents claude` 或 `--agents codex` 指定。然后：
 
 1. **声明验证命令**（由人维护）：编辑 `.devflow/project.yaml` 的 `verify`，例如 `mvn -q test`、`npm test`。只有这里声明的命令会被 `devflow verify` 运行，验证结果决定变更能否归档。
 2. **自检**：`devflow doctor`。
@@ -61,9 +61,9 @@ devflow init --agents claude,codex
 | `devflow update [--agents …]` | 升级 devflow 后重新生成 Agent 文件 |
 | `devflow doctor` | 自检，并给出修复命令 |
 | `devflow new <id>` | 生成变更目录骨架 |
-| `devflow validate <id>` | 校验变更文件，并对当前规范做合并试算 |
+| `devflow validate <id>` | 校验变更文件、对当前规范做合并试算，并检查审查页写法与图语法 |
 | `devflow render <id> [-o 文件]` | 生成离线审查页 |
-| `devflow status [id]` | 显示派生状态与任务进度 |
+| `devflow status [id] [--all]` | 显示派生状态与任务进度；`--all` 同时列出已归档的变更 |
 | `devflow approve <id>` | 批准并绑定内容哈希（只能由人在交互终端运行） |
 | `devflow apply <id> --start` | 记录开工 |
 | `devflow task done <id> <任务>` | 记录任务完成 |

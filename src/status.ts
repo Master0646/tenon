@@ -1,9 +1,27 @@
 // 派生状态与批准：状态不落盘，每次由 变更文件 + 事件日志 + git 现算
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import {
-  DevflowError, appendEvent, changedPaths, currentSpecHash, git, hashFiles, headCommit, readEvents,
+  DF, DevflowError, appendEvent, parseEvents, changedPaths, currentSpecHash, git, hashFiles, headCommit, readEvents,
   requireChange, requireInit, reviewedFiles, specCaps, worktreeHash, type DevflowEvent,
 } from './core.ts';
 import { loadChangeMeta, loadTasks, validateChange } from './validate.ts';
+
+export interface ArchivedChange { id: string; status: 'archived'; archived_at: string | null }
+
+/** changes/archive/ 下的已归档变更；归档时间取事件日志最后一条 archived 事件 */
+export function listArchived(root: string): ArchivedChange[] {
+  const dir = join(root, DF, 'changes', 'archive');
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).sort().map((id) => {
+    let at: string | null = null;
+    try {
+      const ev = parseEvents(readFileSync(join(dir, id, 'events.jsonl'), 'utf8'), id).findLast((e) => e.type === 'archived');
+      at = ev?.at ?? null;
+    } catch { /* 日志缺失或损坏：时间未知 */ }
+    return { id, status: 'archived' as const, archived_at: at };
+  });
+}
 
 export type Status = 'draft' | 'rebase_required' | 'approved' | 'applying' | 'needs_fix' | 'ready_to_archive' | 'archived';
 

@@ -31,6 +31,14 @@ export function parseAgents(value: string | undefined): Agent[] {
   return [...new Set(list)] as Agent[];
 }
 
+const MARKERS: Record<Agent, string[]> = { claude: ['.claude', 'CLAUDE.md'], codex: ['.codex', '.agents', 'AGENTS.md'] };
+
+/** init 未指定 --agents 时：已安装的，加上项目里有目录或说明文件的；一个都没有时返回 null */
+export function guessAgents(root: string): Agent[] | null {
+  const found = AGENTS.filter((a) => MARKERS[a].some((m) => existsSync(join(root, m))));
+  return found.length ? found : null;
+}
+
 /** 已安装过技能的 Agent */
 export function detectAgents(root: string): Agent[] {
   return AGENTS.filter((a) => existsSync(join(root, SKILL_DIR[a], 'devflow-ask', 'SKILL.md')));
