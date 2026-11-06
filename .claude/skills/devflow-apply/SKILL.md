@@ -29,3 +29,4 @@ description: 按已批准的 DevFlow 变更实现代码：开工、按依赖顺�
 - 只改 `change.yaml` 中 `affected_paths` 覆盖的代码；确实需要改其他文件时，先告诉用户。
 - 不运行 `devflow approve`、`devflow archive`；不提交、不推送，除非用户明确要求。
 - 没有实际运行过的检查，不要说"已验证"。
+- 读文件用 Agent 自带的读文件工具（如 Read），一次读一个文件；不要用 `for … cat`、`cat a b c` 之类的 shell 命令批量读，它们常被权限规则拒绝。

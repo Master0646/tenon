@@ -19,7 +19,7 @@
   },
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.build.json",
-    "prepack": "pnpm -s build",
+    "prepack": "npm run -s build",
     "test": "node --test \"test/**/*.test.ts\"",
     "typecheck": "tsc"
   },

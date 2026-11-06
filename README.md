@@ -9,7 +9,7 @@ DevFlow 自己不调用任何模型。读代码、写方案、写代码由你已
 要求：Node 22 或更高版本、git。
 
 ```bash
-cd devflow && pnpm install && pnpm pack
+cd devflow && npm install && npm pack
 ```
 
 ```bash
@@ -20,11 +20,13 @@ npm install -g ./devflow-0.1.0.tgz
 devflow --version
 ```
 
+必须全局安装：终端里能运行 `devflow --version`，后面的命令和 pre-commit hook 才能用。
+
 > 开发时可以不打包，直接运行 `node src/cli.ts <命令>`（需要 Node 23.6 或更高版本）。
 
 ## 五分钟上手
 
-在一个已有提交的 Git 项目里：
+先完成上面的全局安装，确认 `devflow --version` 有输出。然后在一个已有提交的 Git 项目里：
 
 ```bash
 devflow init --agents claude,codex
@@ -32,7 +34,7 @@ devflow init --agents claude,codex
 
 它会创建 `.devflow/`，安装 pre-commit hook，并为 Claude Code（`.claude/skills/`、`CLAUDE.md`）和 Codex（`.agents/skills/`、`AGENTS.md`、`.codex/rules/`）生成技能与说明。然后：
 
-1. **声明验证命令**（由人维护）：编辑 `.devflow/project.yaml` 的 `verify`，例如 `mvn -q test`、`pnpm test`。
+1. **声明验证命令**（由人维护）：编辑 `.devflow/project.yaml` 的 `verify`，例如 `mvn -q test`、`npm test`。只有这里声明的命令会被 `devflow verify` 运行，验证结果决定变更能否归档。
 2. **自检**：`devflow doctor`。
 3. **提方案**：在 Agent 里说"用 devflow-propose 提一个变更：……"。Agent 写好方案后运行 `devflow render <id>`，给你一个离线审查页。
 4. **审批**：你在**自己的终端**运行 `devflow approve <id>`，核对哈希与审查页一致后输入 `y`。

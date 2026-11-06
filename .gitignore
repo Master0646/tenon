@@ -2,3 +2,4 @@ node_modules/
 .devflow/runtime/
 .DS_Store
 dist/
+*.tgz
