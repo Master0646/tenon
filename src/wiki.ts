@@ -10,7 +10,7 @@ const SLUG = /^[a-z0-9][a-z0-9-]*$/;
 const EX_PAGE = `---
 schema_version: 1
 title: 用户管理模块
-verified_commit: 9f3a2c1
+verified_commit: "9f3a2c1"
 sources:
   - path: backend/src/main/java/com/example/user/UserController.java
     symbol: UserController#list
@@ -67,6 +67,9 @@ export function lintWiki(root: string): { issues: Issue[]; pages: Page[] } {
     let fm: any;
     try {
       fm = parse(parts.fm);
+      // 不加引号的短哈希可能被 YAML 当成数字（1234567、1e23456、0123456 丢掉前导 0）：按原文字符串读取
+      const raw = parse(parts.fm, { schema: 'failsafe' });
+      if (fm && typeof fm === 'object' && raw && typeof raw.verified_commit === 'string') fm.verified_commit = raw.verified_commit;
     } catch (e: any) {
       err(`frontmatter YAML 解析失败：${String(e?.message).split('\n')[0]}`, undefined, (e?.linePos?.[0]?.line ?? 0) + 1);
       continue;

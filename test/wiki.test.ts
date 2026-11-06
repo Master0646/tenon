@@ -77,6 +77,16 @@ test('正文引用了未列入 sources 的文件 → 警告', () => {
   assert.match(w[0], /未列入 sources 的文件：backend\/src\/Auth\.java$/);
 });
 
+test('不加引号、形似数字的 verified_commit 按原文读取（曾导致测试随机失败）', () => {
+  const { dir } = setup();
+  for (const v of ['1234567', '1e23456', '0123456']) {
+    write(dir, '.devflow/knowledge/pages/other.md', page(v, '  - path: docs/readme.md', '# 其他\n'));
+    const e = errs(dir).join('|');
+    assert.doesNotMatch(e, /必须是提交哈希/, v);
+    assert.match(e, new RegExp(`verified_commit ${v} 不在当前仓库历史中`), v);
+  }
+});
+
 test('frontmatter 缺失或不完整', () => {
   const { dir } = setup();
   write(dir, '.devflow/knowledge/pages/other.md', '# 没有 frontmatter\n');

@@ -28,7 +28,7 @@ description: 为本项目生成或更新 DevFlow 知识页（.devflow/knowledge/
 ---
 schema_version: 1
 title: 用户管理
-verified_commit: <git rev-parse --short HEAD 的输出>
+verified_commit: "<git rev-parse --short HEAD 的输出，加引号>"
 sources:
   - path: backend/src/main/java/com/example/user/UserController.java
     symbol: UserController#list
