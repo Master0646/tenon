@@ -1,0 +1,9 @@
+schema_version: 1
+title: 禁用用户需要 ADMIN 角色，前端对非 ADMIN 隐藏禁用按钮
+affected_paths:
+  - backend/pom.xml
+  - backend/src/main/java/com/example/admin/auth/**
+  - backend/src/main/java/com/example/admin/user/UserService.java
+  - backend/src/test/java/com/example/admin/**
+  - frontend/src/api/user.js
+  - frontend/src/views/UserList.vue

@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse } from 'yaml';
 import { DF, changeDir, changeRel, listFiles, type Issue } from './core.ts';
+import { mergeSpec, parseDelta } from './spec.ts';
 
 const EX_PROJECT = `schema_version: 1
 verify:
@@ -176,8 +177,20 @@ export function validateChange(root: string, id: string, complete: boolean): Iss
       err(`specs/${f}`, 'delta spec 路径必须是 specs/<capability>/spec.md（capability 用小写字母、数字、连字符）', hd);
       continue;
     }
-    if (complete && !/^## (ADDED|MODIFIED|REMOVED) Requirements\s*$/m.test(readFileSync(join(root, base, 'specs', f), 'utf8'))) {
+    if (!complete) continue;
+    const text = readFileSync(join(root, base, 'specs', f), 'utf8');
+    if (!/^## (ADDED|MODIFIED|REMOVED) Requirements\s*$/m.test(text)) {
       err(`specs/${f}`, '缺少 ## ADDED / MODIFIED / REMOVED Requirements 小节', hd);
+      continue;
+    }
+    // 解析并对当前规范做一次合并试算：名称冲突、改了不存在的需求等在审批前就暴露
+    const { delta, errors } = parseDelta(text);
+    for (const e of errors) issues.push({ level: 'error', file: `${base}/specs/${f}:${e.line}`, message: e.message, hint: hd });
+    if (!errors.length) {
+      const cap = f.split('/')[0];
+      const cur = join(root, DF, 'specs', cap, 'spec.md');
+      const merged = mergeSpec(cap, existsSync(cur) ? readFileSync(cur, 'utf8') : null, delta);
+      for (const m of merged.errors) err(`specs/${f}`, m, `当前规范：${DF}/specs/${cap}/spec.md`);
     }
   }
   if (complete && !specFiles.length) {

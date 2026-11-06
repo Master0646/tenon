@@ -5,6 +5,8 @@ import { parseArgs } from 'node:util';
 import { detectAgents, installAgents, parseAgents, type AgentResult } from './agents.ts';
 import { check } from './check.ts';
 import { lintWiki } from './wiki.ts';
+import { render } from './render.ts';
+import { resolve } from 'node:path';
 import { DevflowError, listChanges, repoRoot, requireChange, requireInit, reviewedFiles, type Issue } from './core.ts';
 import { init, newChange } from './init.ts';
 import { approve, deriveStatus, prepareApproval } from './status.ts';
@@ -19,6 +21,7 @@ const HELP = `用法：devflow <命令> [参数] [--json]
   wiki lint            校验知识页的引用、链接与是否过期
   validate <id>        校验变更文件是否齐全、格式正确
   status [id]          显示变更的派生状态
+  render <id> [-o f]   从被审文件生成离线审查页（默认 .devflow/runtime/rendered/<id>.html）
   approve <id>         批准变更并绑定内容哈希（只能由人在交互终端中运行）
   check [--staged]     门禁检查（pre-commit hook 与 CI 使用）
 `;
@@ -26,7 +29,8 @@ const HELP = `用法：devflow <命令> [参数] [--json]
 const { values: opts, positionals } = parseArgs({
   allowPositionals: true,
   options: {
-    json: { type: 'boolean' }, staged: { type: 'boolean' }, agents: { type: 'string' }, help: { type: 'boolean', short: 'h' },
+    json: { type: 'boolean' }, staged: { type: 'boolean' }, agents: { type: 'string' }, out: { type: 'string', short: 'o' },
+    help: { type: 'boolean', short: 'h' },
   },
 });
 const [cmd, arg] = positionals;
@@ -136,6 +140,18 @@ async function main(): Promise<number> {
       }
       approve(root, id, ev.hash);
       console.log(`✓ 已批准 ${id}`);
+      return 0;
+    }
+    case 'render': {
+      requireInit(root);
+      const id = requireChange(root, arg);
+      const r = render(root, id, opts.out ? resolve(opts.out) : undefined);
+      if (opts.json) console.log(JSON.stringify(r, null, 2));
+      else {
+        console.log(`✓ ${r.file}`);
+        console.log(`  内容哈希：${r.hash}`);
+        console.log(`  审查后由人在自己的终端运行：devflow approve ${id}`);
+      }
       return 0;
     }
     case 'check':

@@ -1,0 +1,25 @@
+{
+  "turns": 17,
+  "cost": 0.5367674,
+  "changes": [
+    "2026-11-06-admin-only-disable"
+  ],
+  "validateOk": true,
+  "validateIssues": [],
+  "renderOk": true,
+  "renderError": null,
+  "status": "draft",
+  "approved": false,
+  "codeChanged": [],
+  "permissionDenials": [
+    {
+      "tool_name": "Bash",
+      "tool_use_id": "toolu_016f5tJS63zpf1BjBfc9fdpc",
+      "tool_input": {
+        "command": "cd backend/src/main/java/com/example/admin && for f in auth/*.java common/GlobalExceptionHandler.java common/BusinessException.java common/ApiResponse.java role/*.java user/*.java; do echo \"=== $f\"; cat -n $f; done; cd -; for f in backend/src/main/resources/schema.sql backend/src/main/resources/mapper/UserMapper.xml frontend/src/api/*.js frontend/src/router/index.js frontend/src/views/*.vue; do echo \"=== $f\"; cat -n $f; done",
+        "description": "Print relevant backend and frontend sources"
+      }
+    }
+  ],
+  "finalMessage": "I wrote the change proposal and it passed validation. No business code was changed.\n\n**Change ID:** `2026-11-06-admin-only-disable`\n**Review page:** `.devflow/runtime/rendered/2026-11-06-admin-only-disable.html`\n**Content hash:** `sha256:f78d5d0b6c841ed3c481410b0991a86c3b34cd33bca005d3543fe181d90dffba`\n\n**What I found in the code**\n- The disable endpoint only checks for a valid token (`backend/src/main/java/com/example/admin/auth/AuthInterceptor.java#preHandle`). `UserService#disable` checks two things: you can't disable yourself, and you can't disable an ADMIN (`backend/src/main/java/com/example/admin/user/UserService.java:33-43`). It never checks the caller's role.\n- The frontend has no way to know the current user's role. The login endpoint returns only a token (`LoginController#login`), so the button can't be hidden yet without new backend support.\n\n**What the proposal does**\n1. Adds a role check at the start of `UserService#disable`. If the caller isn't an ADMIN, the request gets 403 and no user's status changes.\n2. Adds `GET /api/auth/me`, which returns the current user's id, username and role name. It does not return the password hash.\n3. In `UserList.vue`, the disable button only shows when the current user is an ADMIN. If loading the current user fails or hasn't finished, the button stays hidden.\n4. `.devflow/specs/` is currently empty, so it creates a new `user-management` spec. That spec also records the existing disable rules, which stay as they are.\n5. There are 4 tasks. The backend has no test setup yet, so the first task adds `spring-boot-starter-test` and the role check gets unit tests. The frontend has no test framework, so the button change is checked by `npm run build` passing plus logging in by hand as an ADMIN and as a USER.\n\n**Main assumptions (all listed in the proposal's \"假设\" section)**\n- The caller's role is read from the database on every request, not stored in the token, so role changes take effect immediately.\n- The role check runs before every other check. A non-ADMIN always gets 403, even if the target user doesn't exist, so error codes can't be used to probe which users exist.\n- If the token is valid but the caller's user record is gone, the request also gets 403.\n- Only the disable button on the user list page is hidden. The user detail page has no such button.\n\n**Out of scope, but you should know**\n- Revoking tokens that were already issued is not part of this change. A disabled user's existing token keeps working until it expires.\n- The `User` entity is serialized with its `passwordHash` field. The current list and detail endpoints may be exposing password hashes. I suggest a separate change for this.\n\nAfter reviewing, run this in your own terminal: `devflow approve 2026-11-06-admin-only-disable`"
+}
