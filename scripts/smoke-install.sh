@@ -10,7 +10,7 @@ step() { printf '\n== %s\n' "$1"; }
 
 step "打包"
 cd "$ROOT"
-pnpm pack --pack-destination "$WORK" >/dev/null
+npm pack --pack-destination "$WORK" >/dev/null
 TGZ=$(ls "$WORK"/devflow-*.tgz)
 echo "$TGZ"
 # 包里必须有编译产物、模板、随包渲染器，不能有源码与测试
@@ -41,7 +41,7 @@ git commit -qm init --no-verify
 "$BIN" init --agents claude,codex > /dev/null
 grep -q "$WORK/app/node_modules/devflow/dist/cli.js" .git/hooks/pre-commit || { echo "hook 没有指向安装后的 dist/cli.js"; exit 1; }
 "$BIN" doctor
-"$BIN" new demo > /dev/null
+"$BIN" new demo --schema 1 > /dev/null
 B=.devflow/changes/demo
 printf 'schema_version: 1\ntitle: 冒烟测试\naffected_paths: [a.txt]\n' > $B/change.yaml
 printf '# 提案\n\n冒烟测试用的变更。\n' > $B/proposal.md

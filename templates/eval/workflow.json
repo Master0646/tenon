@@ -1,0 +1,13 @@
+{"schema_version":1,"id":"workflow-v1","cases":[
+{"id":"missing-evidence","expected":"archive-blocked"},
+{"id":"stale-code","expected":"evidence-stale"},
+{"id":"old-approval","expected":"completion-reset"},
+{"id":"modified-artifact","expected":"archive-blocked"},
+{"id":"missing-artifact","expected":"archive-blocked"},
+{"id":"manual-unconfirmed","expected":"archive-blocked"},
+{"id":"concurrent-apply","expected":"one-success"},
+{"id":"spec-conflict","expected":"rebase_required"},
+{"id":"archive-interrupted","expected":"resume-without-duplicate-event"},
+{"id":"resume-summary","expected":"missing-evidence-next-command"},
+{"id":"usage-write-failed","expected":"business-exit-unchanged"}
+]}

@@ -1,4 +1,6 @@
 // devflow render：把被审文件确定性地拼成 am 草稿，再交给随包附带的 am 渲染为离线 HTML
+import { evidenceMatrix } from './evidence.ts';
+import { approvalDiff } from './status.ts';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -74,6 +76,13 @@ export function buildDraft(root: string, id: string): { draft: string; hash: str
   const st = deriveStatus(root, id);
 
   const panels: string[] = [];
+  const diff = approvalDiff(root, id);
+  const matrix = evidenceMatrix(root, id);
+  panels.push(`## 决策摘要\n- 业务变化：${cell(meta?.title ?? id)}\n- 影响范围：${cell(meta?.affected_paths.join(', ') ?? '未填写')}\n- 批准范围：除 v2 execution.md 外的方案文件及 project.yaml\n- 未决事项：${matrix.filter((e) => e.status !== 'valid').map((e) => cell(`${e.acceptance} ${e.status}`)).join('；') || '未发现验收证据缺口；仍需人工审查方案完整性'}`);
+  const changes = diff.available ? diff.files.filter((f) => f.before !== f.after).map((f) => `### ${cell(f.path)}\n\n修改前：\n\n\`\`\`text\n${(f.before ?? '（新增文件）').replace(/`/g, 'ˋ')}\n\`\`\`\n\n修改后：\n\n\`\`\`text\n${(f.after ?? '（删除文件）').replace(/`/g, 'ˋ')}\n\`\`\``).join('\n\n') : cell(diff.reason ?? '没有批准快照');
+  panels.push(`## 批准差异\n${changes || '批准范围未变；实施笔记无需重新批准。'}`);
+  if (matrix.length) panels.push(`## 验收矩阵\n| 条件 | 方式 | 证据 | 代码版本 | 状态 | 原因 |\n| --- | --- | --- | --- | --- | --- |\n${matrix.map((e) => `| ${cell(e.acceptance + ' ' + e.text)} | ${e.method} | ${cell(e.evidence_id ?? '缺失')} | ${cell(e.worktree_hash ?? '未知')} | ${e.status} | ${cell(e.reason ?? '')} |`).join('\n')}`);
+
   panels.push(`## A 提案\n${toPanelBody(read(`${base}/proposal.md`), `${base}/proposal.md`, problems) || '（空）'}`);
 
   // 规范增量：按 ADDED / MODIFIED / REMOVED 分色
@@ -111,7 +120,7 @@ export function buildDraft(root: string, id: string): { draft: string; hash: str
     t.depends_on?.length ? t.depends_on.filter((d) => byId.has(d)).map((d) => `${label(byId.get(d)!)} -> ${label(t)}`) : [`(开始) -> ${label(t)}`]);
   const cards = tasks.map((t) => {
     const head = `**${t.id} ${escapeInline(t.title.replace(/\n/g, ' '))}**${t.depends_on?.length ? `　依赖：${t.depends_on.join(', ')}` : ''}`;
-    const acc = t.acceptance?.length ? t.acceptance.map((a) => `- ${escapeInline(a.replace(/\n/g, ' '))}`).join('\n') : '（未写验收条件）';
+    const acc = t.acceptance?.length ? t.acceptance.map((a) => `- ${escapeInline((typeof a === 'string' ? a : `${a.id}: ${a.text}`).replace(/\n/g, ' '))}`).join('\n') : '（未写验收条件）';
     return `${head}\n\n${acc}`;
   });
   panels.push(`## D 任务与依赖\n${tasks.length ? `${cards.join('\n\n')}\n\n\`\`\`flow LR\n${edges.join('\n')}\n\`\`\`` : '（无任务）'}`);

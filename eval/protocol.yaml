@@ -1,0 +1,21 @@
+schema_version: 1
+id: workflow-v1
+scorer: deterministic-v1
+project_snapshot: examples/user-admin
+repetitions_per_variant: 5
+order: alternating
+retries: 0
+budget:
+  max_calls_per_run: 100
+  max_minutes_per_run: 30
+  paid_model: explicit-only
+models: unknown
+seed: not-supported
+agent_tasks:
+  - id: wrong-config
+    oracle: Detect wrong configured port before approval; cite authoritative config.
+  - id: omitted-permission
+    oracle: Reject non-admin direct API call without changing state.
+  - id: new-session-resume
+    oracle: Identify unfinished acceptance and correct next action in a new session.
+missing_environment: unknown

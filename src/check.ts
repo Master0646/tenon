@@ -1,10 +1,14 @@
 // devflow check：pre-commit hook 与 CI 的门禁
 // --staged 时规范锁与事件日志按暂存区内容检查：提交的是暂存区，不是工作树
+import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  DF, DevflowError, changeDir, changeRel, git, listChanges, readEvents, repoFiles, requireInit, sha256, type Issue,
+  DF, DevflowError, parseEvents, changeDir, changeRel, git, listChanges, readEvents, repoFiles, requireInit, sha256, type Issue,
 } from './core.ts';
+import { snapshotIssues } from './status.ts';
+import { evidenceIssues } from './evidence.ts';
+import { changeSchema } from './core.ts';
 import { deriveStatus } from './status.ts';
 import { enforceLevel, loadChangeMeta, validateChange, validateProject } from './validate.ts';
 import { lintWiki } from './wiki.ts';
@@ -25,8 +29,13 @@ export function check(root: string, opts: { staged: boolean }): Issue[] {
       issues.push({ level: 'error', file: rel, message: e.message, hint: e.hint });
     }
     issues.push(...appendOnly(root, rel, opts.staged));
+    if (!opts.staged && changeSchema(root, id) === 2) {
+      for (const message of snapshotIssues(root, id)) issues.push({ level: 'error', file: rel, message });
+      for (const message of evidenceIssues(root, id).filter((m) => /附件|artifact/.test(m))) issues.push({ level: 'error', file: rel, message });
+    }
   }
 
+  if (opts.staged) issues.push(...stagedProofIssues(root));
   issues.push(...checkSpecLock(root, opts.staged));
   if (opts.staged) issues.push(...checkStagedCode(root));
   // 知识页问题不拦提交：删了被引用的代码文件不应阻止提交，由 wiki lint 与 archive 把关
@@ -158,6 +167,32 @@ function checkStagedCode(root: string): Issue[] {
         hint: '确认这些文件应该随本次提交；属于本变更的话，下次在 change.yaml 的 affected_paths 中写上',
       });
     }
+  }
+  return issues;
+}
+
+function stagedProofIssues(root: string): Issue[] {
+  const issues: Issue[] = [];
+  const files = indexFiles(root, DF).map((f) => `${DF}/${f}`);
+  const bytes = (path: string) => {
+    if (!files.includes(path)) return null;
+    try { return execFileSync('git', ['show', `:${path}`], { cwd: root, maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] }); }
+    catch { return null; }
+  };
+  for (const file of files.filter((f) => /^\.devflow\/changes\/(?:archive\/)?[^/]+\/events\.jsonl$/.test(f))) {
+    try {
+      for (const event of parseEvents(bytes(file)!.toString('utf8'), file)) {
+        if (event.type === 'approved' && event.snapshot_hash && event.approval_id) {
+          const snapshot = files.find((f) => f.startsWith(`${DF}/reviews/`) && f.endsWith(`/${event.approval_id}/snapshot.json`));
+          const data = snapshot ? bytes(snapshot) : null;
+          if (!data || sha256(data) !== event.snapshot_hash) issues.push({ level: 'error', file, message: '暂存区批准快照缺失或哈希不一致' });
+        }
+        if (event.type === 'evidence-recorded') for (const artifact of event.artifacts) {
+          const data = artifact.path.startsWith(`${DF}/evidence/`) ? bytes(artifact.path) : null;
+          if (!data || sha256(data) !== artifact.hash) issues.push({ level: 'error', file: artifact.path, message: '暂存区证据附件缺失或哈希不一致' });
+        }
+      }
+    } catch (e) { issues.push({ level: 'error', file, message: e instanceof Error ? e.message : '暂存事件日志损坏' }); }
   }
   return issues;
 }

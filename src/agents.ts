@@ -17,6 +17,7 @@ const END = '<!-- devflow:end -->';
 export const CLAUDE_DENY = [
   'Bash(devflow approve *)',
   'Bash(devflow archive *)',
+  'Bash(devflow evidence confirm *)',
   'Edit(/.devflow/specs/**)',
   'Write(/.devflow/specs/**)',
   'Edit(/.devflow/changes/**/events.jsonl)',

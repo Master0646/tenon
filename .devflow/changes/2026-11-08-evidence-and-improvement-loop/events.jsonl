@@ -1,0 +1,14 @@
+{"type":"approved","at":"2026-11-07T16:09:31.126Z","actor":"zhangniuniu","hash":"sha256:736822da7345c7bb22bbadcd4f07b09fd62c25ebb4dc42143052fda181f28b63","base_commit":"7b037490f1ca0e158cce405c386f27d3e7b43234","spec_base":{"evidence-workflow":null}}
+{"type":"apply-started","at":"2026-11-07T16:10:17.920Z","head":"7b037490f1ca0e158cce405c386f27d3e7b43234"}
+{"type":"task-done","at":"2026-11-07T16:11:08.943Z","task":"T1"}
+{"type":"task-done","at":"2026-11-07T16:23:49.054Z","task":"T2","approval_id":"legacy:0"}
+{"type":"task-done","at":"2026-11-07T16:23:49.349Z","task":"T3","approval_id":"legacy:0"}
+{"type":"task-done","at":"2026-11-07T16:23:49.644Z","task":"T4","approval_id":"legacy:0"}
+{"type":"task-done","at":"2026-11-07T16:23:49.958Z","task":"T5","approval_id":"legacy:0"}
+{"type":"task-done","at":"2026-11-07T16:23:50.315Z","task":"T6","approval_id":"legacy:0"}
+{"type":"task-done","at":"2026-11-07T16:23:50.599Z","task":"T7","approval_id":"legacy:0"}
+{"type":"task-done","at":"2026-11-07T16:23:50.891Z","task":"T8","approval_id":"legacy:0"}
+{"type":"task-done","at":"2026-11-07T16:23:51.174Z","task":"T9","approval_id":"legacy:0"}
+{"type":"task-done","at":"2026-11-07T16:23:51.447Z","task":"T10","approval_id":"legacy:0"}
+{"type":"verified","run_id":"cbdc4991-d67e-45a0-bb07-2284c19a8c90","approval_id":"legacy:0","at":"2026-11-07T16:24:49.227Z","diff_hash":"git-tree:09ffcac6289bf4a762091240df5ea509b79fb725","result":"pass","checks":[{"name":"unit-tests","exit":0,"log_hash":"sha256:40933778ab20c8f827f8ca4c4c23a26713e6bc6a194f697dc15f268d7592ac93"},{"name":"typecheck","exit":0,"log_hash":"sha256:d723d8314dced1e6165759f11f99c97aa132c52760f9580a6b56139e68244be8"}]}
+{"type":"task-done","at":"2026-11-07T16:25:27.468Z","task":"T11","approval_id":"legacy:0"}

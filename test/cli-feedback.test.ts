@@ -121,3 +121,29 @@ test('空知识页：wiki lint 与 doctor 给出 warn；check 不提示', () => 
   assert.equal(doctor(dir).find((f) => f.item === '知识页')?.level, 'warn');
   assert.ok(!check(dir, { staged: false }).some((i) => /知识页为空/.test(i.message)));
 });
+
+test('CLI usage records stable failure reasons and produces a reviewable candidate', async () => {
+  const { usageReport, listCandidates } = await import('../src/usage.ts');
+  const { readdirSync, readFileSync } = await import('node:fs');
+  const { join } = await import('node:path');
+  const dir = makeRepo();
+  writeChange(dir, 'usage-flow');
+  for (let i = 0; i < 3; i++) {
+    const result = cli(dir, 'apply', 'usage-flow', '--start', '--json');
+    assert.equal(result.status, 1);
+    assert.equal(JSON.parse(result.stdout).ok, false);
+  }
+  const report = usageReport(dir);
+  assert.equal(report.report.outcomes.failure, 3);
+  const candidate = listCandidates(dir)[0];
+  assert.equal(candidate.count, 3);
+  const draft = cli(dir, 'improve', 'draft', candidate.id, 'improve-usage', '--json');
+  assert.equal(draft.status, 0, draft.stderr);
+  assert.equal(JSON.parse(draft.stdout).status, 'draft');
+  const base = join(dir, '.devflow/runtime/usage');
+  const day = readdirSync(base).find((d) => /^\d{4}-\d{2}-\d{2}$/.test(d))!;
+  const row = JSON.parse(readFileSync(join(base, day, readdirSync(join(base, day))[0]), 'utf8'));
+  assert.equal(row.status_before, 'draft');
+  assert.equal(row.status_after, 'draft');
+  assert.ok(row.reason_code);
+});

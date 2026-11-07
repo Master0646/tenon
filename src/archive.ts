@@ -3,15 +3,17 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import {
-  DF, DevflowError, appendEvent, archiveTarget, changeDir, currentSpecHash, git, readEvents, requireChange, requireInit, sha256, specCaps,
+  DF, DevflowError, worktreeHash, hashFiles, reviewedFiles, appendEvent, archiveTarget, changeDir, currentSpecHash, git, readEvents, requireChange, requireInit, sha256, specCaps,
 } from './core.ts';
 import { mergeSpec, parseDelta } from './spec.ts';
+import { evidenceIssues } from './evidence.ts';
 import { deriveStatus } from './status.ts';
 import { lintWiki } from './wiki.ts';
 
 interface Tx {
   id: string;
   actor: string;
+  guard?: { worktree_hash: string; approval_hash: string };
   writes: { from: string; to: string }[]; // 相对仓库根
   move: { from: string; to: string };
 }
@@ -71,7 +73,7 @@ export function stageArchive(root: string, id: string): Tx {
   const dir = txDir(root, id);
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(dir, { recursive: true });
-  const tx: Tx = { id, actor, writes: [], move: { from: `${DF}/changes/${id}`, to: target } };
+  const tx: Tx = { id, actor, guard: { worktree_hash: worktreeHash(root), approval_hash: hashFiles(root, reviewedFiles(root, id)) }, writes: [], move: { from: `${DF}/changes/${id}`, to: target } };
   outputs.forEach((o, i) => {
     const staged = `${DF}/runtime/tx/${id}/${i}`;
     writeFileSync(join(root, staged), o.content);
@@ -89,6 +91,11 @@ export function discardArchive(root: string, id: string): void {
 /** 按事务日志执行（或继续执行）剩余步骤 */
 export function commitArchive(root: string, id: string): { target: string; specs: string[] } {
   const tx: Tx = JSON.parse(readFileSync(txFile(root, id), 'utf8'));
+  if (existsSync(join(root, tx.move.from)) && tx.guard) {
+    if (worktreeHash(root) !== tx.guard.worktree_hash || hashFiles(root, reviewedFiles(root, id)) !== tx.guard.approval_hash || evidenceIssues(root, id).length) {
+      throw new DevflowError('归档确认或恢复期间代码、批准内容或证据变化，已停止', '恢复对应代码与证据后重跑；已部分写入的事务不能直接删除');
+    }
+  }
   for (const w of tx.writes) {
     if (!existsSync(join(root, w.from))) continue; // 已完成
     mkdirSync(dirname(join(root, w.to)), { recursive: true });

@@ -155,3 +155,53 @@ test('CLI：status 与 validate 的 --json 输出', () => {
   assert.equal(bad.status, 1);
   assert.match(bad.stderr, /变更不存在/);
 });
+
+async function approvedEvidenceFixture() {
+  const { applyStart, verify } = await import('../src/exec.ts');
+  const { recordEvidence } = await import('../src/evidence.ts');
+  const root = makeRepo();
+  writeChange(root, ID);
+  write(root, `.devflow/changes/${ID}/change.yaml`, 'schema_version: 2\nmin_cli_version: 0.2.0\ntitle: Evidence gate\naffected_paths: [backend/**]\n');
+  write(root, `.devflow/changes/${ID}/tasks.yaml`, 'schema_version: 2\ntasks:\n  - id: T1\n    title: Check access\n    acceptance:\n      - id: AC1\n        text: Reject non-admin\n        method: automated\n        check: tests\n');
+  write(root, '.devflow/project.yaml', 'schema_version: 1\nverify:\n  - name: tests\n    run: "true"\nexclude: []\nenforce: warn\n');
+  write(root, 'backend/result.txt', '403 unchanged\n');
+  writeFileSync(join(root, 'backend/result.bin'), Buffer.from([0, 255, 128, 13, 10, 0, 1]));
+  const approval = approve(root, ID);
+  applyStart(root, ID);
+  const run = verify(root, ID);
+  const evidence = recordEvidence(root, ID, {
+    task: 'T1', acceptance: 'AC1', kind: 'automated', summary: 'Denied without mutation',
+    verify_run: run.run_id, check: 'tests', test: 'backend/src/Auth.java', assertion: '403 and unchanged record',
+    artifacts: ['backend/result.txt', 'backend/result.bin'],
+  });
+  g(root, 'add', '-A');
+  assert.deepEqual(errors(root, true), []);
+  return { root, approval, evidence };
+}
+
+test('check --staged rejects a tampered v2 snapshot despite restored working tree', async (t) => {
+  const { root, approval } = await approvedEvidenceFixture();
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const snapshot = `.devflow/reviews/${ID}/${approval.approval_id}/snapshot.json`;
+  const original = readFileSync(join(root, snapshot));
+  write(root, snapshot, '{"tampered":true}\n');
+  g(root, 'add', '--', snapshot);
+  writeFileSync(join(root, snapshot), original);
+  assert.deepEqual(errors(root), []);
+  assert.ok(errors(root, true).some((issue) => /暂存区批准快照/.test(issue.message)));
+});
+
+test('check --staged hashes text and binary evidence from the index', async (t) => {
+  const { root, evidence } = await approvedEvidenceFixture();
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  for (const artifact of evidence.artifacts) {
+    const original = readFileSync(join(root, artifact.path));
+    writeFileSync(join(root, artifact.path), Buffer.from([0, 254, 129, 10]));
+    g(root, 'add', '--', artifact.path);
+    writeFileSync(join(root, artifact.path), original);
+    assert.deepEqual(errors(root), []);
+    assert.ok(errors(root, true).some((issue) => issue.file === artifact.path && /暂存区证据附件/.test(issue.message)));
+    g(root, 'add', '--', artifact.path);
+    assert.deepEqual(errors(root, true), []);
+  }
+});

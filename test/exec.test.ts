@@ -169,9 +169,9 @@ test('archive：两个变更改同一能力，后归档者因 spec_base 不一�
   taskDone(dir, 'other', 'T2');
   verify(dir, 'other');
   archive(dir, ID);
-  // 归档改了工作树？没有：.devflow 不计入工作树哈希，状态仍是 ready_to_archive
-  assert.equal(status(dir, 'other'), 'ready_to_archive');
-  assert.throws(() => archive(dir, 'other'), /规范 auth 在本变更批准后被修改过/);
+  // 规范基线变化提前进入可恢复的重批状态
+  assert.equal(status(dir, 'other'), 'rebase_required');
+  assert.throws(() => archive(dir, 'other'), /rebase_required/);
 });
 
 test('archive 中断后重跑：从事务日志前滚，不重复写事件，结果与一次完成相同', () => {
@@ -219,4 +219,44 @@ test('CLI：archive 非 TTY 被拒；verify 退出码反映结果；归档后提
   assert.equal(cli(dir, 'verify', ID).status, 0);
   archive(dir, ID);
   commit(dir, 'archive'); // 走 pre-commit hook
+});
+
+test('v2 CLI: verify → evidence → completion, resume selects gaps; code edits invalidate proof', async () => {
+  const { recordEvidence } = await import('../src/evidence.ts');
+  const { cli } = await import('./fixture.ts');
+  const dir = makeRepo();
+  writeChange(dir, ID);
+  write(dir, `.devflow/changes/${ID}/change.yaml`, 'schema_version: 2\nmin_cli_version: 0.2.0\ntitle: Evidence\naffected_paths: [backend/**]\n');
+  write(dir, `.devflow/changes/${ID}/tasks.yaml`, 'schema_version: 2\ntasks:\n  - id: T1\n    title: Access\n    acceptance:\n      - id: AC1\n        text: Reject ordinary user\n        method: automated\n        check: tests\n');
+  write(dir, 'backend/access.test.ts', 'assert.equal(status, 403);\n');
+  setVerify(dir, [{ name: 'tests', run: 'true' }]);
+  approve(dir, ID);
+  assert.equal(cli(dir, 'apply', ID, '--start', '--json').status, 0);
+  const first = verify(dir, ID);
+  assert.throws(() => taskDone(dir, ID, 'T1'), /验收证据/);
+  const resume = JSON.parse(cli(dir, 'resume', ID, '--json').stdout);
+  assert.match(resume.next, /evidence add/);
+  const input = { task: 'T1', acceptance: 'AC1', kind: 'automated', summary: 'Reject ordinary user', verify_run: first.run_id, check: 'tests', test: 'backend/access.test.ts', assertion: 'status is 403' };
+  recordEvidence(dir, ID, input);
+  assert.match(JSON.parse(cli(dir, 'resume', ID, '--json').stdout).next, /task done/);
+  taskDone(dir, ID, 'T1');
+  assert.equal(deriveStatus(dir, ID).status, 'ready_to_archive');
+  write(dir, 'backend/src/Auth.java', 'class Auth { int change; }\n');
+  assert.equal(deriveStatus(dir, ID).tasks.done, 0);
+  const second = verify(dir, ID);
+  recordEvidence(dir, ID, { ...input, verify_run: second.run_id });
+  taskDone(dir, ID, 'T1');
+  assert.equal(deriveStatus(dir, ID).status, 'ready_to_archive');
+  assert.notEqual(cli(dir, 'evidence', 'confirm', ID, 'x', '--json').status, 0);
+  const page = cli(dir, 'render', ID, '--json');
+  assert.equal(page.status, 0, page.stderr + page.stdout);
+});
+
+test('archive rechecks code after staging transaction and before writing specs', async () => {
+  const { stageArchive, commitArchive } = await import('../src/archive.ts');
+  const dir = makeRepo();
+  readyToArchive(dir);
+  stageArchive(dir, ID);
+  write(dir, 'backend/src/Auth.java', 'class Auth { int modifiedDuringConfirmation; }\n');
+  assert.throws(() => commitArchive(dir, ID), /确认或恢复期间/);
 });

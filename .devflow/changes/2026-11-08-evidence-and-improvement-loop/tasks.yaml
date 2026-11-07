@@ -1,0 +1,77 @@
+schema_version: 1
+tasks:
+  - id: T1
+    title: 冻结流程评测协议与兼容夹具
+    depends_on: []
+    acceptance:
+      - "固定 v1 历史与批准哈希夹具，新旧格式边界可复现"
+      - "记录至少十个故障用例预期及 Agent 对照协议，不执行付费模型"
+  - id: T2
+    title: 实现本地使用记录与关闭清理机制
+    depends_on: ["T1"]
+    acceptance:
+      - "并发调用各自完整记录，异常退出显示 unknown"
+      - "关闭与写入失败不改变结果和 stdout，白名单无原始 argv"
+      - "500 次开关对比满足设计中的附加耗时阈值"
+  - id: T3
+    title: 增加 v2 条件格式与统一批准周期
+    depends_on: ["T1"]
+    acceptance:
+      - "v2 编号、方式、check 引用校验通过正反例"
+      - "新批准后旧任务不计数，v1 哈希兼容夹具不变"
+  - id: T4
+    title: 实现自动证据关联及人工确认
+    depends_on: ["T3"]
+    acceptance:
+      - "verify 分配 run_id，关联成功运行与当前工作树"
+      - "人工确认仅交互入口，输入不执行命令，路径/附件检查齐全"
+  - id: T5
+    title: 以有效证据驱动任务完成和归档
+    depends_on: ["T4"]
+    acceptance:
+      - "缺条件、失效代码、旧周期、附件变更、缺人工确认均不能归档"
+      - "先 verify 再 evidence 再 task done 的流程可以完成，无循环依赖"
+  - id: T6
+    title: 支持实施笔记和批准快照
+    depends_on: ["T3"]
+    acceptance:
+      - "仅 execution.md 不撤销 v2 批准，契约文件变化仍撤销"
+      - "快照原子写入并可校验，v1 无快照诚实显示不可还原"
+  - id: T7
+    title: 工作树互斥及规范冲突恢复
+    depends_on: ["T5", "T6"]
+    acceptance:
+      - "并发开工只有一个成功，独立 worktree 不互锁"
+      - "规范变化后可重新批准，归档中断能继续且不重复事件"
+  - id: T8
+    title: 实现决策审查与 resume 摘要
+    depends_on: ["T5", "T6", "T7"]
+    acceptance:
+      - "审查页显示真实批准差异及验收矩阵"
+      - "resume 的 JSON 和人类输出均含阻塞原因、失效证据与下一命令"
+  - id: T9
+    title: 实现故障评测运行与比较
+    depends_on: ["T5", "T7"]
+    acceptance:
+      - "至少十个确定性故障在临时仓库符合预期，用户仓库不变"
+      - "协议不一致拒绝可比结论，原始验收不能因环境失败而降低"
+  - id: T10
+    title: 实现报告反馈候选与提案衔接
+    depends_on: ["T2", "T8", "T9"]
+    acceptance:
+      - "二十调用或七天活跃触发报告，同类三次去重候选"
+      - "报告含分母与 unknown，默认导出无文本和标识"
+      - "候选可生成待完善提案但不自动审批或执行"
+  - id: T11
+    title: 更新技能文档及安装发行验证
+    depends_on: ["T8", "T10"]
+    acceptance:
+      - "三个流程技能使用新证据与恢复入口，文档说明 v1/v2 与记录控制"
+      - "npm test、npm run typecheck、打包安装冒烟通过"
+  - id: T12
+    title: 完成闭环演示和首轮效果报告
+    depends_on: ["T11"]
+    acceptance:
+      - "演示从反馈到候选、提案、修复、固定回归、比较报告的完整链路"
+      - "有运行条件时每任务每版本五次显式 Agent 对照；无授权/环境则报告未完成，不虚构效果"
+      - "明确区分确定性工程验收与真实收益证据，真实对照未完成时本任务不得标完成"

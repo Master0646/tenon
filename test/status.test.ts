@@ -106,3 +106,81 @@ test('重新批准后，之前的开工与验证记录不再算数', () => {
   approve(dir, ID);
   assert.equal(status(dir), 'approved');
 });
+
+test('v1 compatibility baseline: approval input is exactly original reviewed files and config', async () => {
+  const { reviewedFiles, hashFiles } = await import('../src/core.ts');
+  const dir = makeRepo();
+  writeChange(dir, ID);
+  const files = [
+    `.devflow/changes/${ID}/change.yaml`, `.devflow/changes/${ID}/proposal.md`,
+    `.devflow/changes/${ID}/tasks.yaml`, `.devflow/changes/${ID}/specs/auth/spec.md`, '.devflow/project.yaml',
+  ];
+  assert.deepEqual(reviewedFiles(dir, ID).sort(), files.sort());
+  assert.equal(approve(dir, ID).hash, hashFiles(dir, files));
+});
+
+test('重新批准后不继承旧周期任务完成，历史事件仍保留', async () => {
+  const { readEvents } = await import('../src/core.ts');
+  const dir = makeRepo();
+  writeChange(dir, ID);
+  approve(dir, ID);
+  addEvent(dir, ID, { type: 'apply-started', at: at(), head: headCommit(dir) });
+  addEvent(dir, ID, { type: 'task-done', at: at(), task: 'T1' });
+  assert.equal(deriveStatus(dir, ID).tasks.done, 1);
+  append(dir, `.devflow/changes/${ID}/proposal.md`, '修改验收。\n');
+  approve(dir, ID);
+  assert.equal(deriveStatus(dir, ID).tasks.done, 0);
+  assert.equal(readEvents(dir, ID).filter((e) => e.type === 'task-done').length, 1);
+});
+
+function v2Change(dir: string) {
+  writeChange(dir, ID);
+  write(dir, `.devflow/changes/${ID}/change.yaml`, 'schema_version: 2\nmin_cli_version: 0.2.0\ntitle: 新格式\naffected_paths: [backend/**]\n');
+  write(dir, `.devflow/changes/${ID}/tasks.yaml`, 'schema_version: 2\ntasks:\n  - id: T1\n    title: 人工验收\n    acceptance:\n      - id: AC1\n        text: 已检查管理员页面\n        method: manual\n');
+}
+
+test('v2 批准保存快照，实施笔记保持批准，契约变化展示真实差异', async () => {
+  const { approvalDiff, snapshotIssues } = await import('../src/status.ts');
+  const dir = makeRepo();
+  v2Change(dir);
+  const ev = approve(dir, ID);
+  assert.match(ev.approval_id!, /^[0-9a-f-]{36}$/);
+  assert.match(ev.snapshot_hash!, /^sha256:/);
+  assert.deepEqual(snapshotIssues(dir, ID), []);
+  write(dir, `.devflow/changes/${ID}/execution.md`, '先做页面，再做接口。');
+  assert.equal(status(dir), 'approved');
+  assert.deepEqual(approvalDiff(dir, ID).files, []);
+  append(dir, `.devflow/changes/${ID}/proposal.md`, '契约变化。');
+  assert.equal(status(dir), 'draft');
+  const diff = approvalDiff(dir, ID);
+  assert.equal(diff.available, true);
+  assert.equal(diff.files.length, 1);
+  assert.match(diff.files[0].after!, /契约变化/);
+  assert.doesNotMatch(diff.files[0].before!, /契约变化/);
+});
+
+test('v2 快照损坏阻止继续，v1 无快照不冒充 HEAD', async () => {
+  const { approvalDiff, snapshotIssues } = await import('../src/status.ts');
+  const dir = makeRepo();
+  writeChange(dir, ID);
+  approve(dir, ID);
+  assert.equal(approvalDiff(dir, ID).available, false);
+  assert.deepEqual(snapshotIssues(dir, ID), []);
+  const other = makeRepo();
+  v2Change(other);
+  const ev = approve(other, ID);
+  write(other, `.devflow/reviews/${ID}/${ev.approval_id}/snapshot.json`, '{}');
+  assert.equal(snapshotIssues(other, ID).length, 1);
+  assert.equal(status(other), 'needs_fix');
+});
+
+test('开工后规范变化提前要求重批，恢复不会卡在禁止批准状态', () => {
+  const dir = makeRepo();
+  writeChange(dir, ID);
+  approve(dir, ID);
+  addEvent(dir, ID, { type: 'apply-started', at: at(), head: headCommit(dir) });
+  write(dir, '.devflow/specs/auth/spec.md', '# auth\n\n## Purpose\n\n认证。\n\n## Requirements\n\n### Requirement: 登录\n系统 SHALL 登录。\n\n#### Scenario: 登录\n- WHEN 登录\n- THEN 成功\n');
+  assert.equal(status(dir), 'rebase_required');
+  approve(dir, ID);
+  assert.equal(status(dir), 'approved');
+});

@@ -35,10 +35,10 @@ const asHuman = (...a: string[]) => {
 const log: Record<string, unknown> = {};
 let cost = 0;
 function claude(step: string, prompt: string, tools: string[], minutes: number) {
-  const args = ['-p', prompt, '--output-format', 'json', '--setting-sources', 'project,local', '--permission-mode', 'acceptEdits', '--allowedTools', ...tools];
+  const args = ['-p', prompt, '--max-turns', '100', '--output-format', 'json', '--setting-sources', 'project,local', '--permission-mode', 'acceptEdits', '--allowedTools', ...tools];
   if (opts.model) args.push('--model', opts.model);
   console.log(`[${step}] 运行 claude …`);
-  const r = spawnSync('claude', args, { cwd: proj, env, encoding: 'utf8', timeout: minutes * 60_000, maxBuffer: 64 * 1024 * 1024 });
+  const r = spawnSync('claude', args, { cwd: proj, env, encoding: 'utf8', timeout: Math.min(minutes, 30) * 60_000, maxBuffer: 64 * 1024 * 1024 });
   let res: any = {};
   try {
     res = JSON.parse(r.stdout);
@@ -73,19 +73,9 @@ sh('git', 'commit', '-qm', 'knowledge');
 
 // 2. 方案：采用 M2 中 Agent 写的方案，按人的审查意见修改后批准
 cpSync(PROPOSAL, join(proj, '.devflow/changes', ID), { recursive: true });
-const tf = join(proj, '.devflow/changes', ID, 'tasks.yaml');
-let tasks = readFileSync(tf, 'utf8');
-const review: string[] = [];
-// 审查意见 1：端口写错（application.yml 是 8081）；且该验收需要启动服务和数据库，改为可在单元测试中验证
-tasks = tasks.replace(/ +- 不带 token 执行 curl -i http:\/\/localhost:8080\/api\/auth\/me 返回 401\n/, '      - WebConfig 未把 /api/auth/me 排除在登录校验之外\n');
-review.push('T3：验收里的 curl 端口写成 8080（实际 8081），且需要启动服务与数据库；改为检查 WebConfig');
-// 审查意见 2：前端没有安装依赖，构建与手工验证在本流程中无法执行；改为可静态核对的条件
-tasks = tasks.replace(/ +- 在 frontend 目录运行 npm run build 成功\n +- 手工验证：USER 账号登录后列表中没有禁用按钮；ADMIN 账号登录后 ACTIVE 且非 ADMIN 的行有禁用按钮\n +- 手工验证：\/api\/auth\/me 请求失败时列表中没有禁用按钮\n/,
-  '      - isAdmin 初始为 false，获取当前用户失败时保持 false\n');
-review.push('T4：前端未安装依赖，npm build 与手工验证无法执行；改为可静态核对的条件（前端构建留给真实项目的 CI）');
-if (/8080|npm run build|手工验证/.test(tasks)) throw new Error('审查修改未生效：tasks.yaml 的原文与预期不符');
-writeFileSync(tf, tasks);
-log.review = review;
+// 保留原始验收标准；依赖或运行环境不足必须记为 unknown，不替换成静态条件。
+log.review = ['冻结原始验收；错误配置需在方案审查中发现，不能由运行器悄悄修正'];
+log.acceptancePolicy = 'original-contract-or-unknown';
 log.validate = JSON.parse(df('validate', ID, '--json').stdout);
 df('render', ID);
 log.approve = asHuman('approve', ID);

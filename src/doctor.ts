@@ -2,9 +2,9 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { agentDrift, detectAgents } from './agents.ts';
-import { DF, git } from './core.ts';
+import { DF, git, listChanges } from './core.ts';
 import { HOOK_MARK } from './init.ts';
-import { validateProject } from './validate.ts';
+import { validateProject, validateChange } from './validate.ts';
 import { lintWiki } from './wiki.ts';
 
 export interface Finding { level: 'ok' | 'warn' | 'error'; item: string; message: string; hint?: string }
@@ -71,6 +71,11 @@ export function doctor(cwd: string, nodeVersion = process.versions.node): Findin
     const p = readFileSync(join(root, DF, 'project.yaml'), 'utf8');
     if (/^verify:\s*\[\s*\]\s*$/m.test(p)) add('warn', 'project.yaml', '没有声明验证命令，devflow verify 的结果只会是 unknown', '在 .devflow/project.yaml 的 verify 中加入测试命令（由人维护）');
     else add('ok', 'project.yaml', '已声明验证命令');
+  }
+
+  for (const id of listChanges(root)) {
+    const errors = validateChange(root, id, false).filter((i) => i.level === 'error');
+    if (errors.length) add('error', `变更格式 ${id}`, errors.map((i) => i.message).join('；'), '升级兼容 CLI 并运行 devflow validate ' + id);
   }
 
   const pages = lintWiki(root).pages.length;

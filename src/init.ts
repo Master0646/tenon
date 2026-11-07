@@ -88,16 +88,17 @@ tasks: []
   'specs/.gitkeep': '',
 };
 
-export function newChange(root: string, id: string | undefined): string[] {
+export function newChange(root: string, id: string | undefined, schema = 2): string[] {
   requireInit(root);
   if (!id || !CHANGE_ID.test(id) || id === 'archive') {
     throw new DevflowError(`变更 ID 无效：${id ?? '（缺失）'}`, '用小写字母、数字和连字符，例如 devflow new 2026-11-06-role-access');
   }
+  if (![1, 2].includes(schema)) throw new DevflowError('schema 必须为 1 或 2');
   const dir = changeDir(root, id);
   if (existsSync(dir)) throw new DevflowError(`变更已存在：${id}`);
   for (const [rel, content] of Object.entries(CHANGE_FILES)) {
     mkdirSync(dirname(join(dir, rel)), { recursive: true });
-    writeFileSync(join(dir, rel), content);
+    writeFileSync(join(dir, rel), schema === 2 && ['change.yaml', 'tasks.yaml'].includes(rel) ? content.replace('schema_version: 1', `schema_version: 2${rel === 'change.yaml' ? '\nmin_cli_version: 0.2.0' : ''}`) : content);
   }
   return Object.keys(CHANGE_FILES).map((f) => `${DF}/changes/${id}/${f}`);
 }

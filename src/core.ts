@@ -3,9 +3,10 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import type { Dirent } from 'node:fs';
 import {
-  appendFileSync, copyFileSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync,
+  openSync, closeSync, writeFileSync, appendFileSync, copyFileSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { parse } from 'yaml';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 
 export const DF = '.devflow';
@@ -116,7 +117,7 @@ export function listChanges(root: string): string[] {
 /** 被审文件：变更目录下除事件日志外的全部文件，加上 project.yaml（防止批准后改弱验证命令） */
 export function reviewedFiles(root: string, id: string): string[] {
   return [
-    ...repoFiles(root, changeRel(id)).filter((f) => f !== 'events.jsonl').map((f) => `${changeRel(id)}/${f}`),
+    ...repoFiles(root, changeRel(id)).filter((f) => f !== 'events.jsonl' && !(changeSchema(root, id) === 2 && f === 'execution.md')).map((f) => `${changeRel(id)}/${f}`),
     `${DF}/project.yaml`,
   ];
 }
@@ -135,11 +136,20 @@ export function currentSpecHash(root: string, cap: string): string | null {
 
 // ---------- 事件日志 ----------
 
+export interface EvidenceRecord {
+  type: 'evidence-recorded'; at: string; evidence_id: string; approval_id: string; worktree_hash: string;
+  task: string; acceptance: string; kind: 'automated' | 'manual'; summary: string;
+  artifacts: { path: string; hash: string }[]; verify_run?: string; check?: string; test?: string; assertion?: string;
+  procedure?: string; expected?: string; observed?: string;
+}
+
 export type DevflowEvent =
-  | { type: 'approved'; at: string; actor: string; hash: string; base_commit: string; spec_base: Record<string, string | null> }
-  | { type: 'apply-started'; at: string; head: string }
-  | { type: 'task-done'; at: string; task: string }
-  | { type: 'verified'; at: string; diff_hash: string; result: 'pass' | 'fail' | 'unknown'; checks: { name: string; exit: number | null }[] }
+  | { type: 'approved'; at: string; actor: string; hash: string; base_commit: string; spec_base: Record<string, string | null>; approval_id?: string; snapshot_hash?: string }
+  | { type: 'apply-started'; at: string; head: string; approval_id?: string }
+  | { type: 'task-done'; at: string; task: string; approval_id?: string; worktree_hash?: string }
+  | { type: 'verified'; at: string; diff_hash: string; result: 'pass' | 'fail' | 'unknown'; checks: { name: string; exit: number | null; log_hash?: string }[]; run_id?: string; approval_id?: string }
+  | EvidenceRecord
+  | { type: 'evidence-confirmed'; at: string; evidence_id: string; approval_id: string; worktree_hash: string; actor: string }
   | { type: 'archived'; at: string; actor: string };
 
 const isStr = (v: unknown): v is string => typeof v === 'string' && v.length > 0;
@@ -157,6 +167,10 @@ function eventError(ev: any): string | null {
     case 'verified':
       return isStr(ev.diff_hash) && ['pass', 'fail', 'unknown'].includes(ev.result) && Array.isArray(ev.checks)
         ? null : 'verified 事件字段不完整';
+    case 'evidence-recorded':
+      return [ev.evidence_id, ev.approval_id, ev.worktree_hash, ev.task, ev.acceptance].every(isStr) && ['automated', 'manual'].includes(ev.kind) && isStr(ev.summary) && Array.isArray(ev.artifacts) && ev.artifacts.every((a: any) => a && isStr(a.path) && isStr(a.hash)) ? null : 'evidence-recorded 字段不完整';
+    case 'evidence-confirmed':
+      return [ev.evidence_id, ev.approval_id, ev.worktree_hash, ev.actor].every(isStr) ? null : 'evidence-confirmed 字段不完整';
     case 'archived':
       return isStr(ev.actor) ? null : 'archived 事件缺少 actor';
     default:
@@ -222,4 +236,34 @@ export function worktreeHash(root: string): string {
   } finally {
     rmSync(dirname(index), { recursive: true, force: true });
   }
+}
+
+export function changeSchema(root: string, id: string): number {
+  try { return parse(readFileSync(join(changeDir(root, id), 'change.yaml'), 'utf8'))?.schema_version ?? 1; }
+  catch { return 1; }
+}
+
+export function approvalCycle(root: string, id: string) {
+  const all = readEvents(root, id);
+  const index = all.findLastIndex((e) => e.type === 'approved');
+  const approved = index >= 0 ? all[index] as Extract<DevflowEvent, {type: 'approved'}> : undefined;
+  return { approved, approval_id: approved?.approval_id ?? `legacy:${index}`, events: index < 0 ? [] : all.slice(index + 1) };
+}
+
+export function withWorktreeLock<T>(root: string, action: () => T): T {
+  const path = resolve(root, git(root, ['rev-parse', '--git-path', 'devflow.lock']).trim());
+  let fd: number;
+  try { fd = openSync(path, 'wx'); }
+  catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw new DevflowError('无法创建工作树锁，请检查 Git 目录写权限', path);
+    throw new DevflowError('当前工作树有状态改变命令持锁', `检查 ${path} 的进程信息；仅在确认进程已退出后删除锁文件`);
+  }
+  const release = () => { closeSync(fd); rmSync(path, { force: true }); };
+  try {
+    writeFileSync(fd, JSON.stringify({ pid: process.pid, at: new Date().toISOString() }));
+    const result = action();
+    if (result instanceof Promise) return result.finally(release) as T;
+    release();
+    return result;
+  } catch (e) { release(); throw e; }
 }

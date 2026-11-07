@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // devflow 命令行入口。所有命令支持 --json；出错时退出码为 1
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline/promises';
 import { doctor } from './doctor.ts';
 import { parseArgs } from 'node:util';
@@ -10,17 +10,33 @@ import { lintWiki } from './wiki.ts';
 import { render, reviewIssues } from './render.ts';
 import { applyStart, taskDone, verify } from './exec.ts';
 import { commitArchive, discardArchive, pendingTx, stageArchive } from './archive.ts';
+import { fileURLToPath } from 'node:url';
+import { recordEvidence, confirmEvidence, evidenceMatrix } from './evidence.ts';
+import { startUsage, finishUsage, configureUsage, pruneUsage, addFeedback, usageReport, exportUsage, getCandidate, listCandidates, resolveCandidate } from './usage.ts';
+import { runWorkflowSuite, compareReports, readReport } from './evaluate.ts';
 import { resolve } from 'node:path';
-import { DevflowError, listChanges, repoRoot, requireChange, requireInit, reviewedFiles, type Issue } from './core.ts';
+import { DevflowError, approvalCycle, worktreeHash, withWorktreeLock, listChanges, repoRoot, requireChange, requireInit, reviewedFiles, type Issue } from './core.ts';
 import { init, newChange } from './init.ts';
 import { approve, deriveStatus, listArchived, prepareApproval } from './status.ts';
-import { validateChange, validateProject } from './validate.ts';
+import { loadTasks, validateChange, validateProject } from './validate.ts';
 
 const VERSION: string = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
 
 const HELP = `devflow ${VERSION}
 用法：devflow <命令> [参数] [--json]
 
+  resume <id>         显示当前进度、证据缺口与下一步
+  evidence add <id> --file <json>   记录验收证据
+  evidence confirm <id> <evidence-id>  人工确认（仅限人的终端）
+  usage configure --off | --on     控制本地使用记录
+  usage report [--since YYYY-MM-DD]  本地使用报告
+  usage feedback <id> --file <json>  记录使用反馈
+  usage export --out <file>          导出聚合数据
+  usage prune --before YYYY-MM-DD    清理过期使用数据
+  improve draft <candidate-id> <change-id>  生成待完善提案
+  improve resolve <candidate-id> --report <path>  关联优化结果
+  eval run --suite workflow           运行隔离故障评测
+  eval compare <baseline> <candidate>  比较固定协议报告
   doctor               检查环境、hook、Agent 文件与验证命令，并给出修复命令
   --version            显示版本号
   init [--agents a,b]  在当前 Git 项目创建 .devflow/、安装 pre-commit hook，
@@ -46,6 +62,7 @@ const { values: opts, positionals } = parseArgs({
   options: {
     json: { type: 'boolean' }, staged: { type: 'boolean' }, agents: { type: 'string' }, hash: { type: 'string' }, out: { type: 'string', short: 'o' },
     start: { type: 'boolean' }, all: { type: 'boolean' }, version: { type: 'boolean', short: 'v' },
+    'tool-version': { type: 'string' }, file: { type: 'string' }, schema: { type: 'string' }, since: { type: 'string' }, before: { type: 'string' }, off: { type: 'boolean' }, on: { type: 'boolean' }, suite: { type: 'string' }, report: { type: 'string' },
     help: { type: 'boolean', short: 'h' },
   },
 });
@@ -91,7 +108,7 @@ function report(issues: Issue[], okText: string): number {
   return failed ? 1 : 0;
 }
 
-async function main(): Promise<number> {
+async function dispatch(): Promise<number> {
   if (opts.version) {
     console.log(VERSION);
     return 0;
@@ -114,6 +131,61 @@ async function main(): Promise<number> {
   const root = repoRoot(process.cwd());
 
   switch (cmd) {
+    case 'resume': {
+      const id = requireChange(root, arg);
+      const state = deriveStatus(root, id);
+      const evidence = evidenceMatrix(root, id);
+      const missing = evidence.filter((e) => e.status !== 'valid');
+      let next = state.status === 'draft' || state.status === 'rebase_required' ? `devflow render ${id}` : state.status === 'approved' ? `devflow apply ${id} --start` : state.status === 'ready_to_archive' ? `devflow archive ${id}` : `devflow verify ${id}`;
+      if (state.reason.includes('快照')) next = '从 Git 恢复批准快照后重新运行 resume';
+      else if (['applying', 'needs_fix'].includes(state.status) && missing[0]?.status === 'unconfirmed') next = `devflow evidence confirm ${id} ${missing[0].evidence_id}`;
+      else if (['applying', 'needs_fix'].includes(state.status) && missing.length && !/重新验证|尚未验证|fail|unknown/.test(state.reason)) next = `devflow evidence add ${id} --file <${missing[0].acceptance}-evidence.json>`;
+      else if (state.status === 'applying' && !missing.length && state.reason.includes('任务')) {
+        const done = new Set(approvalCycle(root, id).events.flatMap((e) => e.type === 'task-done' && (!e.worktree_hash || e.worktree_hash === worktreeHash(root)) ? [e.task] : []));
+        const task = loadTasks(root, id).find((t) => !done.has(t.id) && (t.depends_on ?? []).every((d) => done.has(d)));
+        if (task) next = `devflow task done ${id} ${task.id}`;
+      }
+      const result = { ...state, approval_id: approvalCycle(root, id).approval_id, evidence, next, blockers: missing };
+      if (opts.json) console.log(JSON.stringify(result, null, 2));
+      else { console.log(`${id}: ${state.status} — ${state.reason}`); for (const e of missing) console.log(`${e.acceptance}: ${e.status} ${e.reason ?? ''}`); console.log(`下一步：${next}`); }
+      return 0;
+    }
+    case 'evidence': {
+      const id = requireChange(root, positionals[2]);
+      const state = deriveStatus(root, id);
+      if (!['applying', 'needs_fix', 'ready_to_archive'].includes(state.status) || state.reason.includes('快照')) throw new DevflowError('当前状态不允许记录证据', state.reason);
+      if (arg === 'confirm') { requireHuman('evidence confirm'); console.log(JSON.stringify(confirmEvidence(root, id, positionals[3] ?? ''), null, 2)); }
+      else if (arg === 'add' && opts.file) console.log(JSON.stringify(recordEvidence(root, id, JSON.parse(readFileSync(resolve(opts.file), 'utf8'))), null, 2));
+      else throw new DevflowError('用法：evidence add <id> --file <json> 或 evidence confirm <id> <evidence-id>');
+      return 0;
+    }
+    case 'usage': {
+      if (arg === 'configure') { if (opts.on === opts.off) throw new DevflowError('指定 --on 或 --off'); configureUsage(root, !!opts.on); console.log(JSON.stringify({ enabled: !!opts.on })); }
+      else if (arg === 'report') console.log(JSON.stringify(usageReport(root, { since: opts.since, tool_version: opts['tool-version'], schema_version: opts.schema ? Number(opts.schema) : undefined }), null, 2));
+      else if (arg === 'feedback' && opts.file) console.log(JSON.stringify(addFeedback(root, positionals[2] ?? '', JSON.parse(readFileSync(resolve(opts.file), 'utf8'))), null, 2));
+      else if (arg === 'export' && opts.out) console.log(JSON.stringify(exportUsage(root, { since: opts.since }, resolve(opts.out)), null, 2));
+      else if (arg === 'prune' && opts.before) console.log(JSON.stringify(pruneUsage(root, opts.before), null, 2));
+      else throw new DevflowError('未知 usage 子命令或缺少参数');
+      return 0;
+    }
+    case 'improve': {
+      if (arg === 'draft') {
+        const candidate = getCandidate(root, positionals[2] ?? '');
+        const id = positionals[3];
+        newChange(root, id);
+        writeFileSync(resolve(root, `.devflow/changes/${id}/proposal.md`), `# 优化候选\n\n## 为什么\n\n候选信息仅供核查，不代表因果结论。\n\n\`\`\`json\n${JSON.stringify(candidate, null, 2)}\n\`\`\`\n\n## 改什么\n\n待核实假设与验收标准后补齐。\n`);
+        console.log(JSON.stringify({ id, candidate, status: 'draft' }, null, 2));
+      } else if (arg === 'resolve' && opts.report) console.log(JSON.stringify(resolveCandidate(root, positionals[2] ?? '', resolve(opts.report)), null, 2));
+      else console.log(JSON.stringify(listCandidates(root), null, 2));
+      return 0;
+    }
+    case 'eval': {
+      const result = arg === 'run' && opts.suite === 'workflow' ? runWorkflowSuite(VERSION) : arg === 'compare' && positionals[2] && positionals[3] ? compareReports(readReport(resolve(positionals[2])), readReport(resolve(positionals[3]))) : null;
+      if (!result) throw new DevflowError('用法：eval run --suite workflow 或 eval compare <baseline> <candidate>');
+      if (opts.out) writeFileSync(resolve(opts.out), JSON.stringify(result, null, 2));
+      console.log(JSON.stringify(result, null, 2));
+      return 'samples' in result && result.samples.some((s) => s.outcome !== 'pass') ? 1 : 0;
+    }
     case 'init': {
       const guessed = opts.agents ? null : guessAgents(root);
       const agents = opts.agents ? parseAgents(opts.agents) : guessed ?? [...AGENTS];
@@ -148,7 +220,7 @@ async function main(): Promise<number> {
       return report(issues, `✓ ${pages.length} 个知识页校验通过`);
     }
     case 'new': {
-      const files = newChange(root, arg);
+      const files = newChange(root, arg, opts.schema === undefined ? 2 : Number(opts.schema));
       if (opts.json) console.log(JSON.stringify({ files }, null, 2));
       else {
         for (const f of files) console.log(`+ ${f}`);
@@ -222,7 +294,7 @@ async function main(): Promise<number> {
           console.log(`${c.exit === 0 ? '✓' : '✗'} ${c.name}  退出码 ${c.exit ?? '—'}  ${(c.ms / 1000).toFixed(1)}s${c.note ? `  ${c.note}` : ''}`);
           if (c.exit !== 0) console.log(`    日志：${c.log}`);
         }
-        console.log(`结果：${r.result}${r.note ? `（${r.note}）` : ''}；状态：${deriveStatus(root, arg!).status}`);
+        console.log(`配置检查结果：${r.result}${r.note ? `（${r.note}）` : ''}；状态：${deriveStatus(root, arg!).status}`);
       }
       return r.result === 'pass' ? 0 : 1;
     }
@@ -265,6 +337,34 @@ async function main(): Promise<number> {
       throw new DevflowError(`未知命令：${cmd}`, HELP);
   }
 }
+
+async function main(): Promise<number> {
+  let root: string;
+  try { root = repoRoot(process.cwd()); } catch { return dispatch(); }
+  const internal = ['usage', 'improve', 'eval'].includes(cmd ?? '');
+  const changeId = cmd === 'task' || cmd === 'evidence' ? positionals[2] : arg;
+  const state = () => { try { return changeId && /^[a-z0-9][a-z0-9-]*$/.test(changeId) ? deriveStatus(root, changeId) : undefined; } catch { return undefined; } };
+  const before = state();
+  let approval_id: string | undefined;
+  try { if (before) approval_id = approvalCycle(root, changeId!).approval_id.replace(':', '-'); } catch { /* reporting cannot block commands */ }
+  const handle = internal ? undefined : startUsage(root, { tool_version: VERSION, command: cmd ?? 'help', subcommand: ['task', 'evidence', 'wiki'].includes(cmd ?? '') ? arg : undefined, change_id: before || cmd === 'new' ? changeId : undefined, approval_id, status_before: before?.status });
+  try {
+    const mutate = ['apply', 'task', 'verify', 'approve', 'archive', 'evidence'].includes(cmd ?? '');
+    // Interactive confirmation keeps the worktree lock until the command finishes.
+    let code: number;
+    if (mutate) {
+      // dispatch is async; keep ownership until its promise resolves.
+      code = await withWorktreeLock(root, dispatch);
+    } else code = await dispatch();
+    finishUsage(handle, { outcome: code === 0 ? 'success' : 'failure', status_after: state()?.status, reason_code: code === 0 ? 'completed' : 'check-failed' });
+    return code;
+  } catch (e) {
+    const message = e instanceof DevflowError ? e.message : '';
+    const reason = /持锁|占用/.test(message) ? 'worktree-busy' : /证据/.test(message) ? 'evidence-incomplete' : /哈希|批准|审批|draft/.test(message) ? 'approval-invalid' : /rebase_required|规范/.test(message) ? 'spec-conflict' : /任务|依赖/.test(message) ? 'task-blocked' : /交互终端/.test(message) ? 'human-required' : 'command-failed';
+    finishUsage(handle, { outcome: 'failure', status_after: state()?.status, error_code: e instanceof DevflowError ? 'DEVFLOW_ERROR' : 'UNEXPECTED_ERROR', reason_code: reason }); throw e;
+  }
+}
+
 
 main().then(
   (code) => process.exit(code),

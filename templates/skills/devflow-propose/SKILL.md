@@ -24,7 +24,8 @@ description: 把用户的需求写成一个 DevFlow 变更方案（proposal、de
 **change.yaml**
 
 ```yaml
-schema_version: 1
+schema_version: 2
+min_cli_version: 0.2.0
 title: 禁用用户需要管理员权限
 affected_paths:            # 本变更会改动的代码路径（glob），审批后这些路径被别人改了会要求重新评估
   - backend/src/main/java/com/example/admin/user/**
@@ -109,7 +110,7 @@ er 语法要点：顶格一行是实体；缩进一行是字段，写成 `名称
 **tasks.yaml**：每个任务可独立验证。只写定义，不写进度（进度由 devflow 记录）。
 
 ```yaml
-schema_version: 1
+schema_version: 2
 tasks:
   - id: T1
     title: UserService#disable 增加操作者角色校验
@@ -119,7 +120,20 @@ tasks:
   - id: T2
     title: 前端对非 ADMIN 隐藏禁用按钮
     depends_on: [T1]
+    acceptance:
+      - id: AC2
+        text: 普通用户直接请求接口返回 403 且数据不变
+        method: automated
+        check: unit-tests
 ```
+
+## v2 验收与实施边界
+
+- new 默认 v2；验收编号在变更内唯一，每任务至少一项，automated 的 check 必须引用项目已声明的 verify.name；示例 unit-tests 必须替换为实际存在的名称。
+- manual 条件使用 method: manual，不写 check；后续需要人确认实际操作结果。
+- design、tasks、影响范围及配置受批准保护；execution.md 只记实施笔记，不放契约、验收或可执行配置。
+- 重新审批先 render 查看真实批准差异；旧变更没有快照时明确无法还原，不把 HEAD 当作旧批准。
+- 使用报告产生的候选只是线索，先核对 report_hash、相关调用与回归用例，再用本流程补全正式提案；不从频次推断因果。
 
 ## 规则
 

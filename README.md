@@ -13,7 +13,7 @@ cd devflow && npm install && npm pack
 ```
 
 ```bash
-npm install -g ./devflow-0.1.0.tgz
+npm install -g ./devflow-0.2.0.tgz
 ```
 
 ```bash
@@ -90,9 +90,66 @@ devflow init
 - **人专属命令**：`approve`、`archive` 要求交互终端（TTY）。Claude Code 的 shell 不是 TTY，此防线有效；Codex 可以让模型选择分配 TTY，此防线在 Codex 下**可被绕过**。
 - **禁止规则**：`init` 为 Claude Code 写入 deny 规则（已实测拦截 `devflow approve`），为 Codex 写入 `.codex/rules/devflow.rules`（只在项目被信任时加载，属实验性功能）。
 - **最后一道防线**是 git：pre-commit 与 CI 中的 `devflow check` 会拒绝手改 `.devflow/specs/`、改写已提交的事件日志等行为；批准记录随 `events.jsonl` 进入代码审查。
-- `check` 检查的是工作树内容而不是暂存区内容；用 `git add -p` 部分暂存时，可能误拦或漏过。
+- `check --staged` 对规范、事件日志及受控快照/附件读取暂存区；方案格式和业务状态仍从工作树派生，部分暂存时应核对对应材料。
 - 在小项目上，知识页对"代码里能直接搜到的事实"没有带来准确率提升（见 `docs/tasks/2026-11-06-devflow-m1.md`）；它的价值在于设计原因和历史变更这类代码里看不出来的知识。
 
 ## 第三方许可证
 
 见 [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md)。devflow 本身尚未选择开源许可证。
+
+## 0.2.0：证据与持续改进
+
+新建变更默认为 v2，change.yaml 使用 schema_version: 2 和 min_cli_version: 0.2.0；tasks.yaml 同为 v2。旧 v1 可继续使用，`devflow new <id> --schema 1` 可显式创建旧格式；重新批准后旧任务完成记录不再计数。
+
+v2 每个任务的 acceptance 是至少一个 `{id, text, method, check?}` 对象；id 在变更内唯一，method 为 automated/manual，自动项的 check 引用 project.yaml 已声明的 verify.name。只有固定 execution.md 实施笔记不参与批准哈希，其他契约修改仍需重批。
+
+推荐顺序：实现代码 → verify → evidence add → 人工项 confirm → task done → resume → 人工 archive。verify 输出 run_id；自动证据必须关联本轮、同代码版本的成功检查，不能凭测试通过推断需求覆盖充分。
+
+```bash
+devflow resume <id> --json
+devflow verify <id> --json
+devflow evidence add <id> --file evidence.json
+# 下面的确认仅由人在自己的终端运行
+devflow evidence confirm <id> <evidence-id>
+devflow task done <id> <task>
+```
+
+自动 evidence.json 示例（填写实际 run_id、任务和已批准条件）：
+
+```json
+{"task":"T1","acceptance":"AC1","kind":"automated","summary":"普通用户被拒绝且数据不变","verify_run":"实际运行ID","check":"unit-tests","test":"test/access.test.ts","assertion":"断言 status=403，数据未修改","artifacts":[]}
+```
+
+人工项改为 kind: manual，并提供 procedure、expected、observed。附件最多十个、每个最多 1 MiB，禁止 exclude 文件、越界或符号链接；证据和批准快照属于受控项目材料，应与 events.jsonl 一起提交。原始运行日志丢失仅提示，受控附件或快照损坏会阻止后续流程。
+
+代码变化需重建证据；重新批准开始新周期。一个工作树只开工一个 v2 变更，多个任务用独立 worktree 隔离；同能力规范变化进入 rebase_required，更新方案后重新批准。归档确认期间代码变化会拒绝继续，部分写入事务只能在恢复相应代码与证据后前滚。
+
+### 本地使用记录
+
+初始化项目内默认记录命令白名单、结果、原因码和耗时，不记录完整参数、输出、环境、用户名或源码；不上传。原始记录默认保留 30 天，用户反馈 90 天，报告 180 天；未解决候选保留到显式删除。
+
+```bash
+devflow usage configure --off
+devflow usage configure --on
+DEVFLOW_USAGE=off devflow status
+devflow usage report --since 2026-11-08
+devflow usage feedback <id> --file feedback.json
+devflow usage export --since 2026-11-08 --out summary.json
+devflow usage prune --before 2026-10-01
+```
+
+反馈 JSON 为 `{category, impact, note, related_invocation?}`；category 使用 blocked、confusing、false-positive、missed-defect 或 other。自由文本是用户填写的数据，默认聚合导出不含它；不要填写凭据。
+
+每 20 次结束调用或有新调用且距离报告超过 7 天自动汇总；同类问题至少 3 次产生去重候选。关闭或记录写入失败不影响业务退出码，JSON stdout 保持纯净。墙钟周期包含等待，不能视为人工时间；token、成本与真实漏检率缺失时保持 unknown。
+
+```bash
+devflow improve list
+devflow improve draft <candidate-id> <change-id>
+devflow eval run --suite workflow --out regression.json
+devflow eval compare baseline.json regression.json
+devflow improve resolve <candidate-id> --report comparison.json
+```
+
+候选生成待补全提案，不自动审批或实施。故障评测在临时仓库运行；协议和夹具不一致时不给出可比提升，至少每任务每版本五次且关键结果不退化、目标中位指标下降至少 10% 才标本批 improved，仍不表示统计显著。
+
+真实 Agent 评测需要显式启动且可能消耗账号额度，不由本地记录或业务 verify 自动触发；环境不满足时记 unknown，不将构建或真实业务验收降级为静态检查。升级时重新安装包并运行 devflow update 同步技能和人的命令规则；已有 v2 项目不得退回旧 CLI 追加事件。

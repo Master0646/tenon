@@ -7,3 +7,9 @@ prefix_rule(
     match = ["devflow approve demo", "devflow archive demo"],
     not_match = ["devflow status", "devflow wiki lint"],
 )
+
+prefix_rule(
+    pattern = ["devflow", "evidence", "confirm"],
+    decision = "forbidden",
+    justification = "人工证据只能由人在自己的终端确认",
+)

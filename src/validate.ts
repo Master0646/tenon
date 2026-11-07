@@ -89,7 +89,8 @@ export function enforceLevel(root: string): 'warn' | 'strict' {
 }
 
 export interface ChangeMeta { title: string; affected_paths: string[] }
-export interface TaskDef { id: string; title: string; depends_on?: string[]; acceptance?: string[] }
+export interface Acceptance { id: string; text: string; method: 'automated' | 'manual'; check?: string }
+export interface TaskDef { id: string; title: string; depends_on?: string[]; acceptance?: (string | Acceptance)[] }
 
 /** change.yaml 合法时返回内容，否则返回 null */
 export function loadChangeMeta(root: string, id: string): ChangeMeta | null {
@@ -120,7 +121,8 @@ export function validateChange(root: string, id: string, complete: boolean): Iss
     if (!existsSync(join(root, base, 'change.yaml'))) err('change.yaml', '文件不存在', hc);
   } else if (!isObj(m)) err('change.yaml', '顶层必须是对象', hc);
   else {
-    if (m.schema_version !== 1) err('change.yaml', 'schema_version 必须为 1', hc);
+    if (![1, 2].includes(m.schema_version)) err('change.yaml', 'schema_version 必须为 1 或 2', hc);
+    if (m.schema_version === 2 && m.min_cli_version !== '0.2.0') err('change.yaml', 'v2 需要 min_cli_version: 0.2.0', hc);
     if (typeof m.title !== 'string' || (complete && !isStr(m.title))) err('change.yaml', 'title 必须是非空字符串', hc);
     if (!Array.isArray(m.affected_paths) || !m.affected_paths.every((p: unknown) => typeof p === 'string')) {
       err('change.yaml', 'affected_paths 必须是字符串数组', hc);
@@ -139,10 +141,14 @@ export function validateChange(root: string, id: string, complete: boolean): Iss
   const t = loadYaml(root, `${base}/tasks.yaml`, issues, ht);
   if (t === undefined) {
     if (complete && !existsSync(join(root, base, 'tasks.yaml'))) err('tasks.yaml', '文件不存在', ht);
-  } else if (!isObj(t) || t.schema_version !== 1 || !Array.isArray(t.tasks)) {
+  } else if (!isObj(t) || ![1, 2].includes(t.schema_version) || !Array.isArray(t.tasks)) {
     err('tasks.yaml', '必须包含 schema_version: 1 和 tasks 数组', ht);
   } else {
     if (complete && !t.tasks.length) err('tasks.yaml', 'tasks 不能为空', ht);
+    if (isObj(m) && t.schema_version !== m.schema_version) err('tasks.yaml', 'tasks 与 change 的 schema_version 必须一致');
+    const acceptanceIds = new Set<string>();
+    const project = loadYaml(root, `${DF}/project.yaml`, issues, '检查 verify 配置');
+    const checks = isObj(project) && Array.isArray(project.verify) ? project.verify.map((v: any) => v.name) : [];
     const ids = new Set<string>();
     t.tasks.forEach((x: any, i: number) => {
       if (!isObj(x) || !isStr(x.id) || !/^[A-Za-z][\w-]*$/.test(x.id)) return err('tasks.yaml', `tasks[${i}].id 必须是字母开头的标识，如 T1`, ht);
@@ -150,7 +156,16 @@ export function validateChange(root: string, id: string, complete: boolean): Iss
       ids.add(x.id);
       if (!isStr(x.title)) err('tasks.yaml', `${x.id}.title 必须是非空字符串`, ht);
       if (x.depends_on !== undefined && !isStrList(x.depends_on)) err('tasks.yaml', `${x.id}.depends_on 必须是任务 ID 数组`, ht);
-      if (x.acceptance !== undefined && !isStrList(x.acceptance)) err('tasks.yaml', `${x.id}.acceptance 必须是字符串数组`, ht);
+      if (t.schema_version === 1 && x.acceptance !== undefined && !isStrList(x.acceptance)) err('tasks.yaml', `${x.id}.acceptance 必须是字符串数组`, ht);
+      if (t.schema_version === 2) {
+        if (!Array.isArray(x.acceptance) || !x.acceptance.length) err('tasks.yaml', `${x.id}.acceptance 不能为空`);
+        else for (const a of x.acceptance) {
+          if (!isObj(a) || !isStr(a.id) || !/^[A-Za-z][\w-]*$/.test(a.id) || !isStr(a.text) || !['automated', 'manual'].includes(a.method)) { err('tasks.yaml', `${x.id} 验收条件需要 id/text/method`); continue; }
+          if (acceptanceIds.has(a.id)) err('tasks.yaml', `验收编号重复：${a.id}`);
+          acceptanceIds.add(a.id);
+          if (a.method === 'automated' && !checks.includes(a.check)) err('tasks.yaml', `${a.id}.check 不在 project.verify 中`);
+        }
+      }
       if ('status' in x || 'done' in x) err('tasks.yaml', `${x.id} 不能包含进度字段：进度由 devflow task done 记录在事件日志`);
     });
     const deps = new Map<string, string[]>();

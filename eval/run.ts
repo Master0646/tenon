@@ -28,7 +28,7 @@ interface ClaudeResult { result?: string; is_error?: boolean; num_turns?: number
 
 /** 用 claude -p 跑一个全新会话；只加载项目级设置，避免用户全局插件与钩子影响结果 */
 function claude(cwd: string, env: NodeJS.ProcessEnv, prompt: string, tools: string[], timeoutMs: number): Promise<ClaudeResult> {
-  const args = ['-p', prompt, '--output-format', 'json', '--setting-sources', 'project,local', '--permission-mode', 'acceptEdits', '--allowedTools', ...tools];
+  const args = ['-p', prompt, '--max-turns', '100', '--output-format', 'json', '--setting-sources', 'project,local', '--permission-mode', 'acceptEdits', '--allowedTools', ...tools];
   if (opts.model) args.push('--model', opts.model);
   if (opts.control) args.push('--append-system-prompt', CONTROL_PROMPT);
   return new Promise((resolve) => {

@@ -1,0 +1,42 @@
+schema_version: 1
+title: 验收证据、可调整实施与持续改进闭环
+affected_paths:
+  - src/core.ts
+  - src/status.ts
+  - src/exec.ts
+  - src/validate.ts
+  - src/cli.ts
+  - src/archive.ts
+  - src/check.ts
+  - src/render.ts
+  - src/init.ts
+  - src/doctor.ts
+  - src/evidence.ts
+  - src/usage.ts
+  - src/evaluate.ts
+  - test/status.test.ts
+  - test/exec.test.ts
+  - test/check.test.ts
+  - test/render.test.ts
+  - test/cli-feedback.test.ts
+  - test/evidence.test.ts
+  - test/usage.test.ts
+  - test/evaluate.test.ts
+  - test/worktree.test.ts
+  - test/fixture.ts
+  - templates/skills/devflow-propose/SKILL.md
+  - templates/skills/devflow-apply/SKILL.md
+  - templates/skills/devflow-archive/SKILL.md
+  - templates/eval/**
+  - eval/lifecycle.ts
+  - eval/run.ts
+  - eval/report.ts
+  - eval/protocol.yaml
+  - README.md
+  - docs/使用手册.md
+  - docs/体验反馈.md
+  - scripts/smoke-install.sh
+  - package.json
+  - src/agents.ts
+  - templates/devflow.rules
+  - test/agents.test.ts
