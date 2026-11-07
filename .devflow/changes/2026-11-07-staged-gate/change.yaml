@@ -1,0 +1,7 @@
+schema_version: 1
+title: 提交门禁按暂存区检查，并提示漏提交的变更记录与超出影响路径的文件
+affected_paths:
+  - src/check.ts
+  - test/**
+  - docs/使用手册.md
+  - docs/体验反馈.md

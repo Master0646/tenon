@@ -1,0 +1,28 @@
+schema_version: 1
+tasks:
+  - id: T1
+    title: 规范锁与事件日志按暂存区检查
+    acceptance:
+      - 测试：工作树手改规范但未暂存，check --staged 无该错误；不带 --staged 仍报错
+      - 测试：暂存手改后工作树恢复，check --staged 报错
+      - 测试：暂存区 events.jsonl 删改已提交行、工作树合法时，check --staged 报错
+      - 现有 check 测试全部通过
+  - id: T2
+    title: 提示未暂存的变更记录
+    acceptance:
+      - 测试：已开工变更只暂存代码时输出"记录未暂存"警告，含 git add 提示
+      - 测试：代码与变更目录一起暂存时无该警告
+      - 测试：enforce strict 时该警告不拒绝提交
+  - id: T3
+    title: 提示超出影响路径的文件
+    acceptance:
+      - 测试：已开工、affected_paths 为 backend/** 时暂存 .claude/launch.json，警告列出该文件
+      - 测试：没有已开工变更时不输出该警告
+      - 测试：.devflow/ 下的文件不算超出
+  - id: T4
+    title: 使用手册与体验反馈同步
+    depends_on: [T1, T2, T3]
+    acceptance:
+      - 使用手册第 10 节写明 --staged 以暂存区为准，规则表含两条新警告
+      - 体验反馈 #16 #29 #30 状态更新
+      - npm test 与 typecheck 通过

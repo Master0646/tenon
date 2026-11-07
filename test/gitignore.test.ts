@@ -52,13 +52,18 @@ test('被忽略的 .DS_Store 不影响 check、validate、wiki lint 与批准哈
 test('没被忽略的多余文件仍会被拦下；删除已跟踪的规范仍报"文件被删除"', () => {
   const dir = makeRepo();
   write(dir, '.devflow/specs/notes.md', '手写笔记\n');
+  assert.match(check(dir, { staged: false }).map((i) => i.message).join(), /不在 specs\.lock 中/);
+  g(dir, 'add', '-A');
   assert.match(errors(dir).map((i) => i.message).join(), /不在 specs\.lock 中/);
+  g(dir, 'rm', '-q', '--cached', '.devflow/specs/notes.md');
   rmSync(join(dir, '.devflow/specs/notes.md'));
 
   write(dir, '.devflow/specs/auth/spec.md', '# auth\n');
   writeFileSync(join(dir, '.devflow/specs/specs.lock'), JSON.stringify({ 'auth/spec.md': sha256('# auth\n') }));
   commit(dir, 'spec', true);
   rmSync(join(dir, '.devflow/specs/auth/spec.md'));
+  assert.match(check(dir, { staged: false }).map((i) => i.message).join(), /文件被删除/);
+  g(dir, 'add', '-A');
   assert.match(errors(dir).map((i) => i.message).join(), /文件被删除/);
 });
 
