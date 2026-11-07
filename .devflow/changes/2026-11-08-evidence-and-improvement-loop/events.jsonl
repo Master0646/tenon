@@ -12,3 +12,17 @@
 {"type":"task-done","at":"2026-11-07T16:23:51.447Z","task":"T10","approval_id":"legacy:0"}
 {"type":"verified","run_id":"cbdc4991-d67e-45a0-bb07-2284c19a8c90","approval_id":"legacy:0","at":"2026-11-07T16:24:49.227Z","diff_hash":"git-tree:09ffcac6289bf4a762091240df5ea509b79fb725","result":"pass","checks":[{"name":"unit-tests","exit":0,"log_hash":"sha256:40933778ab20c8f827f8ca4c4c23a26713e6bc6a194f697dc15f268d7592ac93"},{"name":"typecheck","exit":0,"log_hash":"sha256:d723d8314dced1e6165759f11f99c97aa132c52760f9580a6b56139e68244be8"}]}
 {"type":"task-done","at":"2026-11-07T16:25:27.468Z","task":"T11","approval_id":"legacy:0"}
+{"type":"approved","at":"2026-11-07T16:37:16.777Z","actor":"zhangniuniu","hash":"sha256:d7be5d06e8e5ae39293e14d289684657b8554768f1c99cab11dda9e963612a7f","base_commit":"bae5e62b739bec3dc32e1aa73d11811d7f792b59","spec_base":{"evidence-workflow":null}}
+{"type":"apply-started","at":"2026-11-07T16:38:27.812Z","head":"bae5e62b739bec3dc32e1aa73d11811d7f792b59","approval_id":"legacy:14"}
+{"type":"verified","run_id":"119bc7ce-0261-45cc-a09f-4a45eac5e9e6","approval_id":"legacy:14","at":"2026-11-07T16:38:54.581Z","diff_hash":"git-tree:09ffcac6289bf4a762091240df5ea509b79fb725","result":"pass","checks":[{"name":"unit-tests","exit":0,"log_hash":"sha256:9c56a925eff3b2910c3bdec2db41df9f6f331c68c2ad14c0c3c724d279179c3b"},{"name":"typecheck","exit":0,"log_hash":"sha256:d723d8314dced1e6165759f11f99c97aa132c52760f9580a6b56139e68244be8"}]}
+{"type":"task-done","at":"2026-11-07T16:39:16.896Z","task":"T1","approval_id":"legacy:14"}
+{"type":"task-done","at":"2026-11-07T16:39:17.414Z","task":"T2","approval_id":"legacy:14"}
+{"type":"task-done","at":"2026-11-07T16:39:17.934Z","task":"T3","approval_id":"legacy:14"}
+{"type":"task-done","at":"2026-11-07T16:39:18.462Z","task":"T4","approval_id":"legacy:14"}
+{"type":"task-done","at":"2026-11-07T16:39:18.980Z","task":"T5","approval_id":"legacy:14"}
+{"type":"task-done","at":"2026-11-07T16:39:19.498Z","task":"T6","approval_id":"legacy:14"}
+{"type":"task-done","at":"2026-11-07T16:39:20.029Z","task":"T7","approval_id":"legacy:14"}
+{"type":"task-done","at":"2026-11-07T16:39:20.543Z","task":"T8","approval_id":"legacy:14"}
+{"type":"task-done","at":"2026-11-07T16:39:21.063Z","task":"T9","approval_id":"legacy:14"}
+{"type":"task-done","at":"2026-11-07T16:39:21.597Z","task":"T10","approval_id":"legacy:14"}
+{"type":"task-done","at":"2026-11-07T16:39:22.120Z","task":"T11","approval_id":"legacy:14"}
