@@ -1,0 +1,32 @@
+schema_version: 1
+tasks:
+  - id: T1
+    title: 冻结真实实验协议与执行条件
+    depends_on: []
+    acceptance:
+      - "为基线 7b03749 与候选 f99edf1 记录完整提交号、项目树哈希、模型、工具、判据及预算"
+      - "确认模型和账号执行条件；未具备时保留未开工，不调用付费模型"
+  - id: T2
+    title: 补齐隔离真实运行器
+    depends_on: ["T1"]
+    acceptance:
+      - "每个任务运行在全新临时项目及新会话，顺序交替、无隐式重试"
+      - "假运行测试验证中断、超时、unknown 和原始结果关联，运行器不代人批准"
+  - id: T3
+    title: 完成反馈到候选结果的闭环演示
+    depends_on: ["T2"]
+    acceptance:
+      - "留存反馈、来源报告、候选、正式提案、人的批准、修复提交、回归案例和比较结果的关联"
+      - "不以演示通过替代真实 Agent 对照或改写生产事件"
+  - id: T4
+    title: 执行至少三十次真实对照
+    depends_on: ["T2"]
+    acceptance:
+      - "三类任务各两个版本至少五次，运行与人工步骤有可核对记录"
+      - "保持原验收，环境不足或中止如实计 unknown，不伪造或降低标准"
+  - id: T5
+    title: 输出首轮效果报告并回填候选
+    depends_on: ["T3", "T4"]
+    acceptance:
+      - "报告完成率、漏检、误拦、介入、调用数、耗时分布、样本数和失败明细，缺失费用保持 unknown"
+      - "使用固定判据输出 improved/regressed/inconclusive；未完成真实对照时本案不得完成"
