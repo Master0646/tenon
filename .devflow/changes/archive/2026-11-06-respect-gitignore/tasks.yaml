@@ -1,0 +1,18 @@
+schema_version: 1
+tasks:
+  - id: T1
+    title: 新增 repoFiles，四个调用点改用它
+    acceptance:
+      - check、reviewedFiles、validate 的 delta 列表、wiki lint 的页面列表都改用 repoFiles
+      - 现有测试全部通过
+  - id: T2
+    title: 补测试
+    depends_on: [T1]
+    acceptance:
+      - 被 .gitignore 忽略的 .DS_Store 出现在 .devflow/specs/、变更目录、changes/<id>/specs/、knowledge/pages/ 时，check、validate、wiki lint 无错误，批准哈希不变，状态仍为 approved
+      - specs/ 下未被忽略的多余文件仍被 check 拒绝
+      - 删除已跟踪的规范文件仍报"文件被删除"
+  - id: T3
+    title: 使用手册补一条常见问题
+    acceptance:
+      - 常见问题中说明：被忽略的文件不参与校验；没被忽略的临时文件需要加入 .gitignore

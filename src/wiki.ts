@@ -2,7 +2,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, matchesGlob, normalize } from 'node:path';
 import { parse } from 'yaml';
-import { DF, archiveTarget, git, listChanges, listFiles, type Issue } from './core.ts';
+import { DF, archiveTarget, git, listChanges, repoFiles, type Issue } from './core.ts';
 
 const KDIR = `${DF}/knowledge`;
 const SLUG = /^[a-z0-9][a-z0-9-]*$/;
@@ -46,7 +46,7 @@ export function lintWiki(root: string): { issues: Issue[]; pages: Page[] } {
   const issues: Issue[] = [];
   const pages: Page[] = [];
   const excludes = loadExcludes(root);
-  const files = listFiles(join(root, KDIR, 'pages')).filter((f) => f !== '.gitkeep');
+  const files = repoFiles(root, `${KDIR}/pages`).filter((f) => f !== '.gitkeep');
   const slugs = new Set(files.filter((f) => f.endsWith('.md')).map((f) => f.slice(0, -3)));
 
   for (const f of files) {

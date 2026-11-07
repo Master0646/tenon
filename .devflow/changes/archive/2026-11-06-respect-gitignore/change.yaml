@@ -1,0 +1,9 @@
+schema_version: 1
+title: .devflow 内的文件遍历遵守 .gitignore
+affected_paths:
+  - src/core.ts
+  - src/check.ts
+  - src/validate.ts
+  - src/wiki.ts
+  - test/**
+  - docs/使用手册.md

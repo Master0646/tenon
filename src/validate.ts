@@ -2,7 +2,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse } from 'yaml';
-import { DF, changeDir, changeRel, listFiles, type Issue } from './core.ts';
+import { DF, changeRel, repoFiles, type Issue } from './core.ts';
 import { mergeSpec, parseDelta } from './spec.ts';
 
 const EX_PROJECT = `schema_version: 1
@@ -171,7 +171,7 @@ export function validateChange(root: string, id: string, complete: boolean): Iss
 
   // delta specs
   const hd = `示例：\n${EX_DELTA}`;
-  const specFiles = listFiles(join(changeDir(root, id), 'specs')).filter((f) => f !== '.gitkeep');
+  const specFiles = repoFiles(root, `${base}/specs`).filter((f) => f !== '.gitkeep');
   for (const f of specFiles) {
     if (!/^[a-z0-9][a-z0-9-]*\/spec\.md$/.test(f)) {
       err(`specs/${f}`, 'delta spec 路径必须是 specs/<capability>/spec.md（capability 用小写字母、数字、连字符）', hd);

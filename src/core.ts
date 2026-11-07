@@ -62,7 +62,19 @@ export function listFiles(dir: string): string[] {
     .sort();
 }
 
-export const sha256 = (data: string | Buffer): string =>
+/**
+ * 仓库内某目录下 git 会跟踪的文件：已跟踪的，加上未被 .gitignore 等规则忽略的新文件。
+ * 返回相对 relDir 的路径（/ 分隔、已排序），格式同 listFiles；已从磁盘删除的文件不返回。
+ */
+export function repoFiles(root: string, relDir: string): string[] {
+  const out = git(root, ['ls-files', '-z', '--cached', '--others', '--exclude-standard', '--', relDir]);
+  const prefix = `${relDir.replace(/\/$/, '')}/`;
+  return [...new Set(out.split('\0').filter((f) => f.startsWith(prefix) && existsSync(join(root, f))))]
+    .map((f) => f.slice(prefix.length))
+    .sort();
+}
+
+export const sha256 =(data: string | Buffer): string =>
   'sha256:' + createHash('sha256').update(data).digest('hex');
 
 /** 多个文件（相对 root）合成一个哈希；路径参与哈希，改名也会使哈希变化 */
@@ -104,14 +116,14 @@ export function listChanges(root: string): string[] {
 /** 被审文件：变更目录下除事件日志外的全部文件，加上 project.yaml（防止批准后改弱验证命令） */
 export function reviewedFiles(root: string, id: string): string[] {
   return [
-    ...listFiles(changeDir(root, id)).filter((f) => f !== 'events.jsonl').map((f) => `${changeRel(id)}/${f}`),
+    ...repoFiles(root, changeRel(id)).filter((f) => f !== 'events.jsonl').map((f) => `${changeRel(id)}/${f}`),
     `${DF}/project.yaml`,
   ];
 }
 
 /** 变更要修改的能力：specs/<cap>/spec.md */
 export function specCaps(root: string, id: string): string[] {
-  return listFiles(join(changeDir(root, id), 'specs'))
+  return repoFiles(root, `${changeRel(id)}/specs`)
     .filter((f) => /^[^/]+\/spec\.md$/.test(f))
     .map((f) => f.split('/')[0]);
 }

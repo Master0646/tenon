@@ -3,7 +3,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  DF, DevflowError, changeDir, changeRel, git, listChanges, listFiles, readEvents, requireInit, sha256, type Issue,
+  DF, DevflowError, changeDir, changeRel, git, listChanges, readEvents, repoFiles, requireInit, sha256, type Issue,
 } from './core.ts';
 import { deriveStatus } from './status.ts';
 import { enforceLevel, loadChangeMeta, validateChange, validateProject } from './validate.ts';
@@ -63,7 +63,7 @@ function checkSpecLock(root: string): Issue[] {
   }
   const hint = '规范只能经 devflow archive 修改。撤销手改：git restore <文件>（新加的文件直接删除）；要改规范，请新建变更并归档';
   const issues: Issue[] = [];
-  const files = listFiles(dir).filter((f) => f !== 'specs.lock' && f !== '.gitkeep');
+  const files = repoFiles(root, `${DF}/specs`).filter((f) => f !== 'specs.lock' && f !== '.gitkeep');
   for (const f of files) {
     if (lock[f] !== sha256(readFileSync(join(dir, f)))) {
       issues.push({ level: 'error', file: `${DF}/specs/${f}`, message: lock[f] ? '内容与 specs.lock 不符（被手动修改）' : '不在 specs.lock 中（被手动添加）', hint });
