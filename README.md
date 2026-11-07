@@ -37,7 +37,7 @@ devflow init
 1. **声明验证命令**（由人维护）：编辑 `.devflow/project.yaml` 的 `verify`，例如 `mvn -q test`、`npm test`。只有这里声明的命令会被 `devflow verify` 运行，验证结果决定变更能否归档。
 2. **自检**：`devflow doctor`。
 3. **提方案**：在 Agent 里说"用 devflow-propose 提一个变更：……"。Agent 写好方案后运行 `devflow render <id>`，给你一个离线审查页。
-4. **审批**：你在**自己的终端**运行 `devflow approve <id>`，核对哈希与审查页一致后输入 `y`。
+4. **审批**：复制审查页上的 `devflow approve <id> --hash <前缀>`，在**自己的终端**运行。不带 `--hash` 时，核对哈希与审查页一致后输入 `y`。
 5. **实现与验证**：在 Agent 里说"用 devflow-apply 实现变更 <id>"。它会开工、逐个完成任务，并运行 `devflow verify <id>` 直到通过。
 6. **提交代码**：由你决定何时提交。
 7. **归档准备**：在 Agent 里说"用 devflow-archive 为变更 <id> 做归档准备"。它会更新知识页。
@@ -64,7 +64,7 @@ devflow init
 | `devflow validate <id>` | 校验变更文件、对当前规范做合并试算，并检查审查页写法与图语法 |
 | `devflow render <id> [-o 文件]` | 生成离线审查页 |
 | `devflow status [id] [--all]` | 显示派生状态与任务进度；`--all` 同时列出已归档的变更 |
-| `devflow approve <id>` | 批准并绑定内容哈希（只能由人在交互终端运行） |
+| `devflow approve <id> [--hash 前缀]` | 批准并绑定内容哈希（只能由人在交互终端运行）；`--hash` 与审查页一致时直接批准 |
 | `devflow apply <id> --start` | 记录开工 |
 | `devflow task done <id> <任务>` | 记录任务完成 |
 | `devflow verify <id>` | 运行 `project.yaml` 中的验证命令 |

@@ -32,7 +32,8 @@ const HELP = `devflow ${VERSION}
   validate <id>        校验变更文件是否齐全、格式正确
   status [id] [--all]  显示变更的派生状态；--all 同时列出已归档的变更
   render <id> [-o f]   从被审文件生成离线审查页（默认 .devflow/runtime/rendered/<id>.html）
-  approve <id>         批准变更并绑定内容哈希（只能由人在交互终端中运行）
+  approve <id> [--hash h]  批准变更并绑定内容哈希（只能由人在交互终端中运行）；
+                       --hash 为审查页上的哈希前缀，一致时直接批准
   apply <id> --start   记录开工（状态须为 approved）
   task done <id> <T>   记录任务完成
   verify <id>          运行 project.yaml 声明的验证命令并记录结果
@@ -43,7 +44,7 @@ const HELP = `devflow ${VERSION}
 const { values: opts, positionals } = parseArgs({
   allowPositionals: true,
   options: {
-    json: { type: 'boolean' }, staged: { type: 'boolean' }, agents: { type: 'string' }, out: { type: 'string', short: 'o' },
+    json: { type: 'boolean' }, staged: { type: 'boolean' }, agents: { type: 'string' }, hash: { type: 'string' }, out: { type: 'string', short: 'o' },
     start: { type: 'boolean' }, all: { type: 'boolean' }, version: { type: 'boolean', short: 'v' },
     help: { type: 'boolean', short: 'h' },
   },
@@ -181,7 +182,13 @@ async function main(): Promise<number> {
       console.log(`内容哈希：${ev.hash}`);
       console.log('被审文件：');
       for (const f of reviewedFiles(root, id)) console.log(`  ${f}`);
-      if (!(await confirm('确认批准？输入 y 确认：', ''))) {
+      if (opts.hash !== undefined) {
+        // 复制审查页上的命令就是确认：前缀一致即批准，不再问 y
+        if (!/^[0-9a-f]{12,64}$/.test(opts.hash)) throw new DevflowError('--hash 至少需要 12 位十六进制', '从审查页复制完整的 devflow approve 命令');
+        if (!ev.hash.startsWith(`sha256:${opts.hash}`)) {
+          throw new DevflowError('审查后被审文件已变化，未批准', `重新运行 devflow render ${id} 并重新审查`);
+        }
+      } else if (!(await confirm('确认批准？输入 y 确认：', ''))) {
         const st = deriveStatus(root, id);
         console.log(`✗ 未批准：${id} 状态仍为 ${st.status}（${st.reason}）。要批准，请重新运行并输入 y`);
         return 1;

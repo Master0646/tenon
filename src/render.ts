@@ -86,7 +86,11 @@ export function buildDraft(root: string, id: string): { draft: string; hash: str
     if (delta.purpose) specParts.push(`目的：${escapeInline(delta.purpose)}`);
     const group = (kind: string, title: string, reqs: typeof delta.added) => {
       if (!reqs.length) return;
-      const body = reqs.map((r) => toPanelBody(r.text, rel, problems)).join('\n\n');
+      // toPanelBody 总是调用：它负责拦截不安全写法；能识别场景结构时用表格版式
+      const body = reqs.map((r) => {
+        const raw = toPanelBody(r.text, rel, problems);
+        return formatRequirement(r.text) ?? raw;
+      }).join('\n\n');
       // 四个反引号：需求正文里可能有三反引号的代码块
       specParts.push(`\`\`\`\`callout ${kind} ${title}（${reqs.length}）\n${body}\n\`\`\`\``);
     };
@@ -98,15 +102,19 @@ export function buildDraft(root: string, id: string): { draft: string; hash: str
 
   panels.push(`## C 设计\n${toPanelBody(read(`${base}/design.md`), `${base}/design.md`, problems) || '（无设计文档）'}`);
 
-  // 任务：表格 + 由 depends_on 生成的依赖图
+  // 任务：每个任务一段（验收条件逐条列出）+ 由 depends_on 生成的依赖图
   const tasks = loadTasks(root, id);
   // flow 语法字符（箭头、括号、冒号等）从节点名中去掉
   const label = (t: { id: string; title: string }) => `[${t.id} ${t.title.replace(/-+>|[[\]{}():&*|]/g, ' ').replace(/\s+/g, ' ').trim()}]`;
   const byId = new Map(tasks.map((t) => [t.id, t]));
   const edges = tasks.flatMap((t) =>
     t.depends_on?.length ? t.depends_on.filter((d) => byId.has(d)).map((d) => `${label(byId.get(d)!)} -> ${label(t)}`) : [`(开始) -> ${label(t)}`]);
-  const rows = tasks.map((t) => `| ${t.id} | ${cell(t.title)} | ${t.depends_on?.join(', ') || '—'} | ${cell((t.acceptance ?? []).join('；')) || '—'} |`);
-  panels.push(`## D 任务与依赖\n${tasks.length ? `| ID | 任务 | 依赖 | 验收条件 |\n| --- | --- | --- | --- |\n${rows.join('\n')}\n\n\`\`\`flow LR\n${edges.join('\n')}\n\`\`\`` : '（无任务）'}`);
+  const cards = tasks.map((t) => {
+    const head = `**${t.id} ${escapeInline(t.title.replace(/\n/g, ' '))}**${t.depends_on?.length ? `　依赖：${t.depends_on.join(', ')}` : ''}`;
+    const acc = t.acceptance?.length ? t.acceptance.map((a) => `- ${escapeInline(a.replace(/\n/g, ' '))}`).join('\n') : '（未写验收条件）';
+    return `${head}\n\n${acc}`;
+  });
+  panels.push(`## D 任务与依赖\n${tasks.length ? `${cards.join('\n\n')}\n\n\`\`\`flow LR\n${edges.join('\n')}\n\`\`\`` : '（无任务）'}`);
 
   // 被审文件与哈希：人批准的就是这些文件的这份内容；project.yaml 只显示哈希看不出内容，单列验证命令
   const files = reviewedFiles(root, id);
@@ -118,7 +126,7 @@ export function buildDraft(root: string, id: string): { draft: string; hash: str
   const verifyTable = verify.length
     ? `验证命令（\`${DF}/project.yaml\`，devflow verify 只运行这些）：\n\n| name | run | cwd |\n| --- | --- | --- |\n${verify.map((v) => `| ${cell(String(v.name ?? ''))} | \`${String(v.run ?? '').replace(/[`|\n]/g, ' ')}\` | ${cell(String(v.cwd ?? '.'))} |`).join('\n')}`
     : `未声明验证命令（\`${DF}/project.yaml\` 的 verify 为空）：devflow verify 的结果只会是 unknown，变更无法归档。`;
-  panels.push(`## E 被审文件与内容哈希\n${verifyTable}\n\n批准时绑定的哈希：\`${hash}\`\n\n| 文件 | 内容 sha256 |\n| --- | --- |\n${files.map((f) => `| \`${f}\` | \`${sha256(readFileSync(join(root, f))).slice(7, 19)}…\` |`).join('\n')}\n\n确认无误后，在你自己的终端运行 \`devflow approve ${id}\`，核对它显示的哈希与本页一致。`);
+  panels.push(`## E 被审文件与内容哈希\n${verifyTable}\n\n批准时绑定的哈希：\`${hash}\`\n\n| 文件 | 内容 sha256 |\n| --- | --- |\n${files.map((f) => `| \`${f}\` | \`${sha256(readFileSync(join(root, f))).slice(7, 19)}…\` |`).join('\n')}\n\n确认无误后，复制下面的命令到你自己的终端运行。哈希与本页不一致时，命令会拒绝批准：\n\n\`\`\`bash\ndevflow approve ${id} --hash ${hash.slice(7, 19)}\n\`\`\``);
 
   const title = (meta?.title || id).replace(/\n/g, ' ');
   const draft = `---
@@ -136,6 +144,43 @@ file: ${id}
 ${panels.join('\n\n')}
 `;
   return { draft, hash, problems };
+}
+
+/**
+ * 需求原文 → 需求名、约束与场景表。场景下出现 WHEN / THEN / AND 以外的内容、或约束中有代码块时返回 null（按原文展示）。
+ */
+export function formatRequirement(text: string): string | null {
+  const lines = text.split('\n');
+  const name = /^###\s+Requirement:\s*(.*)$/.exec(lines[0] ?? '')?.[1];
+  if (name === undefined) return null;
+  const intro: string[] = [];
+  const rows: { name: string; when: string[]; then: string[] }[] = [];
+  let last: string[] | null = null;
+  for (const line of lines.slice(1)) {
+    const sc = /^####\s+Scenario:\s*(.*)$/.exec(line);
+    if (sc) {
+      rows.push({ name: sc[1], when: [], then: [] });
+      last = null;
+      continue;
+    }
+    const cur = rows.at(-1);
+    if (!cur) {
+      if (/^\s*(```|~~~)/.test(line) || /^#{1,6}\s/.test(line)) return null;
+      intro.push(line);
+      continue;
+    }
+    if (!line.trim()) continue;
+    const m = /^\s*-\s+(WHEN|THEN|AND)\s+(.*)$/.exec(line);
+    if (!m) return null;
+    if (m[1] !== 'AND') last = m[1] === 'WHEN' ? cur.when : cur.then;
+    if (!last) return null; // AND 之前没有 WHEN / THEN
+    last.push(m[2]);
+  }
+  const body = intro.map(escapeInline).join('\n').trim();
+  const table = rows.length
+    ? `\n\n| 场景 | WHEN | THEN |\n| --- | --- | --- |\n${rows.map((r) => `| ${cell(r.name)} | ${cell(r.when.join('；')) || '—'} | ${cell(r.then.join('；')) || '—'} |`).join('\n')}`
+    : '';
+  return `**${escapeInline(name)}**${body ? `\n\n${body}` : ''}${table}`;
 }
 
 export interface RenderResult { file: string; hash: string }
@@ -157,6 +202,40 @@ function runAm(draft: string, out: string): string | null {
 }
 
 interface Block { file: string; line: number; lines: string[] }
+
+const MAX_SENTENCES = 3;
+
+/** 超过 3 句的段落（连续的普通文本行；标题、列表、表格、引用、缩进行、代码块不算） → warn */
+export function longParagraphs(text: string, file: string): Issue[] {
+  const issues: Issue[] = [];
+  let fence: string | null = null;
+  let start = 0;
+  let buf: string[] = [];
+  const flush = () => {
+    const n = buf.join('').match(/[。！？]|[.!?](?=\s|$)/g)?.length ?? 0;
+    if (n > MAX_SENTENCES) {
+      issues.push({ level: 'warn', file: `${file}:${start}`, message: `段落有 ${n} 句，审查页建议每段不超过 ${MAX_SENTENCES} 句`, hint: '拆成列表，每条一句；能画图的用图表达' });
+    }
+    buf = [];
+  };
+  text.split('\n').forEach((line, i) => {
+    const open = /^\s*(```+|~~~+)\s*(.*)$/.exec(line);
+    if (fence) {
+      if (open && open[1].startsWith(fence) && !open[2]) fence = null;
+      return;
+    }
+    if (open) {
+      flush();
+      fence = open[1];
+      return;
+    }
+    if (!line.trim() || /^(#{1,6}\s|\s*([-*+]|\d+\.)\s|\s*\||\s*>|\s{2,}\S)/.test(line)) return flush();
+    if (!buf.length) start = i + 1;
+    buf.push(line);
+  });
+  flush();
+  return issues;
+}
 
 /** 抽出已闭合的图块（flow / sequence / tree / er），line 为开始围栏所在行（从 1 起） */
 function diagramBlocks(text: string, file: string): Block[] {
@@ -193,6 +272,7 @@ export function reviewIssues(root: string, id: string): Issue[] {
     blocks.push(...diagramBlocks(text, f));
   }
   const issues: Issue[] = problems.map((p) => ({ level: 'error', file: `${p.file}:${p.line}`, message: p.message }));
+  for (const f of files.filter((f) => !f.includes('/specs/'))) issues.push(...longParagraphs(readFileSync(join(root, f), 'utf8'), f));
   if (!blocks.length) return issues;
 
   // 每个图块一个面板；记下每块在草稿中的起始行，用于把 am 的行号映射回源文件

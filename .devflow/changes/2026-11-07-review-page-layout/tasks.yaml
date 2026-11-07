@@ -1,0 +1,32 @@
+schema_version: 1
+tasks:
+  - id: T1
+    title: 规范增量按需求名、约束、场景表展示
+    acceptance:
+      - 测试：两个场景的需求生成两行场景表
+      - 测试：AND 行并入 THEN 单元格
+      - 测试：场景下有其他内容时按原文展示
+      - 测试：render 成功生成页面
+  - id: T2
+    title: 任务逐个展示验收条件
+    acceptance:
+      - 测试：三条验收条件生成三条列表项，依赖图仍在
+  - id: T3
+    title: 带哈希的批准命令
+    acceptance:
+      - 测试：审查页草稿含 devflow approve <id> --hash <12 位前缀>
+      - 测试（伪终端）：前缀一致时无 y 提示直接批准
+      - 测试（伪终端）：前缀不一致或太短时拒绝，事件日志不变
+      - 测试：非交互终端带 --hash 仍被拒绝
+  - id: T4
+    title: validate 长段落提醒
+    acceptance:
+      - 测试：5 句段落 warn 定位到首行，退出码 0
+      - 测试：列表、表格、代码块中的长内容不 warn
+  - id: T5
+    title: 文档同步
+    depends_on: [T1, T2, T3, T4]
+    acceptance:
+      - 使用手册与 README 描述 approve --hash、审查页新版式、长段落 warn
+      - 体验反馈 #26 #27 状态更新
+      - npm test 与 typecheck 通过

@@ -1,0 +1,9 @@
+schema_version: 1
+title: 审查页去文字墙，并给出可直接复制的带哈希批准命令
+affected_paths:
+  - src/render.ts
+  - src/cli.ts
+  - test/**
+  - docs/使用手册.md
+  - docs/体验反馈.md
+  - README.md
