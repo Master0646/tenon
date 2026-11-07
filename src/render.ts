@@ -303,7 +303,7 @@ export function reviewIssues(root: string, id: string): Issue[] {
       current = { level: 'error', file: where, message: `图语法错误：${m[2]}`, hint: '' };
       found.push(current);
     } else if (line.startsWith('✗')) current = null;
-    else if (current && line.startsWith('  ')) current.hint += `${current.hint ? '\n' : ''}${line.slice(2)}`;
+    else if (current && line.startsWith('  ') && !line.startsWith('  draft:')) current.hint += `${current.hint ? '\n' : ''}${line.slice(2)}`;
   }
   for (const f of found) if (!f.hint) delete f.hint;
   return [...issues, ...(found.length ? found : [{ level: 'error' as const, file: base, message: '图块无法渲染', hint: output }])];

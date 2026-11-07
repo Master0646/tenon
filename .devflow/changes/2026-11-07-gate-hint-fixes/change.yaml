@@ -1,0 +1,10 @@
+schema_version: 1
+title: 修正三处提示：重叠路径误报未开工、图语法报错带临时路径、哈希不一致的原因
+affected_paths:
+  - src/check.ts
+  - src/render.ts
+  - src/cli.ts
+  - test/staged-gate.test.ts
+  - test/review-layout.test.ts
+  - test/cli-feedback.test.ts
+  - docs/体验反馈.md

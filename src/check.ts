@@ -110,7 +110,8 @@ function checkStagedCode(root: string): Issue[] {
   const level = enforceLevel(root) === 'strict' ? 'error' : 'warn';
   const issues: Issue[] = [];
   const globs: string[] = [];
-  let started = false;
+  const startedGlobs: string[] = [];
+  const pending: { id: string; paths: string[]; status: string; reason: string }[] = [];
   for (const id of listChanges(root)) {
     const meta = loadChangeMeta(root, id);
     if (!meta?.affected_paths.length || !existsSync(changeDir(root, id))) continue;
@@ -121,9 +122,9 @@ function checkStagedCode(root: string): Issue[] {
     } catch {
       continue; // 事件日志损坏，已在上面报告
     }
-    const staged = stagedFiles(root, meta.affected_paths);
     if (STARTED.has(st.status)) {
-      started = true;
+      startedGlobs.push(...meta.affected_paths);
+      const staged = stagedFiles(root, meta.affected_paths);
       const rel = `${changeRel(id)}/events.jsonl`;
       if (staged.length && (indexContent(root, rel) ?? '') !== worktreeText(root, rel)) {
         issues.push({
@@ -134,14 +135,20 @@ function checkStagedCode(root: string): Issue[] {
       }
       continue;
     }
+    pending.push({ id, paths: meta.affected_paths, status: st.status, reason: st.reason });
+  }
+  // 已被某个已开工变更覆盖的文件，不再以其他未开工变更的名义报"未开工"
+  const byStarted = new Set(startedGlobs.length ? stagedFiles(root, startedGlobs) : []);
+  for (const { id, paths, status, reason } of pending) {
+    const staged = stagedFiles(root, paths).filter((f) => !byStarted.has(f));
     if (!staged.length) continue;
     issues.push({
       level, file: staged.slice(0, 5).join(', ') + (staged.length > 5 ? ' …' : ''),
-      message: `这些文件属于变更 ${id} 的影响路径，但该变更状态为 ${st.status}（${st.reason}）`,
+      message: `这些文件属于变更 ${id} 的影响路径，但该变更状态为 ${status}（${reason}）`,
       hint: `先批准（devflow approve ${id}）并开工，再提交这些文件`,
     });
   }
-  if (started) {
+  if (startedGlobs.length) {
     const covered = new Set(stagedFiles(root, globs, 'd'));
     const outside = stagedFiles(root, undefined, 'd').filter((f) => !covered.has(f) && !f.startsWith(`${DF}/`));
     if (outside.length) {

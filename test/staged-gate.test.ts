@@ -92,3 +92,19 @@ test('超出影响路径：已开工时列出；.devflow/ 下不算；没有已�
   g(plain, 'add', '-A');
   assert.doesNotMatch(msgs(plain, 'warn'), /affected_paths 内/);
 });
+
+test('affected_paths 重叠：已被已开工变更覆盖的文件不报另一个变更未开工；只属于未开工变更的仍报', () => {
+  const dir = started(); // ID 已开工，affected_paths: backend/**
+  write(dir, '.devflow/changes/other/change.yaml', 'schema_version: 1\ntitle: 另一个\naffected_paths:\n  - backend/**\n  - frontend/**\n');
+  write(dir, '.devflow/changes/other/proposal.md', '# 提案\n\n另一个变更。\n');
+  write(dir, '.devflow/changes/other/tasks.yaml', 'schema_version: 1\ntasks:\n  - id: T1\n    title: x\n');
+  commit(dir, 'other', true);
+  write(dir, 'backend/src/A.java', 'class A {}\n');
+  g(dir, 'add', 'backend/src/A.java');
+  assert.doesNotMatch(msgs(dir, 'warn'), /变更 other/);
+  write(dir, 'frontend/B.vue', '<template/>\n');
+  g(dir, 'add', 'frontend/B.vue');
+  const w = msgs(dir, 'warn');
+  assert.match(w, /frontend\/B\.vue .*变更 other 的影响路径/);
+  assert.doesNotMatch(w, /A\.java.*变更 other/);
+});

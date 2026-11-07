@@ -1,0 +1,18 @@
+schema_version: 1
+tasks:
+  - id: T1
+    title: 门禁不对已被已开工变更覆盖的文件报"未开工"
+    acceptance:
+      - A 已开工、B 未开工且路径重叠，只暂存重叠文件时 check --staged 不报 B 未开工
+      - 暂存只属于 B 的文件时仍报 B 未开工
+  - id: T2
+    title: 图语法报错提示去掉 draft 行
+    acceptance:
+      - er 图写错时 validate 的 hint 不含 "draft:"
+  - id: T3
+    title: approve --hash 不一致时说明两种原因
+    acceptance:
+      - 错误哈希被拒绝，输出含"不一致"与"复制"，事件日志不变
+  - id: T4
+    title: 体验反馈 #33 #35 #36 标为已修
+    depends_on: [T1, T2, T3]

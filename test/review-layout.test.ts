@@ -64,9 +64,12 @@ test('approve --hash：一致时不问 y 直接批准；不一致、太短时拒
 
   assert.match(cli(dir, 'approve', ID, '--hash', prefix).stderr, /交互终端/);
   assert.match(tty(dir, null, 'approve', ID, '--hash', 'abc').stdout, /至少需要 12 位/);
+  const typo = tty(dir, null, 'approve', ID, '--hash', '0'.repeat(12)).stdout;
+  assert.match(typo, /不一致[\s\S]*被修改[\s\S]*复制/);
+  assert.equal(ev(), '');
   append(dir, `.devflow/changes/${ID}/proposal.md`, '审查后又改了。\n');
   const stale = tty(dir, null, 'approve', ID, '--hash', prefix);
-  assert.match(stale.stdout, /审查后被审文件已变化/);
+  assert.match(stale.stdout, /不一致[\s\S]*devflow render/);
   assert.equal(ev(), '');
 
   const fresh = buildDraft(dir, ID).hash.slice(7, 19);

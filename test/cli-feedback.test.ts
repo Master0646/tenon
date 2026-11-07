@@ -103,6 +103,7 @@ test('validate：报出图语法错误与带属性的代码块，定位到源文
   assert.ok(er, JSON.stringify(issues));
   assert.match(er.message, /图语法错误.*Mermaid/);
   assert.match(er.hint!, /1--\*/);
+  assert.doesNotMatch(er.hint!, /draft:/); // 临时文件已删除，不该出现在提示里
   assert.ok(issues.some((i) => i.file === `${base}/proposal.md:3` && /不能带属性/.test(i.message)));
 
   write(dir, `${base}/design.md`, '# 设计\n\n```flow LR\nA -> B: 调用\n```\n\n```er LR\nUser\n  id PK\nOrder\n  user_id FK -> User\n```\n');

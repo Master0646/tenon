@@ -186,7 +186,7 @@ async function main(): Promise<number> {
         // 复制审查页上的命令就是确认：前缀一致即批准，不再问 y
         if (!/^[0-9a-f]{12,64}$/.test(opts.hash)) throw new DevflowError('--hash 至少需要 12 位十六进制', '从审查页复制完整的 devflow approve 命令');
         if (!ev.hash.startsWith(`sha256:${opts.hash}`)) {
-          throw new DevflowError('审查后被审文件已变化，未批准', `重新运行 devflow render ${id} 并重新审查`);
+          throw new DevflowError('--hash 与当前内容哈希不一致，未批准', `可能是审查后被审文件又被修改，或命令没有复制完整；重新运行 devflow render ${id}，从新页面复制命令`);
         }
       } else if (!(await confirm('确认批准？输入 y 确认：', ''))) {
         const st = deriveStatus(root, id);
