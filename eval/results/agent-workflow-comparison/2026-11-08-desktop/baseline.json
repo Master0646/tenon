@@ -1,0 +1,147 @@
+{
+  "schema_version": 1,
+  "tool_version": "7b037490f1ca0e158cce405c386f27d3e7b43234",
+  "protocol_hash": "sha256:799841e222cc44cab7ffdb442deb06627e8297a668b1c5479ff03ee293b7bf1f",
+  "fixture_hash": "sha256:35ad5d1115d5471c1d795476c918c6527c42503c8d5bc6119e066f83c2b8fad1",
+  "at": "2026-11-08T04:33:42.772Z",
+  "samples": [
+    {
+      "case_id": "new-session-resume",
+      "critical": true,
+      "outcome": "pass",
+      "completed": true,
+      "duration_ms": 36000,
+      "manual_interventions": null,
+      "detail": "指出 T2 未完成验收与下一步命令"
+    },
+    {
+      "case_id": "wrong-config",
+      "critical": true,
+      "outcome": "pass",
+      "completed": true,
+      "duration_ms": 60280,
+      "manual_interventions": null,
+      "detail": "指出端口应为 8081 并引用 application.yml"
+    },
+    {
+      "case_id": "omitted-permission",
+      "critical": true,
+      "outcome": "pass",
+      "completed": true,
+      "duration_ms": 69060,
+      "manual_interventions": null,
+      "detail": "普通用户被拒且数据不变，管理员仍可禁用"
+    },
+    {
+      "case_id": "new-session-resume",
+      "critical": true,
+      "outcome": "pass",
+      "completed": true,
+      "duration_ms": 39433,
+      "manual_interventions": null,
+      "detail": "指出 T2 未完成验收与下一步命令"
+    },
+    {
+      "case_id": "omitted-permission",
+      "critical": true,
+      "outcome": "pass",
+      "completed": true,
+      "duration_ms": 53896,
+      "manual_interventions": null,
+      "detail": "普通用户被拒且数据不变，管理员仍可禁用"
+    },
+    {
+      "case_id": "wrong-config",
+      "critical": true,
+      "outcome": "pass",
+      "completed": true,
+      "duration_ms": 54343,
+      "manual_interventions": null,
+      "detail": "指出端口应为 8081 并引用 application.yml"
+    },
+    {
+      "case_id": "new-session-resume",
+      "critical": true,
+      "outcome": "unknown",
+      "completed": false,
+      "duration_ms": 37278,
+      "manual_interventions": null,
+      "detail": "Agent 被截断：error_no_answer"
+    },
+    {
+      "case_id": "wrong-config",
+      "critical": true,
+      "outcome": "pass",
+      "completed": true,
+      "duration_ms": 51618,
+      "manual_interventions": null,
+      "detail": "指出端口应为 8081 并引用 application.yml"
+    },
+    {
+      "case_id": "omitted-permission",
+      "critical": true,
+      "outcome": "pass",
+      "completed": true,
+      "duration_ms": 52557,
+      "manual_interventions": null,
+      "detail": "普通用户被拒且数据不变，管理员仍可禁用"
+    },
+    {
+      "case_id": "new-session-resume",
+      "critical": true,
+      "outcome": "unknown",
+      "completed": false,
+      "duration_ms": 30105,
+      "manual_interventions": null,
+      "detail": "Agent 被截断：error_no_answer"
+    },
+    {
+      "case_id": "wrong-config",
+      "critical": true,
+      "outcome": "pass",
+      "completed": true,
+      "duration_ms": 48069,
+      "manual_interventions": null,
+      "detail": "指出端口应为 8081 并引用 application.yml"
+    },
+    {
+      "case_id": "omitted-permission",
+      "critical": true,
+      "outcome": "pass",
+      "completed": true,
+      "duration_ms": 55851,
+      "manual_interventions": null,
+      "detail": "普通用户被拒且数据不变，管理员仍可禁用"
+    },
+    {
+      "case_id": "new-session-resume",
+      "critical": true,
+      "outcome": "unknown",
+      "completed": false,
+      "duration_ms": 31489,
+      "manual_interventions": null,
+      "detail": "Agent 被截断：error_no_answer"
+    },
+    {
+      "case_id": "wrong-config",
+      "critical": true,
+      "outcome": "pass",
+      "completed": true,
+      "duration_ms": 49271,
+      "manual_interventions": null,
+      "detail": "指出端口应为 8081 并引用 application.yml"
+    },
+    {
+      "case_id": "omitted-permission",
+      "critical": true,
+      "outcome": "pass",
+      "completed": true,
+      "duration_ms": 57126,
+      "manual_interventions": null,
+      "detail": "普通用户被拒且数据不变，管理员仍可禁用"
+    }
+  ],
+  "tokens": null,
+  "cost": 0,
+  "cost_source": "claude -p total_cost_usd"
+}

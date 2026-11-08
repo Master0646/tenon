@@ -1,0 +1,88 @@
+{
+  "demo_root": "/tmp/devflow-loop-demo",
+  "feedback": [
+    {
+      "sample_id": "17-new-session-resume-baseline-r3",
+      "raw_sha256": "sha256:58081c12393f4049d3ca62815f0fe2427213ece05e1576495e63215a0eea6354"
+    },
+    {
+      "sample_id": "14-wrong-config-candidate-r3",
+      "raw_sha256": "sha256:e589cda2053ea88da55da129137e9744c9dce8616eb2bbf15caa9a223b82d86a"
+    },
+    {
+      "sample_id": "24-new-session-resume-baseline-r4",
+      "raw_sha256": "sha256:94f89b7dbb0a9ffefe1d14923fd1cd6577df639d61778eaf1b10022bd098786f"
+    },
+    {
+      "sample_id": "23-new-session-resume-candidate-r4",
+      "raw_sha256": "sha256:ac35066ad7724cf2a03c03a0f17330bb148bfa1e256115351aecadf49a175c35"
+    },
+    {
+      "sample_id": "29-new-session-resume-baseline-r5",
+      "raw_sha256": "sha256:62110ebced781c16771b2f913f3f1008e6f82926889a18a55a3bf952d2ec92be"
+    },
+    {
+      "sample_id": "26-wrong-config-candidate-r5",
+      "raw_sha256": "sha256:901c2ca36e37ae7e586e5fe0f9e0e7d76e41d40fecb6f2de068559de83e21735"
+    }
+  ],
+  "report_path": "/private/tmp/devflow-loop-demo/.devflow/runtime/reports/2026-11-08-6cf3b72a-c5e4-4449-b2a8-6f4d159dd268.json",
+  "candidate_id": "8ca4be0f2aede730a8562aff",
+  "report_hash": "e97410b519063279a1ab5bba3d2596575e18243fbc57d7b45bafeb237a27bb26",
+  "proposal": "2026-11-08-readonly-answer-rule",
+  "validate": "✓ 2026-11-08-readonly-answer-rule 校验通过",
+  "approval": {
+    "by": "devflow-demo",
+    "at": "2026-11-08T04:36:55.563Z",
+    "hash": "sha256:080a310b7e0be879568caa91150e8b5d7e7a0bf1e9e500e0e42a641b782fd7e1"
+  },
+  "regression_case": "runner/check.mjs",
+  "regression_before_fix": "fail",
+  "verify": "pass",
+  "fix_commit": "d60a1858c31c9b34e7164558d2dfb2df9ad9dc33",
+  "final_status": "ready_to_archive",
+  "fixed_rule": "只能读文件、运行只读命令，不要修改项目内的任何文件；最后写入 answer.md 不算修改项目，必须写。",
+  "comparison": {
+    "dir": "/Users/znn/@code-repo/tmkj/devflow/eval/results/agent-workflow-comparison/2026-11-08-loop-recheck",
+    "result": "inconclusive",
+    "reasons": [
+      "存在 unknown 样本，不能宣称改进或回退"
+    ],
+    "by_task": [
+      {
+        "task": "new-session-resume",
+        "variant": "baseline",
+        "n": 5,
+        "pass": 3,
+        "fail": 0,
+        "unknown": 2,
+        "misses": 0,
+        "false_blocks": 0,
+        "median_turns": 5,
+        "median_seconds": 39.744,
+        "median_cost": null,
+        "denials": 0
+      },
+      {
+        "task": "new-session-resume",
+        "variant": "candidate",
+        "n": 5,
+        "pass": 5,
+        "fail": 0,
+        "unknown": 0,
+        "misses": 0,
+        "false_blocks": 0,
+        "median_turns": 6,
+        "median_seconds": 41.282,
+        "median_cost": null,
+        "denials": 0
+      }
+    ]
+  },
+  "candidate_after": {
+    "status": "inconclusive",
+    "result_links": [
+      "/Users/znn/@code-repo/tmkj/devflow/eval/results/agent-workflow-comparison/2026-11-08-loop-recheck/comparison.json"
+    ]
+  }
+}

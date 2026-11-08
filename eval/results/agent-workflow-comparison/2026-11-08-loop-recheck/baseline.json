@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "tool_version": "7b037490f1ca0e158cce405c386f27d3e7b43234",
+  "protocol_hash": "sha256:799841e222cc44cab7ffdb442deb06627e8297a668b1c5479ff03ee293b7bf1f",
+  "fixture_hash": "sha256:35ad5d1115d5471c1d795476c918c6527c42503c8d5bc6119e066f83c2b8fad1",
+  "at": "2026-11-08T04:40:33.242Z",
+  "samples": [
+    {
+      "case_id": "new-session-resume",
+      "critical": true,
+      "outcome": "pass",
+      "completed": true,
+      "duration_ms": 31810,
+      "manual_interventions": null,
+      "detail": "指出 T2 未完成验收与下一步命令"
+    },
+    {
+      "case_id": "new-session-resume",
+      "critical": true,
+      "outcome": "unknown",
+      "completed": false,
+      "duration_ms": 34150,
+      "manual_interventions": null,
+      "detail": "Agent 被截断：error_no_answer"
+    },
+    {
+      "case_id": "new-session-resume",
+      "critical": true,
+      "outcome": "pass",
+      "completed": true,
+      "duration_ms": 39744,
+      "manual_interventions": null,
+      "detail": "指出 T2 未完成验收与下一步命令"
+    },
+    {
+      "case_id": "new-session-resume",
+      "critical": true,
+      "outcome": "pass",
+      "completed": true,
+      "duration_ms": 40887,
+      "manual_interventions": null,
+      "detail": "指出 T2 未完成验收与下一步命令"
+    },
+    {
+      "case_id": "new-session-resume",
+      "critical": true,
+      "outcome": "unknown",
+      "completed": false,
+      "duration_ms": 41925,
+      "manual_interventions": null,
+      "detail": "Agent 被截断：error_no_answer"
+    }
+  ],
+  "tokens": null,
+  "cost": 0,
+  "cost_source": "claude -p total_cost_usd"
+}

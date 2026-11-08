@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "tool_version": "f99edf1e11f04b7c45f18f0bc4774a7f968fc318",
+  "protocol_hash": "sha256:799841e222cc44cab7ffdb442deb06627e8297a668b1c5479ff03ee293b7bf1f",
+  "fixture_hash": "sha256:35ad5d1115d5471c1d795476c918c6527c42503c8d5bc6119e066f83c2b8fad1",
+  "at": "2026-11-08T04:40:33.242Z",
+  "samples": [
+    {
+      "case_id": "new-session-resume",
+      "critical": true,
+      "outcome": "pass",
+      "completed": true,
+      "duration_ms": 40562,
+      "manual_interventions": null,
+      "detail": "指出 T2 未完成验收与下一步命令"
+    },
+    {
+      "case_id": "new-session-resume",
+      "critical": true,
+      "outcome": "pass",
+      "completed": true,
+      "duration_ms": 41060,
+      "manual_interventions": null,
+      "detail": "指出 T2 未完成验收与下一步命令"
+    },
+    {
+      "case_id": "new-session-resume",
+      "critical": true,
+      "outcome": "pass",
+      "completed": true,
+      "duration_ms": 41282,
+      "manual_interventions": null,
+      "detail": "指出 T2 未完成验收与下一步命令"
+    },
+    {
+      "case_id": "new-session-resume",
+      "critical": true,
+      "outcome": "pass",
+      "completed": true,
+      "duration_ms": 41932,
+      "manual_interventions": null,
+      "detail": "指出 T2 未完成验收与下一步命令"
+    },
+    {
+      "case_id": "new-session-resume",
+      "critical": true,
+      "outcome": "pass",
+      "completed": true,
+      "duration_ms": 42605,
+      "manual_interventions": null,
+      "detail": "指出 T2 未完成验收与下一步命令"
+    }
+  ],
+  "tokens": null,
+  "cost": 0,
+  "cost_source": "claude -p total_cost_usd"
+}

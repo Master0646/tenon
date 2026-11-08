@@ -1,0 +1,162 @@
+{
+  "protocol": "agent-workflow-v1",
+  "model": "claude-sonnet-5-5",
+  "planned": 30,
+  "run": 30,
+  "spent_usd": null,
+  "stopped": null,
+  "comparison": {
+    "result": "inconclusive",
+    "comparable": true,
+    "reasons": [
+      "存在 unknown 样本，不能宣称改进或回退"
+    ],
+    "baseline": {
+      "samples": 15,
+      "pass": 12,
+      "fail": 0,
+      "unknown": 3,
+      "completion_rate": 0.8,
+      "critical_misses": 0,
+      "median_duration_ms": 51618,
+      "median_manual_interventions": null,
+      "case_counts": {
+        "new-session-resume": 5,
+        "omitted-permission": 5,
+        "wrong-config": 5
+      }
+    },
+    "candidate": {
+      "samples": 15,
+      "pass": 12,
+      "fail": 0,
+      "unknown": 3,
+      "completion_rate": 0.8,
+      "critical_misses": 0,
+      "median_duration_ms": 51293,
+      "median_manual_interventions": null,
+      "case_counts": {
+        "new-session-resume": 5,
+        "omitted-permission": 5,
+        "wrong-config": 5
+      }
+    },
+    "statistical_significance": "not-established"
+  },
+  "by_task": [
+    {
+      "task": "wrong-config",
+      "variant": "baseline",
+      "n": 5,
+      "pass": 5,
+      "fail": 0,
+      "unknown": 0,
+      "misses": 0,
+      "false_blocks": 0,
+      "median_turns": 7,
+      "median_seconds": 51.618,
+      "median_cost": null,
+      "denials": 0
+    },
+    {
+      "task": "wrong-config",
+      "variant": "candidate",
+      "n": 5,
+      "pass": 3,
+      "fail": 0,
+      "unknown": 2,
+      "misses": 0,
+      "false_blocks": 0,
+      "median_turns": 6,
+      "median_seconds": 51.293,
+      "median_cost": null,
+      "denials": 0
+    },
+    {
+      "task": "omitted-permission",
+      "variant": "baseline",
+      "n": 5,
+      "pass": 5,
+      "fail": 0,
+      "unknown": 0,
+      "misses": 0,
+      "false_blocks": 0,
+      "median_turns": 7,
+      "median_seconds": 55.851,
+      "median_cost": null,
+      "denials": 0
+    },
+    {
+      "task": "omitted-permission",
+      "variant": "candidate",
+      "n": 5,
+      "pass": 5,
+      "fail": 0,
+      "unknown": 0,
+      "misses": 0,
+      "false_blocks": 0,
+      "median_turns": 7,
+      "median_seconds": 55.198,
+      "median_cost": null,
+      "denials": 0
+    },
+    {
+      "task": "new-session-resume",
+      "variant": "baseline",
+      "n": 5,
+      "pass": 2,
+      "fail": 0,
+      "unknown": 3,
+      "misses": 0,
+      "false_blocks": 0,
+      "median_turns": 6,
+      "median_seconds": 36,
+      "median_cost": null,
+      "denials": 0
+    },
+    {
+      "task": "new-session-resume",
+      "variant": "candidate",
+      "n": 5,
+      "pass": 4,
+      "fail": 0,
+      "unknown": 1,
+      "misses": 0,
+      "false_blocks": 0,
+      "median_turns": 6,
+      "median_seconds": 38.563,
+      "median_cost": null,
+      "denials": 0
+    }
+  ],
+  "baseline": {
+    "samples": 15,
+    "pass": 12,
+    "fail": 0,
+    "unknown": 3,
+    "completion_rate": 0.8,
+    "critical_misses": 0,
+    "median_duration_ms": 51618,
+    "median_manual_interventions": null,
+    "case_counts": {
+      "new-session-resume": 5,
+      "omitted-permission": 5,
+      "wrong-config": 5
+    }
+  },
+  "candidate": {
+    "samples": 15,
+    "pass": 12,
+    "fail": 0,
+    "unknown": 3,
+    "completion_rate": 0.8,
+    "critical_misses": 0,
+    "median_duration_ms": 51293,
+    "median_manual_interventions": null,
+    "case_counts": {
+      "new-session-resume": 5,
+      "omitted-permission": 5,
+      "wrong-config": 5
+    }
+  }
+}

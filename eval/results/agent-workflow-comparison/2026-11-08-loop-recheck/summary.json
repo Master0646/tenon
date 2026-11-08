@@ -1,0 +1,98 @@
+{
+  "protocol": "agent-workflow-v1",
+  "model": "claude-sonnet-5-5",
+  "planned": 10,
+  "run": 10,
+  "spent_usd": null,
+  "stopped": null,
+  "comparison": {
+    "result": "inconclusive",
+    "comparable": true,
+    "reasons": [
+      "存在 unknown 样本，不能宣称改进或回退"
+    ],
+    "baseline": {
+      "samples": 5,
+      "pass": 3,
+      "fail": 0,
+      "unknown": 2,
+      "completion_rate": 0.6,
+      "critical_misses": 0,
+      "median_duration_ms": 39744,
+      "median_manual_interventions": null,
+      "case_counts": {
+        "new-session-resume": 5
+      }
+    },
+    "candidate": {
+      "samples": 5,
+      "pass": 5,
+      "fail": 0,
+      "unknown": 0,
+      "completion_rate": 1,
+      "critical_misses": 0,
+      "median_duration_ms": 41282,
+      "median_manual_interventions": null,
+      "case_counts": {
+        "new-session-resume": 5
+      }
+    },
+    "statistical_significance": "not-established"
+  },
+  "by_task": [
+    {
+      "task": "new-session-resume",
+      "variant": "baseline",
+      "n": 5,
+      "pass": 3,
+      "fail": 0,
+      "unknown": 2,
+      "misses": 0,
+      "false_blocks": 0,
+      "median_turns": 5,
+      "median_seconds": 39.744,
+      "median_cost": null,
+      "denials": 0
+    },
+    {
+      "task": "new-session-resume",
+      "variant": "candidate",
+      "n": 5,
+      "pass": 5,
+      "fail": 0,
+      "unknown": 0,
+      "misses": 0,
+      "false_blocks": 0,
+      "median_turns": 6,
+      "median_seconds": 41.282,
+      "median_cost": null,
+      "denials": 0
+    }
+  ],
+  "baseline": {
+    "samples": 5,
+    "pass": 3,
+    "fail": 0,
+    "unknown": 2,
+    "completion_rate": 0.6,
+    "critical_misses": 0,
+    "median_duration_ms": 39744,
+    "median_manual_interventions": null,
+    "case_counts": {
+      "new-session-resume": 5
+    }
+  },
+  "candidate": {
+    "samples": 5,
+    "pass": 5,
+    "fail": 0,
+    "unknown": 0,
+    "completion_rate": 1,
+    "critical_misses": 0,
+    "median_duration_ms": 41282,
+    "median_manual_interventions": null,
+    "case_counts": {
+      "new-session-resume": 5
+    }
+  }
+}

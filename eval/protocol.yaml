@@ -19,3 +19,46 @@ agent_tasks:
   - id: new-session-resume
     oracle: Identify unfinished acceptance and correct next action in a new session.
 missing_environment: unknown
+# 真实 Agent 对照（变更 2026-11-08-agent-workflow-evaluation）冻结于 2026-11-08，看到结果后不得修改
+agent_comparison:
+  id: agent-workflow-v1
+  baseline:
+    commit: 7b037490f1ca0e158cce405c386f27d3e7b43234
+  candidate:
+    commit: f99edf1e11f04b7c45f18f0bc4774a7f968fc318
+  # git rev-parse <commit>:examples/user-admin，两版相同
+  project_tree: e33610d285bb1179336723cfb7e21651f9167f28
+  runner: claude -p (Claude Code 2.1.300)，--setting-sources project,local，--no-session-persistence
+  model: claude-sonnet-5-5
+  approved_by_user: 2026-11-08，Sonnet 5.5，总预算 30 美元
+  budget:
+    total_usd: 30
+    # 由 claude --max-budget-usd 逐次强制；剩余预算不足下一次上限时停止，不再启动
+    per_run_usd: { wrong-config: 0.6, omitted-permission: 1.5, new-session-resume: 0.6 }
+    max_turns_per_run: 100
+    max_minutes_per_run: 30
+    retries: 0
+  repetitions_per_variant: 5
+  order: alternating
+  tools:
+    read: [Read, Grep, Glob, Skill, "Bash(rg *)", "Bash(ls *)", "Bash(git status *)", "Bash(git diff *)", "Bash(git log *)", "Bash(devflow *)"]
+    write: [read, Edit, Write, "Bash(mvn *)"]
+  scorer: agent-deterministic-v1
+  oracles:
+    wrong-config: 回答同时包含正确端口 8081 与 application.yml 引用
+    omitted-permission: 隐藏 MockMvc 测试，USER 令牌直接请求禁用接口返回 401/403 且未调用 updateStatus；ADMIN 仍可禁用（否则计为误拦）
+    new-session-resume: 回答指出 T2、其未完成验收（DISABLED），且给出 devflow task done <id> T2 或 devflow verify
+  fixture_approval: 在一次性临时仓库中以 devflow-eval 身份调用各版本自身 approve() 构造夹具，发生在 Agent 会话之前；运行器从不批准 Agent 产出
+  unknown_policy: 环境故障、超时、预算截断、隐藏测试无法加载上下文计为 unknown，不补跑
+  manual_interventions: unknown（-p 模式无人值守；权限拒绝次数单独报告）
+  # 2026-11-08 修订（尚无任何结果）：本机 claude -p 无法认证（OAuth 过期），按用户指示改为桌面端子 Agent 执行
+  desktop_runner:
+    agent: Claude 桌面端 general-purpose 子 Agent，model sonnet（Sonnet 5.5），每样本全新会话
+    blind: 临时目录名不含版本；子 Agent 只被告知项目路径
+    skills: 不用 Skill 工具，按提示读取 <项目>/CLAUDE.md 与 <项目>/.claude/skills/*/SKILL.md（各版本自身生成）
+    tools: 只读任务仅凭提示约束；可写任务允许改代码、运行 mvn
+    limits: 事后核对，tool_uses > 100 或耗时 > 30 分钟计 unknown
+    cost: unknown（计入用户套餐，不可计量）；30 美元上限不适用
+    order: 每轮 3 任务 × 2 版本并行启动，共 5 轮；并行消除先后顺序影响
+    contamination: 子 Agent 继承宿主会话的全局与本仓库指令，两版本相同
+
