@@ -1,0 +1,472 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DevFlow 使用手册</title>
+<style>
+:root{--text:#1a2c44;--text-2:#50617a;--text-3:#667691;--brand:#533afd;--border:#d4dee9;--subtle:#f4f7fa;--code-bg:#1a2c44;--warn-bg:#fef9ec;--warn-border:#f5c44f;--human:#b13600;--agent:#217005;--top:56px}
+*{box-sizing:border-box}
+html{scroll-padding-top:calc(var(--top) + 16px)}
+body{margin:0;color:var(--text);font:14px/22px -apple-system,system-ui,"Segoe UI",Roboto,Helvetica,Arial,"PingFang SC","Microsoft YaHei",sans-serif;-webkit-font-smoothing:antialiased}
+a{color:var(--brand);text-decoration:none;font-weight:500}
+a:hover{text-decoration:underline}
+code{font:500 12px/20px "Source Code Pro",Menlo,Monaco,monospace;background:var(--subtle);border:1px solid var(--border);border-radius:6px;padding:1px 5px;word-break:break-word}
+header{position:fixed;inset:0 0 auto;height:var(--top);display:flex;align-items:center;gap:16px;padding:0 24px;background:#fff;border-bottom:1px solid var(--border);z-index:10}
+.logo{font-weight:700;font-size:16px;color:var(--text)}
+.logo span{color:var(--brand);font-weight:600;font-size:12px;margin-left:6px;letter-spacing:.04em}
+header .spacer{flex:1}
+.btn{font:inherit;font-size:12px;color:var(--text-2);background:#fff;border:1px solid var(--border);border-radius:6px;padding:4px 10px;cursor:pointer}
+.btn:hover{color:var(--brand);border-color:var(--brand)}
+.search{font:inherit;width:220px;padding:5px 10px;border:1px solid var(--border);border-radius:6px;background:var(--subtle);color:var(--text)}
+.layout{display:flex;padding-top:var(--top)}
+nav{position:sticky;top:var(--top);width:280px;flex:none;height:calc(100vh - var(--top));overflow:auto;padding:24px 16px 48px 24px;border-right:1px solid var(--border)}
+nav ul{list-style:none;margin:0;padding:0}
+nav li a{display:block;padding:3px 8px;border-radius:6px;color:var(--text-2);font-weight:500}
+nav li a:hover{color:var(--text);background:var(--subtle);text-decoration:none}
+nav li a.active{color:var(--brand);background:#f1efff}
+nav ul ul{margin:2px 0 6px 10px;border-left:1px solid var(--border);padding-left:6px}
+nav ul ul a{font-weight:400;font-size:13px}
+nav li.hidden{display:none}
+main{flex:1;min-width:0;padding:40px 48px 120px}
+article{max-width:760px}
+h1{font-size:32px;line-height:40px;margin:0 0 8px}
+.subtitle{font-size:16px;line-height:24px;color:var(--text-2);margin:0 0 20px}
+h2{font-size:22px;line-height:30px;margin:48px 0 12px}
+h3{font-size:17px;line-height:26px;margin:32px 0 8px;font-weight:600}
+h4{font-size:14px;margin:24px 0 8px}
+hr{border:0;border-top:1px solid var(--border);margin:48px 0}
+p{margin:0 0 14px}
+ul,ol{margin:0 0 14px;padding-left:22px}
+li{margin:4px 0}
+.badge{display:inline-block;vertical-align:middle;margin-left:8px;font-size:11px;line-height:18px;font-weight:600;padding:0 7px;border-radius:9px;border:1px solid}
+.badge.human{color:var(--human);border-color:#f3c3ab;background:#fff5f0}
+.badge.agent{color:var(--agent);border-color:#b5dfa5;background:#f2fbef}
+.badge.optional-tag{margin:0 8px 0 0;color:var(--text-3);border-color:var(--border);background:var(--subtle)}
+.code{margin:0 0 16px;border-radius:8px;overflow:hidden;background:var(--code-bg)}
+.code-bar{display:flex;justify-content:space-between;align-items:center;padding:6px 12px;background:rgba(255,255,255,.06);color:#a3b1c6;font-size:12px}
+.code-bar .copy{font:inherit;color:#a3b1c6;background:none;border:1px solid rgba(255,255,255,.15);border-radius:5px;padding:1px 8px;cursor:pointer}
+.code-bar .copy:hover{color:#fff}
+pre{margin:0;padding:12px 16px;overflow:auto}
+pre code{all:unset;font:13px/20px "Source Code Pro",Menlo,Monaco,monospace;color:#f5f7fa;white-space:pre}
+.table{overflow-x:auto;margin:0 0 16px}
+table{border-collapse:collapse;width:100%;font-size:13px;line-height:20px}
+th{text-align:left;font-weight:600;color:var(--text-2);border-bottom:1px solid var(--border);padding:8px 12px 8px 0;white-space:nowrap}
+td{border-bottom:1px solid var(--border);padding:8px 12px 8px 0;vertical-align:top}
+.callout{margin:0 0 16px;padding:12px 16px;border-radius:8px;background:var(--subtle);border:1px solid var(--border)}
+.callout p{margin:0}
+.callout.warn{background:var(--warn-bg);border-color:var(--warn-border)}
+.callout-title{font-weight:700;margin-bottom:4px}
+details.optional{border:1px solid var(--border);border-radius:8px;margin:16px 0;padding:0 20px}
+details.optional>summary{cursor:pointer;list-style:none;display:flex;align-items:center}
+details.optional>summary::-webkit-details-marker{display:none}
+details.optional>summary::after{content:"展开";margin-left:auto;font-size:12px;color:var(--text-3)}
+details.optional[open]>summary::after{content:"收起"}
+details.optional>summary h2{margin:16px 0;font-size:18px}
+details.optional>div{padding-bottom:8px}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--text);color:#fff;padding:6px 14px;border-radius:6px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none}
+.toast.show{opacity:1}
+@media (max-width:900px){nav{display:none}main{padding:24px 20px 80px}.search{display:none}}
+@media print{header,nav{display:none}.layout{padding:0}details.optional{border:0}}
+</style>
+</head>
+<body>
+<header>
+<div class="logo">DevFlow<span>DOCS</span></div>
+<div class="spacer"></div>
+<input class="search" type="search" placeholder="筛选目录　按 / 聚焦" aria-label="筛选目录">
+<button class="btn" type="button" id="copy-md">复制给 LLM</button>
+<a class="btn" href="使用手册.md">查看 Markdown</a>
+</header>
+<div class="layout">
+<nav aria-label="目录"><ul><li><a href="#选择你的-agent">选择你的 Agent</a></li><li><a href="#快速入门">快速入门</a><ul><li><a href="#1-安装-devflow">1. 安装 devflow</a></li><li><a href="#2-在项目里初始化">2. 在项目里初始化</a></li><li><a href="#3-声明验证命令人来做">3. 声明验证命令</a></li><li><a href="#4-验证你的安装">4. 验证你的安装</a></li><li><a href="#5-提交">5. 提交</a></li></ul></li><li><a href="#走一遍完整的变更">走一遍完整的变更</a><ul><li><a href="#第-1-步提方案agent">第 1 步：提方案</a></li><li><a href="#第-2-步审查人">第 2 步：审查</a></li><li><a href="#第-3-步批准人在自己的终端">第 3 步：批准</a></li><li><a href="#第-4-步实现并验证agent">第 4 步：实现并验证</a></li><li><a href="#第-5-步记录验收证据agent人工项由人确认">第 5 步：记录验收证据</a></li><li><a href="#第-6-步提交代码人">第 6 步：提交代码</a></li><li><a href="#第-7-步归档准备agent">第 7 步：归档准备</a></li><li><a href="#第-8-步归档人在自己的终端">第 8 步：归档</a></li><li><a href="#之后">之后</a></li></ul></li><li><a href="#状态与下一步">状态与下一步</a><ul><li><a href="#按场景检查验证结果">按场景检查验证结果</a></li></ul></li><li><a href="#可选生成知识页">可选：生成知识页</a></li><li><a href="#可选本地使用记录">可选：本地使用记录</a></li><li><a href="#可选改进候选与评测">可选：改进候选与评测</a></li><li><a href="#可选继续使用-v1-格式">可选：继续使用 v1 格式</a></li><li><a href="#命令参考">命令参考</a></li><li><a href="#文件格式参考">文件格式参考</a><ul><li><a href="#projectyaml人维护">project.yaml</a></li><li><a href="#changeyaml">change.yaml</a></li><li><a href="#proposalmd">proposal.md</a></li><li><a href="#规范增量-specs能力specmd">规范增量 specs/&lt;能力&gt;/spec.md</a></li><li><a href="#tasksyamlv2">tasks.yaml</a></li><li><a href="#executionmd">execution.md</a></li><li><a href="#designmd-与审查页的写法限制">design.md 与审查页的写法限制</a></li><li><a href="#证据-json">证据 JSON</a></li><li><a href="#eventsjsonl">events.jsonl</a></li><li><a href="#知识页-knowledgepagesslugmd">知识页 knowledge/pages/&lt;slug&gt;.md</a></li></ul></li><li><a href="#agent-技能参考">Agent 技能参考</a></li><li><a href="#提交门禁">提交门禁</a></li><li><a href="#安全模型">安全模型</a></li><li><a href="#常见问题与排错">常见问题与排错</a></li><li><a href="#升级-devflow">升级 devflow</a></li><li><a href="#已知限制">已知限制</a></li><li><a href="#另请参阅">另请参阅</a></li></ul></nav>
+<main><article>
+<h1>DevFlow 使用手册</h1>
+<p>让 AI 编码 Agent 先出方案、经你批准再改代码，并把需求和设计原因留在仓库里。</p>
+<div class="callout note"><p>适用版本：devflow 0.2.0　·　更新：2026-11-08　·　本手册的输出示例均来自 0.2.0 实测；<code>approve</code>、<code>archive</code>、<code>evidence confirm</code> 只能由人运行，它们的输出按源码 <code>src/cli.ts</code> 核对。</p></div>
+<p>DevFlow 嵌入你已有的 Agent（Claude Code 或 Codex）使用，自己不调用任何模型。Agent 负责读代码、写方案、写代码；<code>devflow</code> 命令只做确定性的事：校验格式、给批准绑定哈希、计算状态、运行验证命令、合并规范、在提交时把关。</p>
+<div class="callout note"><p><strong>只负责审查和批准？</strong> 你只需要读<a href="#快速入门">快速入门</a>的第 1 步，以及<a href="#第-2-步审查人">第 2 步：审查</a>、<a href="#第-3-步批准人在自己的终端">第 3 步：批准</a>和<a href="#第-8-步归档人在自己的终端">第 8 步：归档</a>。其余工作由 Agent 完成。</p></div>
+<p><strong>一句话流程</strong></p>
+<div class="code"><div class="code-bar"><span>输出</span><button class="copy" type="button">复制</button></div><pre><code>提方案(Agent) → 审查并批准(人) → 实现、验证、记证据(Agent) → 提交代码(人) → 更新知识页(Agent) → 归档(人)</code></pre></div>
+<h2 id="选择你的-agent">选择你的 Agent</h2>
+<p>两种 Agent 的用法相同，区别在于调用技能的方式和安全防线的强度。</p>
+<div class="table"><table><thead><tr><th></th><th>Claude Code</th><th>Codex</th></tr></thead><tbody><tr><td>调用技能</td><td>直接说技能名：&quot;用 devflow-propose 提一个变更&quot;</td><td>用 <code>$devflow-propose</code></td></tr><tr><td>生成的文件</td><td><code>.claude/skills/devflow-*/</code>、<code>CLAUDE.md</code>、<code>.claude/settings.json</code></td><td><code>.agents/skills/devflow-*/</code>、<code>AGENTS.md</code>、<code>.codex/rules/devflow.rules</code></td></tr><tr><td>禁止 Agent 运行 approve / archive</td><td>有效（已实测拦截）</td><td>实验性：项目被信任后才加载规则</td></tr><tr><td>交互终端防线</td><td>有效：Agent 的 shell 不是交互终端</td><td><strong>可被绕过</strong>：模型可以自行申请交互终端</td></tr></tbody></table></div>
+<p>两个都用也可以，<code>devflow init</code> 会为两者都生成文件。</p>
+<hr>
+<h2 id="快速入门">快速入门</h2>
+<p>做完这一节，你会有一个启用了 DevFlow、提交门禁生效、能跑验证命令的项目。大约 5 分钟。</p>
+<p><strong>前提</strong>：Node 22 或更高版本，git，以及一个<strong>至少已有一次提交</strong>的 Git 项目。</p>
+<h3 id="1-安装-devflow">1. 安装 devflow</h3>
+<p>在 devflow 源码目录里打包，然后全局安装：</p>
+<div class="code"><div class="code-bar"><span>终端</span><button class="copy" type="button">复制</button></div><pre><code>npm install &amp;&amp; npm pack</code></pre></div>
+<div class="code"><div class="code-bar"><span>终端</span><button class="copy" type="button">复制</button></div><pre><code>npm install -g ./devflow-0.2.0.tgz</code></pre></div>
+<div class="code"><div class="code-bar"><span>终端</span><button class="copy" type="button">复制</button></div><pre><code>devflow --version</code></pre></div>
+<p>预期输出：</p>
+<div class="code"><div class="code-bar"><span>输出</span><button class="copy" type="button">复制</button></div><pre><code>0.2.0</code></pre></div>
+<p>必须全局安装：终端里要能运行 <code>devflow</code>，pre-commit hook 也依赖这个命令。</p>
+<div class="callout note"><p>开发 devflow 本身时，可以不打包，直接运行 <code>node src/cli.ts &lt;命令&gt;</code>（需要 Node 23.6 或更高版本）。</p></div>
+<h3 id="2-在项目里初始化">2. 在项目里初始化</h3>
+<p>在你的项目根目录运行：</p>
+<div class="code"><div class="code-bar"><span>终端</span><button class="copy" type="button">复制</button></div><pre><code>devflow init</code></pre></div>
+<p>预期输出（节选）：</p>
+<div class="code"><div class="code-bar"><span>输出</span><button class="copy" type="button">复制</button></div><pre><code>+ .devflow/project.yaml
++ .devflow/specs/specs.lock
++ .devflow/knowledge/index.md
++ .gitignore（追加 .devflow/runtime/）
+✓ pre-commit hook 已安装：/path/to/project/.git/hooks/pre-commit
+✓ .claude/skills/devflow-propose/SKILL.md
+✓ CLAUDE.md
+✓ .claude/settings.json
+…</code></pre></div>
+<p><code>init</code> 只为检测到的 Agent 生成文件：项目里有 <code>.claude/</code> 或 <code>CLAUDE.md</code>，就装 Claude Code；有 <code>.codex/</code>、<code>.agents/</code> 或 <code>AGENTS.md</code>，就装 Codex。两种都没检测到时，两个都装。要指定，写 <code>--agents claude</code>、<code>--agents codex</code> 或 <code>--agents claude,codex</code>。</p>
+<p><code>init</code> 可以重复运行，不会覆盖已有文件。<code>CLAUDE.md</code> 和 <code>AGENTS.md</code> 里，只有 <code>&lt;!-- devflow:begin --&gt;</code> 和 <code>&lt;!-- devflow:end --&gt;</code> 之间的内容由 DevFlow 维护，其余内容不会被改动。</p>
+<div class="callout warn"><div class="callout-title">注意</div><p>项目里已经有别的 pre-commit hook 时，<code>init</code> 不会覆盖它，而是提示你手动加一行。</p></div>
+<h3 id="3-声明验证命令人来做">3. 声明验证命令<span class="badge human">人来做</span></h3>
+<p>编辑 <code>.devflow/project.yaml</code>，把 <code>verify: []</code> 换成你平时用来确认&quot;没改坏&quot;的命令：</p>
+<div class="code"><div class="code-bar"><span>YAML</span><button class="copy" type="button">复制</button></div><pre><code>verify:
+  - name: unit-tests     # 名称，不能重复；任务的验收条件会用这个名字引用它
+    run: npm test        # 用 sh -c 执行
+  - name: backend-test
+    run: mvn -q -B test
+    cwd: backend         # 可选，相对项目根目录</code></pre></div>
+<div class="callout warn"><div class="callout-title">注意</div><p>只有这里声明的命令会被 <code>devflow verify</code> 运行，所有命令退出码为 0 才算通过。这个文件由人维护，并计入每次批准的哈希：如果 Agent 能改它，就能删掉测试让自己通过。所以批准之后改动它，已有的批准会失效。</p></div>
+<p>常见技术栈：</p>
+<div class="table"><table><thead><tr><th>技术栈</th><th><code>run</code></th></tr></thead><tbody><tr><td>Node</td><td><code>npm test</code>；前端没有测试时，至少配 <code>npm run build</code></td></tr><tr><td>Maven</td><td><code>mvn -q -B test</code>（<code>-B</code> 关闭交互输出）</td></tr><tr><td>Gradle</td><td><code>./gradlew test --console=plain</code></td></tr><tr><td>Python</td><td><code>pytest -q</code></td></tr><tr><td>Go</td><td><code>go test ./...</code></td></tr></tbody></table></div>
+<p>验证命令生成的文件（<code>dist/</code>、<code>target/</code>、<code>node_modules/</code> 等）必须写进 <code>.gitignore</code>。否则验证期间工作树发生变化，结果会被记为 <code>unknown</code>。</p>
+<h3 id="4-验证你的安装">4. 验证你的安装</h3>
+<div class="code"><div class="code-bar"><span>终端</span><button class="copy" type="button">复制</button></div><pre><code>devflow doctor</code></pre></div>
+<p>预期输出：</p>
+<div class="code"><div class="code-bar"><span>输出</span><button class="copy" type="button">复制</button></div><pre><code>✓ Node：v26.13.0
+✓ git：git version 2.39.5
+✓ 仓库：/path/to/project
+✓ 初始化：.devflow/ 存在
+✓ hook：指向 /opt/homebrew/lib/node_modules/devflow/dist/cli.js
+✓ Agent 文件（claude）：与当前版本一致
+! 知识页：知识页为空，devflow-archive 没有页面可更新
+    修复：用 devflow-scan 技能生成知识页；小项目可以跳过
+✓ .gitignore：已忽略 .devflow/runtime/</code></pre></div>
+<p><code>✓</code> 表示正常，<code>!</code> 表示警告，<code>✗</code> 表示错误。有 <code>✗</code> 时退出码为 1，每个问题下面都附有修复命令。知识页为空的警告可以先不管，见<a href="#可选生成知识页">可选：生成知识页</a>。</p>
+<p><strong>如果出现以下问题</strong></p>
+<ul><li><code>! project.yaml：没有声明验证命令</code>：回到第 3 步。不声明验证命令时，验证结果永远是 <code>unknown</code>，变更无法归档。</li><li><code>✗ hook：…不存在</code>：devflow 的安装位置变了，重新运行 <code>devflow init</code>。</li><li><code>✗ Agent 文件…不一致</code>：运行 <code>devflow update</code>。</li></ul>
+<h3 id="5-提交">5. 提交</h3>
+<div class="code"><div class="code-bar"><span>终端</span><button class="copy" type="button">复制</button></div><pre><code>git add -A &amp;&amp; git commit -m &quot;启用 DevFlow&quot;</code></pre></div>
+<p>预期输出中会有一行，表示提交门禁已经生效：</p>
+<div class="code"><div class="code-bar"><span>输出</span><button class="copy" type="button">复制</button></div><pre><code>✓ devflow check 通过</code></pre></div>
+<div class="callout note"><p>使用 Codex 时，第一次在项目里打开 Codex 要选择<strong>信任</strong>该项目，<code>.codex/rules/</code> 才会加载。</p></div>
+<hr>
+<h2 id="走一遍完整的变更">走一遍完整的变更</h2>
+<p>下面以一个最小的需求为例：给 <code>math.js</code> 新增 <code>subtract(a, b)</code>。每一步都标明由谁来做。</p>
+<h3 id="第-1-步提方案agent">第 1 步：提方案<span class="badge agent">Agent</span></h3>
+<p>在 Agent 里说：</p>
+<div class="callout note"><p>用 devflow-propose 提一个变更：在 math.js 中新增 subtract(a, b)，返回 a 减 b。</p></div>
+<p>Agent 信息不足时会先问你，然后读相关代码和当前规范，运行 <code>devflow new &lt;id&gt;</code> 生成目录，写好方案，最后运行 <code>devflow validate</code> 和 <code>devflow render</code>。<strong>这一步 Agent 不会改业务代码。</strong></p>
+<p>Agent 生成的变更目录如下：</p>
+<div class="code"><div class="code-bar"><span>输出</span><button class="copy" type="button">复制</button></div><pre><code>.devflow/changes/2026-11-08-add-subtract/
+├── change.yaml            标题与影响路径
+├── proposal.md            为什么、改什么、影响、不做什么
+├── specs/math/spec.md     规范增量：本次对系统行为契约的增、改、删
+├── design.md              技术方案与流程图
+└── tasks.yaml             任务、依赖与验收条件</code></pre></div>
+<p>其中 <code>tasks.yaml</code> 是后面验收的依据，每条验收条件都要写清楚怎么证明：</p>
+<div class="code"><div class="code-bar"><span>YAML</span><button class="copy" type="button">复制</button></div><pre><code>schema_version: 2
+tasks:
+  - id: T1
+    title: 实现 subtract 并补测试
+    acceptance:
+      - id: AC1
+        text: subtract(5, 3) 返回 2
+        method: automated      # automated：由验证命令证明；manual：由人确认
+        check: unit-tests      # 引用 project.yaml 中的 verify.name</code></pre></div>
+<p><strong>验证</strong>：Agent 最后会给出 render 的结果。</p>
+<div class="code"><div class="code-bar"><span>输出</span><button class="copy" type="button">复制</button></div><pre><code>✓ /path/to/project/.devflow/runtime/rendered/2026-11-08-add-subtract.html
+  内容哈希：sha256:79445fe7ed97bef5475cec4400d48d5e7ece7c1f033f7997691a9db2a89bc446
+  审查后由人在自己的终端运行：devflow approve 2026-11-08-add-subtract</code></pre></div>
+<h3 id="第-2-步审查人">第 2 步：审查<span class="badge human">人</span></h3>
+<p>用浏览器打开上面的 HTML 文件。审查页直接从方案文件生成，没有经过模型改写，离线可用。</p>
+<div class="table"><table><thead><tr><th>面板</th><th>内容</th></tr></thead><tbody><tr><td>A 提案</td><td>为什么、改什么、影响、不做什么</td></tr><tr><td>B 规范增量</td><td>新增（绿）、修改（黄）、删除（红）的需求，每条需求附场景表（WHEN / THEN）</td></tr><tr><td>C 设计</td><td>技术方案与流程图</td></tr><tr><td>D 任务与依赖</td><td>每个任务的验收条件和依赖图</td></tr><tr><td>E 被审文件与内容哈希</td><td>验证命令、每个文件的哈希，以及可以直接复制的批准命令</td></tr></tbody></table></div>
+<p>重点看三处：</p>
+<ol><li>验收条件能不能真正被验证？<code>automated</code> 的条件引用的是哪个验证命令？</li><li><code>affected_paths</code> 有没有覆盖要改的代码？</li><li>&quot;不做什么&quot;是否符合你的预期？</li></ol>
+<p><strong>要修改时</strong>，直接告诉 Agent 改哪里。Agent 会重新校验、重新生成审查页，哈希也会随之变化。</p>
+<h3 id="第-3-步批准人在自己的终端">第 3 步：批准<span class="badge human">人，在自己的终端</span></h3>
+<p>复制审查页 E 面板末尾的命令，在你自己的终端里运行：</p>
+<div class="code"><div class="code-bar"><span>终端</span><button class="copy" type="button">复制</button></div><pre><code>devflow approve 2026-11-08-add-subtract --hash 79445fe7ed97</code></pre></div>
+<p><code>--hash</code> 至少要有 12 位。它和当前内容一致时直接批准，不会再让你输入 <code>y</code>。预期输出：</p>
+<div class="code"><div class="code-bar"><span>输出</span><button class="copy" type="button">复制</button></div><pre><code>变更：2026-11-08-add-subtract
+基线：a1b2c3d  批准人：你的名字
+内容哈希：sha256:79445fe7ed97…
+被审文件：
+  .devflow/changes/2026-11-08-add-subtract/change.yaml
+  …
+✓ 已批准 2026-11-08-add-subtract
+下一步：在 Agent 里说&quot;用 devflow-apply 实现变更 2026-11-08-add-subtract&quot;</code></pre></div>
+<p>只有看到 <code>✓ 已批准</code> 才算成功。</p>
+<p>不带 <code>--hash</code> 时，终端会列出同样的信息并要求确认。核对哈希和审查页一致后，输入 <code>y</code> 并回车。</p>
+<p><strong>如果批准不成功</strong></p>
+<div class="table"><table><thead><tr><th>提示</th><th>原因与处理</th></tr></thead><tbody><tr><td><code>--hash 与当前内容哈希不一致，未批准</code></td><td>审查之后方案又被改过，或者命令没复制完整。重新 render，从新页面复制命令</td></tr><tr><td><code>approve 只能由人在交互终端中运行</code></td><td>命令在非交互环境中运行，例如被 Agent 代为执行、在编辑器任务面板里运行或经过管道。请在普通终端窗口里运行</td></tr><tr><td><code>✗ 未批准：… 状态仍为 draft</code></td><td>确认时没有输入 <code>y</code>。重新运行</td></tr><tr><td>未配置 git user.name</td><td>运行 <code>git config user.name &quot;你的名字&quot;</code>，批准人取自这里</td></tr></tbody></table></div>
+<h3 id="第-4-步实现并验证agent">第 4 步：实现并验证<span class="badge agent">Agent</span></h3>
+<p>在 Agent 里说：</p>
+<div class="callout note"><p>用 devflow-apply 实现变更 2026-11-08-add-subtract。</p></div>
+<p>Agent 会先记录开工：</p>
+<div class="code"><div class="code-bar"><span>终端</span><button class="copy" type="button">复制</button></div><pre><code>devflow apply 2026-11-08-add-subtract --start</code></pre></div>
+<div class="code"><div class="code-bar"><span>输出</span><button class="copy" type="button">复制</button></div><pre><code>✓ 2026-11-08-add-subtract 已开工（基于 a1b2c3d）</code></pre></div>
+<p>然后写代码和测试，运行验证命令：</p>
+<div class="code"><div class="code-bar"><span>终端</span><button class="copy" type="button">复制</button></div><pre><code>devflow verify 2026-11-08-add-subtract --json</code></pre></div>
+<div class="code"><div class="code-bar"><span>JSON</span><button class="copy" type="button">复制</button></div><pre><code>{
+  &quot;result&quot;: &quot;pass&quot;,
+  &quot;checks&quot;: [{ &quot;name&quot;: &quot;unit-tests&quot;, &quot;log_hash&quot;: &quot;sha256:…&quot;, &quot;exit&quot;: 0, &quot;ms&quot;: 412, &quot;log&quot;: &quot;.devflow/runtime/verify/…&quot; }],
+  &quot;run_id&quot;: &quot;6f1c…&quot;
+}</code></pre></div>
+<div class="callout warn"><div class="callout-title">注意</div><p>下一步记录证据时要用到 <code>run_id</code>，它只在 <code>--json</code> 输出里出现。不加 <code>--json</code> 时，输出是 <code>✓ unit-tests  退出码 0  0.4s</code>，后面跟一行&quot;配置检查结果&quot;。</p></div>
+<p>Agent 发现方案本身有问题时，会停下来告诉你，而不是自己改方案。改方案会让批准失效，需要你重新批准。</p>
+<h3 id="第-5-步记录验收证据agent人工项由人确认">第 5 步：记录验收证据<span class="badge agent">Agent，人工项由人确认</span></h3>
+<p>测试通过，不等于验收条件被覆盖了。每条验收条件都需要一份证据，说明它是由哪个测试、哪条断言证明的。Agent 写一个 JSON 文件：</p>
+<div class="code"><div class="code-bar"><span>JSON</span><button class="copy" type="button">复制</button></div><pre><code>{
+  &quot;task&quot;: &quot;T1&quot;,
+  &quot;acceptance&quot;: &quot;AC1&quot;,
+  &quot;kind&quot;: &quot;automated&quot;,
+  &quot;summary&quot;: &quot;subtract(5, 3) 返回 2&quot;,
+  &quot;verify_run&quot;: &quot;6f1c…&quot;,
+  &quot;check&quot;: &quot;unit-tests&quot;,
+  &quot;test&quot;: &quot;test/math.test.js&quot;,
+  &quot;assertion&quot;: &quot;assert.equal(subtract(5, 3), 2)&quot;,
+  &quot;artifacts&quot;: []
+}</code></pre></div>
+<div class="code"><div class="code-bar"><span>终端</span><button class="copy" type="button">复制</button></div><pre><code>devflow evidence add 2026-11-08-add-subtract --file AC1-evidence.json</code></pre></div>
+<p>命令会输出记录下来的证据，其中包含 <code>evidence_id</code>。</p>
+<p>自动证据必须满足三个条件，否则会被拒绝：引用的是<strong>本轮批准之后</strong>、<strong>当前代码版本下</strong>、<strong>指定检查通过</strong>的那次验证。</p>
+<p><strong>人工验收项</strong>（<code>method: manual</code>）的证据，把 <code>kind</code> 改成 <code>manual</code>，并填写 <code>procedure</code>（怎么操作）、<code>expected</code>（预期）、<code>observed</code>（实际看到的）。Agent 记录之后，<strong>由你在自己的终端里确认</strong>：</p>
+<div class="code"><div class="code-bar"><span>终端</span><button class="copy" type="button">复制</button></div><pre><code>devflow evidence confirm 2026-11-08-add-subtract &lt;evidence-id&gt;</code></pre></div>
+<p>所有验收条件都有有效证据后，Agent 标记任务完成：</p>
+<div class="code"><div class="code-bar"><span>终端</span><button class="copy" type="button">复制</button></div><pre><code>devflow task done 2026-11-08-add-subtract T1</code></pre></div>
+<div class="code"><div class="code-bar"><span>输出</span><button class="copy" type="button">复制</button></div><pre><code>✓ T1 已完成；任务 1/1</code></pre></div>
+<p><strong>验证</strong>：任何时候都可以运行 <code>resume</code>，查看还缺什么以及下一步做什么。</p>
+<div class="code"><div class="code-bar"><span>终端</span><button class="copy" type="button">复制</button></div><pre><code>devflow resume 2026-11-08-add-subtract</code></pre></div>
+<div class="code"><div class="code-bar"><span>输出</span><button class="copy" type="button">复制</button></div><pre><code>2026-11-08-add-subtract: ready_to_archive — 验证通过，等待人工归档
+下一步：devflow archive 2026-11-08-add-subtract</code></pre></div>
+<p><strong>如果证据被拒</strong></p>
+<div class="table"><table><thead><tr><th>提示</th><th>处理</th></tr></thead><tbody><tr><td><code>自动证据必须引用本轮批准、当前代码下成功的指定验证检查</code></td><td>验证之后代码又变了，或者 <code>check</code> 名称和验收条件里写的不一致。重新运行 <code>verify --json</code>，用新的 <code>run_id</code></td></tr><tr><td><code>证据方式与批准的验收条件不一致</code></td><td><code>kind</code> 必须和验收条件的 <code>method</code> 一致</td></tr><tr><td><code>任务验收条件不存在：T1/AC9</code></td><td><code>task</code> 或 <code>acceptance</code> 写错了，对照 <code>tasks.yaml</code></td></tr><tr><td><code>当前状态不允许记录证据</code></td><td>还没开工，或者批准已经失效。运行 <code>devflow resume</code> 看原因</td></tr><tr><td><code>任务 T2 依赖的任务尚未完成</code></td><td>先完成被依赖的任务，并补齐它的证据</td></tr></tbody></table></div>
+<h3 id="第-6-步提交代码人">第 6 步：提交代码<span class="badge human">人</span></h3>
+<p>什么时候提交、提交信息怎么写，由你决定。DevFlow 不会自动提交或推送。</p>
+<p>提交时，把变更目录 <code>.devflow/changes/&lt;id&gt;/</code> 和证据目录 <code>.devflow/evidence/&lt;id&gt;/</code> 一起提交。其中的 <code>events.jsonl</code> 是批准、验证和证据的记录。</p>
+<div class="callout warn"><div class="callout-title">注意</div><p>验证结果绑定当时的工作树内容（不含 <code>.devflow/</code>）。验证之后改了任何文件，包括文档，状态都会回到 <code>applying</code>，证据也会失效，需要重新验证并重新记录证据。所以说明文档要在 verify 之前写完。</p></div>
+<h3 id="第-7-步归档准备agent">第 7 步：归档准备<span class="badge agent">Agent</span></h3>
+<p>在 Agent 里说：</p>
+<div class="callout note"><p>用 devflow-archive 为变更 2026-11-08-add-subtract 做归档准备。</p></div>
+<p>Agent 会更新相关的知识页，链接到归档后的设计文档，并确认 <code>devflow wiki lint</code> 没有错误。项目里没有知识页时，可以跳过这一步。</p>
+<h3 id="第-8-步归档人在自己的终端">第 8 步：归档<span class="badge human">人，在自己的终端</span></h3>
+<div class="code"><div class="code-bar"><span>终端</span><button class="copy" type="button">复制</button></div><pre><code>devflow archive 2026-11-08-add-subtract</code></pre></div>
+<p>终端会列出将要写入的规范文件和将要移动的目录。确认后输入 <code>y</code>：</p>
+<div class="code"><div class="code-bar"><span>输出</span><button class="copy" type="button">复制</button></div><pre><code>变更：2026-11-08-add-subtract  归档人：你的名字
+将写入：
+  .devflow/specs/math/spec.md
+将移动：.devflow/changes/2026-11-08-add-subtract → .devflow/changes/archive/2026-11-08-add-subtract
+确认归档？输入 y 确认：y
+✓ 已归档到 .devflow/changes/archive/2026-11-08-add-subtract；更新规范：.devflow/specs/math/spec.md</code></pre></div>
+<p>然后提交归档结果：</p>
+<div class="code"><div class="code-bar"><span>终端</span><button class="copy" type="button">复制</button></div><pre><code>git add -A &amp;&amp; git commit -m &quot;归档 2026-11-08-add-subtract&quot;</code></pre></div>
+<p>一个功能因此分成两次提交，这是有意的：知识页的 <code>verified_commit</code> 要指向包含代码改动的那次提交，所以代码必须先提交。</p>
+<p>归档中途被打断时，再运行一次 <code>devflow archive &lt;id&gt;</code> 即可。它会发现未完成的事务，从中断处继续，不会重复写入。</p>
+<h3 id="之后">之后</h3>
+<p>在任何新会话里都可以问：</p>
+<div class="callout note"><p>subtract 是哪次变更加的？为什么不处理非数字输入？</p></div>
+<p>Agent 会从 <code>.devflow/changes/archive/</code> 和 <code>.devflow/specs/</code> 里找到需求、规范和设计原因，并给出出处。</p>
+<hr>
+<h2 id="状态与下一步">状态与下一步</h2>
+<p>状态不存盘，每次都由变更文件、<code>events.jsonl</code> 和 git 现算。查看状态：</p>
+<div class="code"><div class="code-bar"><span>终端</span><button class="copy" type="button">复制</button></div><pre><code>devflow status                 # 所有进行中的变更
+devflow status &lt;id&gt;            # 一个变更
+devflow status --all           # 同时列出已归档的变更
+devflow resume &lt;id&gt;            # 一个变更：状态、证据缺口和下一条命令</code></pre></div>
+<div class="code"><div class="code-bar"><span>输出</span><button class="copy" type="button">复制</button></div><pre><code>2026-11-08-add-subtract  draft  任务 0/1  尚未批准</code></pre></div>
+<div class="table"><table><thead><tr><th>状态</th><th>含义</th><th>下一步</th></tr></thead><tbody><tr><td><code>draft</code></td><td>尚未批准，或者批准后被审文件被改过</td><td>人审查后 <code>approve</code></td></tr><tr><td><code>rebase_required</code></td><td>已批准、未开工，但批准后有提交改动了 <code>affected_paths</code>，或者同一能力的规范变了</td><td>人重新评估方案，必要时让 Agent 修改，再 <code>approve</code></td></tr><tr><td><code>approved</code></td><td>已批准，可以开工</td><td>Agent 用 devflow-apply 实现</td></tr><tr><td><code>applying</code></td><td>已开工；任务未完成、证据失效，或者验证之后代码有改动</td><td>Agent 继续实现，或者重新 <code>verify</code> 并补证据</td></tr><tr><td><code>needs_fix</code></td><td>最近一次验证结果为 <code>fail</code> 或 <code>unknown</code></td><td>看验证日志修复后重新 <code>verify</code></td></tr><tr><td><code>ready_to_archive</code></td><td>任务全部完成，证据有效，且验证通过的就是当前代码</td><td>人提交代码 → Agent 做归档准备 → 人 <code>archive</code></td></tr><tr><td><code>archived</code></td><td>已归档</td><td>—</td></tr></tbody></table></div>
+<p>规则：</p>
+<ul><li><strong>改方案就要重新批准</strong>：批准后改动任何被审文件或 <code>project.yaml</code>，状态回到 <code>draft</code>。</li><li><strong>重新批准就是新的一轮</strong>：之前的开工、验证、证据和任务完成记录都不再算数。</li><li><strong><code>unknown</code> 不算通过</strong>：以下情况结果都记为 <code>unknown</code>：验证命令无法运行、超时（单条命令 30 分钟）、没有声明命令、验证期间工作树发生变化。</li><li><strong>一个工作树同时只能开工一个 v2 变更</strong>。要并行做多个变更，用独立的 git worktree。</li></ul>
+<h3 id="按场景检查验证结果">按场景检查验证结果</h3>
+<div class="table"><table><thead><tr><th>场景</th><th><code>verify</code> 结果</th><th>状态</th></tr></thead><tbody><tr><td>所有命令退出码为 0</td><td><code>pass</code></td><td>补齐证据并完成任务后，变为 <code>ready_to_archive</code></td></tr><tr><td>任一命令退出码非 0</td><td><code>fail</code>，并输出日志路径</td><td><code>needs_fix</code></td></tr><tr><td>没有声明验证命令</td><td><code>unknown</code></td><td><code>needs_fix</code></td></tr><tr><td>命令不存在，例如没装 <code>mvn</code></td><td><code>unknown</code></td><td><code>needs_fix</code></td></tr><tr><td>构建产物没被忽略，验证期间工作树变了</td><td><code>unknown</code></td><td><code>needs_fix</code></td></tr><tr><td>验证通过后又改了代码</td><td>上次的结果作废</td><td><code>applying</code></td></tr></tbody></table></div>
+<p>验证日志在 <code>.devflow/runtime/verify/&lt;id&gt;/</code> 目录下。</p>
+<hr>
+<details class="optional" id="可选生成知识页"><summary><h2><span class="badge optional-tag">可选</span>生成知识页</h2></summary><div>
+<p>知识页（<code>.devflow/knowledge/pages/*.md</code>）记录代码&quot;现在是怎样&quot;，每条事实都带源码出处。在 Agent 里说：</p>
+<div class="callout note"><p>用 devflow-scan 为本项目生成知识页。</p></div>
+<p>Agent 会按业务模块写页面，并运行 <code>devflow wiki lint</code>，直到没有错误。</p>
+<div class="callout warn"><div class="callout-title">注意</div><p>小项目可以跳过这一步。在一个 25 个文件的演示项目上评测，有没有知识页，回答准确率相同，而且有知识页时每题多用约 25% 的轮数。知识页的价值在于代码里看不出来的东西：设计原因、历史变更，以及 Agent 读不完的大项目。</p></div>
+</div></details>
+<details class="optional" id="可选本地使用记录"><summary><h2><span class="badge optional-tag">可选</span>本地使用记录</h2></summary><div>
+<p><code>init</code> 之后，项目默认在本地记录 devflow 命令的使用情况：命令名（白名单内）、结果、原因码和耗时。不记录完整参数、输出、环境、用户名或源码，也不上传。原始记录保留 30 天，反馈保留 90 天，报告保留 180 天。</p>
+<div class="code"><div class="code-bar"><span>终端</span><button class="copy" type="button">复制</button></div><pre><code>devflow usage configure --off             # 关闭
+devflow usage configure --on              # 打开
+DEVFLOW_USAGE=off devflow status          # 只对这一次命令关闭
+devflow usage report --since 2026-11-01   # 本地报告
+devflow usage feedback &lt;id&gt; --file feedback.json
+devflow usage export --since 2026-11-01 --out summary.json
+devflow usage prune --before 2026-10-01</code></pre></div>
+<p>反馈文件格式为 <code>{category, impact, note, related_invocation?}</code>，其中 <code>category</code> 取 <code>blocked</code>、<code>confusing</code>、<code>false-positive</code>、<code>missed-defect</code> 或 <code>other</code>。<code>note</code> 是自由文本，默认不会出现在聚合导出里；不要在里面写凭据。</p>
+<p>关闭记录或记录写入失败，都不影响命令本身的退出码。</p>
+</div></details>
+<details class="optional" id="可选改进候选与评测"><summary><h2><span class="badge optional-tag">可选</span>改进候选与评测</h2></summary><div>
+<p>同一类问题出现至少 3 次，会生成一个去重后的改进候选。候选只会生成一份待补全的提案，不会自动审批或实施。</p>
+<div class="code"><div class="code-bar"><span>终端</span><button class="copy" type="button">复制</button></div><pre><code>devflow improve list
+devflow improve draft &lt;candidate-id&gt; &lt;change-id&gt;
+devflow eval run --suite workflow --out regression.json
+devflow eval compare baseline.json regression.json
+devflow improve resolve &lt;candidate-id&gt; --report comparison.json</code></pre></div>
+<p>故障评测在临时仓库里运行。只有每个任务每个版本至少跑 5 次、关键结果不退化、目标中位指标下降至少 10% 时，才标记为 <code>improved</code>，而且这仍不代表统计显著。真实 Agent 评测需要显式启动，可能消耗账号额度。</p>
+</div></details>
+<details class="optional" id="可选继续使用-v1-格式"><summary><h2><span class="badge optional-tag">可选</span>继续使用 v1 格式</h2></summary><div>
+<p>0.2.0 新建的变更默认是 v2 格式（<code>schema_version: 2</code>，验收条件带证据）。旧的 v1 变更可以继续使用。要显式创建 v1 格式：</p>
+<div class="code"><div class="code-bar"><span>终端</span><button class="copy" type="button">复制</button></div><pre><code>devflow new &lt;id&gt; --schema 1</code></pre></div>
+<p>已有 v2 变更的项目，不能再用旧版 CLI 往里追加事件。</p>
+<hr>
+</div></details>
+<h2 id="命令参考">命令参考</h2>
+<p>所有命令都支持 <code>--json</code>，输出机器可读的结果。出错时退出码为 1，<code>✗</code> 后面给出原因和修复提示。标 <strong>人</strong> 的命令要求交互终端，Agent 无法代为运行。</p>
+<div class="table"><table><thead><tr><th>命令</th><th>谁运行</th><th>说明</th></tr></thead><tbody><tr><td><code>devflow init [--agents claude,codex]</code></td><td>人</td><td>创建 <code>.devflow/</code>、安装 hook、生成 Agent 文件。可以重复运行</td></tr><tr><td><code>devflow update [--agents …]</code></td><td>人</td><td>升级 devflow 后重新生成 Agent 文件；不写 <code>--agents</code> 时更新已安装过的</td></tr><tr><td><code>devflow doctor</code></td><td>任意</td><td>自检，并给出修复命令</td></tr><tr><td><code>devflow new &lt;id&gt; [--schema 1]</code></td><td>Agent</td><td>生成变更目录骨架。id 用小写字母、数字、连字符，建议 <code>&lt;日期&gt;-&lt;英文短名&gt;</code></td></tr><tr><td><code>devflow validate &lt;id&gt;</code></td><td>Agent</td><td>校验文件、对当前规范试算合并，并检查审查页会拒绝的写法，报错定位到行号</td></tr><tr><td><code>devflow render &lt;id&gt; [-o 文件]</code></td><td>Agent</td><td>生成离线审查页，默认在 <code>.devflow/runtime/rendered/&lt;id&gt;.html</code></td></tr><tr><td><code>devflow approve &lt;id&gt; [--hash 前缀]</code></td><td><strong>人</strong></td><td>批准并绑定内容哈希</td></tr><tr><td><code>devflow apply &lt;id&gt; --start</code></td><td>Agent</td><td>记录开工，只能从 <code>approved</code> 开始</td></tr><tr><td><code>devflow verify &lt;id&gt;</code></td><td>Agent</td><td>运行 <code>project.yaml</code> 中的命令；全部通过时退出码为 0</td></tr><tr><td><code>devflow evidence add &lt;id&gt; --file &lt;json&gt;</code></td><td>Agent</td><td>记录一条验收证据</td></tr><tr><td><code>devflow evidence confirm &lt;id&gt; &lt;evidence-id&gt;</code></td><td><strong>人</strong></td><td>确认人工验收证据</td></tr><tr><td><code>devflow task done &lt;id&gt; &lt;任务&gt;</code></td><td>Agent</td><td>记录任务完成；依赖的任务必须先完成，证据必须有效</td></tr><tr><td><code>devflow resume &lt;id&gt;</code></td><td>任意</td><td>当前状态、证据缺口和下一条命令</td></tr><tr><td><code>devflow status [id] [--all]</code></td><td>任意</td><td>状态、任务进度和原因</td></tr><tr><td><code>devflow archive &lt;id&gt;</code></td><td><strong>人</strong></td><td>合并规范增量、更新 <code>specs.lock</code>、移动变更目录；中断后重跑即可继续</td></tr><tr><td><code>devflow wiki lint</code></td><td>Agent</td><td>校验知识页的引用和链接，并检查是否过期</td></tr><tr><td><code>devflow check [--staged]</code></td><td>hook / CI</td><td>门禁检查</td></tr></tbody></table></div>
+<h2 id="文件格式参考">文件格式参考</h2>
+<h3 id="projectyaml人维护">project.yaml<span class="badge human">人维护</span></h3>
+<div class="code"><div class="code-bar"><span>YAML</span><button class="copy" type="button">复制</button></div><pre><code>schema_version: 1
+verify:                  # devflow verify 只运行这里的命令
+  - name: unit-tests     # 不能重复
+    run: npm test        # 用 sh -c 执行
+    cwd: .               # 可选，相对仓库根目录
+exclude:                 # 知识页和证据不得引用的文件，规则同 .gitignore
+  - &quot;.env*&quot;
+  - &quot;**/*.pem&quot;
+  - &quot;**/*.key&quot;
+  - &quot;**/node_modules/**&quot;
+enforce: warn            # warn | strict：暂存了未开工变更的代码时，警告还是拒绝提交</code></pre></div>
+<h3 id="changeyaml">change.yaml</h3>
+<div class="code"><div class="code-bar"><span>YAML</span><button class="copy" type="button">复制</button></div><pre><code>schema_version: 2
+min_cli_version: 0.2.0
+title: 新增减法函数
+affected_paths:          # 本变更会改动的代码（glob），不能写 .devflow/ 下的路径
+  - math.js
+  - test/**</code></pre></div>
+<p><code>affected_paths</code> 有两个用途：批准后有提交改动了这些路径时，状态变为 <code>rebase_required</code>；提交未开工变更的这些文件时，门禁会警告。</p>
+<h3 id="proposalmd">proposal.md</h3>
+<p>写四节：<code>## 为什么</code>、<code>## 改什么</code>、<code>## 影响</code>、<code>## 不做什么</code>。不能只有标题没有正文。超过 3 句的段落，validate 会给出警告。</p>
+<h3 id="规范增量-specs能力specmd">规范增量 specs/&lt;能力&gt;/spec.md</h3>
+<div class="code"><div class="code-bar"><span>Markdown</span><button class="copy" type="button">复制</button></div><pre><code>## ADDED Requirements
+
+### Requirement: 减法
+系统 SHALL 导出 subtract(a, b)，返回 a 减 b 的结果。
+
+#### Scenario: 整数相减
+- WHEN 调用 subtract(5, 3)
+- THEN 返回 2
+
+## MODIFIED Requirements
+### Requirement: &lt;当前规范中已有的名称&gt;
+（这条需求修改后的全文）
+
+## REMOVED Requirements
+### Requirement: &lt;当前规范中已有的名称&gt;
+**Reason**: 删除原因</code></pre></div>
+<ul><li>能力名（目录名）只能用小写字母、数字、连字符。</li><li>每条新增或修改的需求都必须含 <code>SHALL</code>、<code>MUST</code> 或&quot;必须&quot;，并且至少有一个 <code>#### Scenario:</code>。</li><li>新能力只能用 ADDED，可以加一节 <code>## Purpose</code> 说明这个能力是什么。</li><li>MODIFIED 和 REMOVED 里的名称，必须和当前规范完全一致。</li><li>不改变对外行为的变更（例如纯重构）可以不写规范增量。validate 只会提醒，不算错误。</li></ul>
+<h3 id="tasksyamlv2">tasks.yaml（v2）</h3>
+<div class="code"><div class="code-bar"><span>YAML</span><button class="copy" type="button">复制</button></div><pre><code>schema_version: 2
+tasks:
+  - id: T1
+    title: 实现 subtract 并补测试
+    acceptance:
+      - id: AC1
+        text: subtract(5, 3) 返回 2
+        method: automated        # automated | manual
+        check: unit-tests        # automated 必填，引用 verify.name
+  - id: T2
+    title: 更新使用说明
+    depends_on: [T1]
+    acceptance:
+      - id: AC2
+        text: README 示例可以照抄运行
+        method: manual</code></pre></div>
+<ul><li>任务 id 以字母开头，不能重复。<code>depends_on</code> 引用的任务必须存在，依赖不能成环。</li><li>验收条件的 id 在整个变更内唯一。</li><li><strong>不要写进度字段</strong>（如 <code>status</code>、<code>done</code>）。进度记在事件日志里；写在这个文件里的话，每勾选一次任务，批准就会失效一次。</li></ul>
+<div class="callout warn"><div class="callout-title">注意</div><p>在 0.2.0 中，<code>devflow new</code> 生成的 <code>tasks.yaml</code> 骨架里，注释示例仍是 v1 写法（<code>acceptance: [字符串]</code>）。请按上面的 v2 对象格式写。</p></div>
+<h3 id="executionmd">execution.md</h3>
+<p>可选的实施笔记。它是变更目录里唯一不参与批准哈希的文件，改它不会让批准失效。</p>
+<h3 id="designmd-与审查页的写法限制">design.md 与审查页的写法限制</h3>
+<p>流程图写在代码块里：</p>
+<div class="code"><div class="code-bar"><span>Markdown</span><button class="copy" type="button">复制</button></div><pre><code>```flow TB
+(开始) -&gt; {a、b 都是数字?}
+{a、b 都是数字?} -&gt; 返回 a - b: 是
+{a、b 都是数字?} -&gt; 行为未定义: 否
+```</code></pre></div>
+<ul><li><code>A -&gt; B: 标签</code>：冒号后面是连线上的标签。<code>{条件?}</code> 是判断节点，<code>(开始)</code> 是起止节点。</li><li>可用的图：<code>flow</code>、<code>sequence</code>、<code>tree</code>、<code>er</code>。</li><li>普通代码块只写语言名，例如 <code>```java</code>。</li></ul>
+<p>审查页会<strong>拒绝</strong>以下写法：<code>html</code> 和 <code>svg</code> 代码块、带属性的代码块（如 <code>```ts src=…</code>）、<code>:::</code> 块、图片。正文里的 <code>&lt;</code> 和 <code>&gt;</code> 会被转义，按原样显示。validate 通过，render 就不会因为写法问题失败。</p>
+<h3 id="证据-json">证据 JSON</h3>
+<div class="table"><table><thead><tr><th>字段</th><th>automated</th><th>manual</th><th>说明</th></tr></thead><tbody><tr><td><code>task</code>、<code>acceptance</code></td><td>必填</td><td>必填</td><td>对应 <code>tasks.yaml</code> 中的 id</td></tr><tr><td><code>kind</code></td><td><code>automated</code></td><td><code>manual</code></td><td>必须和验收条件的 <code>method</code> 一致</td></tr><tr><td><code>summary</code></td><td>必填</td><td>必填</td><td>一句话结论</td></tr><tr><td><code>verify_run</code></td><td>必填</td><td>—</td><td><code>verify --json</code> 输出的 <code>run_id</code></td></tr><tr><td><code>check</code></td><td>必填</td><td>—</td><td>和验收条件的 <code>check</code> 一致</td></tr><tr><td><code>test</code></td><td>必填</td><td>—</td><td>测试文件路径，必须在仓库内</td></tr><tr><td><code>assertion</code></td><td>必填</td><td>—</td><td>证明这条验收条件的断言</td></tr><tr><td><code>procedure</code>、<code>expected</code>、<code>observed</code></td><td>—</td><td>必填</td><td>操作步骤、预期、实际</td></tr><tr><td><code>artifacts</code></td><td>可选</td><td>可选</td><td>最多 10 个仓库内文件，每个不超过 1 MiB；不能是 exclude 中的文件，也不能是符号链接</td></tr></tbody></table></div>
+<p>附件会被复制到 <code>.devflow/evidence/&lt;id&gt;/&lt;evidence-id&gt;/</code>，并记录哈希。附件被改动或丢失，证据就会失效。</p>
+<h3 id="eventsjsonl">events.jsonl</h3>
+<p>每行一个事件，记录批准、开工、验证、证据、任务完成和归档。<strong>只能由 devflow 命令追加</strong>。已提交的行被改动或删除时，提交会被门禁拒绝。</p>
+<h3 id="知识页-knowledgepagesslugmd">知识页 knowledge/pages/&lt;slug&gt;.md</h3>
+<div class="code"><div class="code-bar"><span>Markdown</span><button class="copy" type="button">复制</button></div><pre><code>---
+schema_version: 1
+title: 数学工具
+verified_commit: &quot;9f3a2c1&quot;
+sources:
+  - path: math.js
+    symbol: subtract
+  - path: test/math.test.js
+    lines: [1, 10]
+related_specs: []
+---
+
+# 数学工具
+……</code></pre></div>
+<ul><li><code>verified_commit</code> <strong>要加引号</strong>：<code>1234567</code> 这样的短哈希不加引号，会被 YAML 当成数字读取。</li><li><code>symbol</code> 写成 <code>类名</code> 或 <code>类名#方法名</code>，必须和源码里的文字一致。</li><li>正文里用完整路径引用的文件，也要列进 <code>sources</code>。漏列的文件改了，这页不会被标为过期。</li><li>每个页面都要在 <code>knowledge/index.md</code> 里有一行：<code>- [标题](pages/&lt;slug&gt;.md) — 摘要</code>。</li></ul>
+<p><code>devflow wiki lint</code> 报<strong>错误</strong>的情况：frontmatter 缺失或字段不合法；引用的文件不存在、符号找不到或行号越界；引用了 <code>exclude</code> 中的文件；<code>index.md</code> 漏列页面或列了不存在的页面；正文链接指向不存在的目标。报<strong>警告</strong>的情况：引用的文件在 <code>verified_commit</code> 之后有改动；正文引用了没列入 <code>sources</code> 的文件；一个知识页都没有。</p>
+<h2 id="agent-技能参考">Agent 技能参考</h2>
+<p><code>devflow init</code> 为每个 Agent 安装五个技能。</p>
+<div class="table"><table><thead><tr><th>技能</th><th>什么时候用</th><th>典型说法</th></tr></thead><tbody><tr><td><code>devflow-propose</code></td><td>新功能、行为修改、修复，先出方案</td><td>&quot;用 devflow-propose 提一个变更：……&quot;</td></tr><tr><td><code>devflow-apply</code></td><td>实现已批准的变更，并验证、记录证据</td><td>&quot;用 devflow-apply 实现变更 &lt;id&gt;&quot;</td></tr><tr><td><code>devflow-archive</code></td><td>验证通过后、归档前，更新知识页</td><td>&quot;用 devflow-archive 为变更 &lt;id&gt; 做归档准备&quot;</td></tr><tr><td><code>devflow-scan</code></td><td>生成或修复知识页</td><td>&quot;用 devflow-scan 生成知识页&quot;</td></tr><tr><td><code>devflow-ask</code></td><td>带出处回答关于项目的问题</td><td>&quot;X 在哪里实现？&quot;（不说技能名也会用到）</td></tr></tbody></table></div>
+<h2 id="提交门禁">提交门禁</h2>
+<p>pre-commit hook 运行 <code>devflow check --staged</code>。CI 中可以运行 <code>devflow check</code>，检查工作树。</p>
+<div class="table"><table><thead><tr><th>规则</th><th>结果</th></tr></thead><tbody><tr><td><code>.devflow/</code> 下的文件格式错误</td><td>拒绝提交</td></tr><tr><td><code>.devflow/specs/</code> 和 <code>specs.lock</code> 不符（手改、手加、手删）</td><td>拒绝提交</td></tr><tr><td><code>events.jsonl</code> 中已提交的行被修改或删除</td><td>拒绝提交</td></tr><tr><td>暂存了某个变更 <code>affected_paths</code> 内的代码，而该变更还没开工</td><td>警告；<code>enforce: strict</code> 时拒绝</td></tr><tr><td>暂存了已开工变更的代码，但它的 <code>events.jsonl</code> 没有暂存或不是最新</td><td>警告，提示 <code>git add .devflow/changes/&lt;id&gt;</code></td></tr><tr><td>有已开工的变更时，暂存了不属于任何进行中变更、也不在 <code>.devflow/</code> 下的文件</td><td>警告，列出这些文件</td></tr><tr><td>知识页有问题（过期、引用失效等）</td><td>警告</td></tr></tbody></table></div>
+<p>规范、事件日志、批准快照和证据附件，按暂存区的内容检查。方案格式和业务状态仍然按工作树计算，所以用 <code>git add -p</code> 部分暂存时，请核对相关文件是否都暂存了。</p>
+<p>紧急情况可以用 <code>git commit --no-verify</code> 跳过本地门禁，CI 中的检查仍然有效。</p>
+<h2 id="安全模型">安全模型</h2>
+<p>DevFlow 防的是 Agent 的<strong>失误和越级</strong>：跳过审批、自己判定通过、手改规范。它<strong>不防恶意篡改</strong>，有写权限的 Agent 理论上能改任何文件。防线有三层：</p>
+<ol><li><strong>人专属命令要求交互终端</strong>：<code>approve</code>、<code>archive</code>、<code>evidence confirm</code> 在非交互终端中直接拒绝。在 Codex 下，这一层可以被绕过（见<a href="#选择你的-agent">选择你的 Agent</a>）。</li><li><strong>Agent 侧的禁止规则</strong>：Claude Code 用 <code>.claude/settings.json</code> 禁止运行 approve 和 archive，并禁止直接编辑 <code>.devflow/specs/</code> 和 <code>events.jsonl</code>；Codex 用 <code>.codex/rules/devflow.rules</code>。</li><li><strong>git 门禁和代码审查</strong>：批准记录随 <code>events.jsonl</code> 进入提交，审查代码时能看到谁在什么时候批准了什么。</li></ol>
+<p>另外：</p>
+<ul><li><code>verify</code> 只运行 <code>project.yaml</code> 中的命令，而 <code>project.yaml</code> 计入批准哈希。</li><li>审查页离线生成，不加载任何外部资源，也不执行方案里的 HTML 或脚本。</li><li>知识页和证据都不能引用 <code>exclude</code> 中的文件。</li></ul>
+<h2 id="常见问题与排错">常见问题与排错</h2>
+<p><strong>提交后状态从 <code>ready_to_archive</code> 变回了 <code>applying</code></strong><br>提交本身不会造成这种情况。原因是验证之后有文件被改过，包括文档。运行 <code>devflow resume &lt;id&gt;</code> 查看原因，然后重新 <code>verify</code> 并补齐证据。</p>
+<p><strong>状态是 <code>rebase_required</code></strong><br>批准之后，有提交改动了 <code>affected_paths</code> 中的文件，或者同一能力的规范被别的变更改了。让 Agent 检查方案是否仍然适用，必要时修改，然后重新批准。</p>
+<p><strong>archive 被拒：&quot;规范 X 在本变更批准后被修改过&quot;</strong><br>另一个修改同一能力的变更先归档了。让 Agent 根据最新规范更新本变更的规范增量，然后重新批准、重新验证。</p>
+<p><strong>archive 被拒：&quot;知识页有 N 个错误&quot;</strong><br>运行 <code>devflow wiki lint</code> 查看，或者让 Agent 用 devflow-scan 修复。</p>
+<p><strong>提交被拒：&quot;内容与 specs.lock 不符&quot;</strong><br>有人手改了 <code>.devflow/specs/</code>。用 <code>git restore &lt;文件&gt;</code> 撤销，新加的文件直接删除。要改规范，请新建一个变更并归档。</p>
+<p><strong>提交被拒：&quot;事件日志的已提交内容被修改或删除&quot;</strong><br>用 <code>git restore .devflow/changes/&lt;id&gt;/events.jsonl</code> 恢复。</p>
+<p><strong><code>.DS_Store</code> 或编辑器临时文件让批准失效、提交被拒</strong><br>devflow 只看 git 会跟踪的文件。出现这类问题，说明这些临时文件没有被忽略。把它们加进 <code>.gitignore</code>：</p>
+<div class="code"><div class="code-bar"><span>终端</span><button class="copy" type="button">复制</button></div><pre><code>echo '.DS_Store' &gt;&gt; .gitignore</code></pre></div>
+<p><strong>render 报&quot;审查页内容有 N 处不允许的写法&quot;</strong><br>错误信息里有文件名和行号。把 <code>html</code>、<code>svg</code> 代码块改成 <code>flow</code> 等图形块，去掉代码块属性和图片。</p>
+<p><strong>知识页报 <code>verified_commit ... 必须是提交哈希</code></strong><br>给哈希加上引号：<code>verified_commit: &quot;1234567&quot;</code>。</p>
+<p><strong>Codex 没有拦截 <code>devflow approve</code></strong><br>第一次在项目中使用 Codex 时，要选择信任该项目，<code>.codex/rules/</code> 才会加载。即使加载了规则，交互终端检查在 Codex 下仍可能被绕过。</p>
+<h2 id="升级-devflow">升级 devflow</h2>
+<ol><li>重新打包，并全局安装新版本。</li><li>在每个已启用 DevFlow 的项目里运行 <code>devflow update</code>，重新生成技能和说明段落。手工改过的技能文件会被覆盖。</li><li>运行 <code>devflow doctor</code>，确认 hook 和 Agent 文件都是最新的。</li></ol>
+<h2 id="已知限制">已知限制</h2>
+<ul><li><strong>规范从变更中逐步积累</strong>：<code>.devflow/specs/</code> 一开始是空的，只随着归档增长。DevFlow 不会从现有代码自动生成规范，因为那样的规范没有经过审核。</li><li><strong>没有图形界面</strong>：审查靠离线 HTML 页面，批准和归档靠终端命令。</li><li><strong>不自动提交、推送或部署</strong>：这些都由人决定。</li></ul>
+<h2 id="另请参阅">另请参阅</h2>
+<ul><li><a href="../README.md">README.md</a>：项目概览</li><li><a href="体验反馈.md">体验反馈.md</a>：早期试用记录</li><li><code>.devflow/knowledge/index.md</code>：本仓库自身的知识页索引</li><li><a href="../THIRD_PARTY_LICENSES.md">THIRD_PARTY_LICENSES.md</a>：第三方许可证</li></ul>
+</article></main>
+</div>
+<div class="toast" role="status" aria-live="polite"></div>
+<script>
+const MD="# DevFlow 使用手册\n\n让 AI 编码 Agent 先出方案、经你批准再改代码，并把需求和设计原因留在仓库里。\n\n> 适用版本：devflow 0.2.0　·　更新：2026-11-08　·　本手册的输出示例均来自 0.2.0 实测；`approve`、`archive`、`evidence confirm` 只能由人运行，它们的输出按源码 `src/cli.ts` 核对。\n\nDevFlow 嵌入你已有的 Agent（Claude Code 或 Codex）使用，自己不调用任何模型。Agent 负责读代码、写方案、写代码；`devflow` 命令只做确定性的事：校验格式、给批准绑定哈希、计算状态、运行验证命令、合并规范、在提交时把关。\n\n> **只负责审查和批准？** 你只需要读[快速入门](#快速入门)的第 1 步，以及[第 2 步：审查](#第-2-步审查人)、[第 3 步：批准](#第-3-步批准人在自己的终端)和[第 8 步：归档](#第-8-步归档人在自己的终端)。其余工作由 Agent 完成。\n\n**一句话流程**\n\n```text\n提方案(Agent) → 审查并批准(人) → 实现、验证、记证据(Agent) → 提交代码(人) → 更新知识页(Agent) → 归档(人)\n```\n\n## 选择你的 Agent\n\n两种 Agent 的用法相同，区别在于调用技能的方式和安全防线的强度。\n\n| | Claude Code | Codex |\n| --- | --- | --- |\n| 调用技能 | 直接说技能名：\"用 devflow-propose 提一个变更\" | 用 `$devflow-propose` |\n| 生成的文件 | `.claude/skills/devflow-*/`、`CLAUDE.md`、`.claude/settings.json` | `.agents/skills/devflow-*/`、`AGENTS.md`、`.codex/rules/devflow.rules` |\n| 禁止 Agent 运行 approve / archive | 有效（已实测拦截） | 实验性：项目被信任后才加载规则 |\n| 交互终端防线 | 有效：Agent 的 shell 不是交互终端 | **可被绕过**：模型可以自行申请交互终端 |\n\n两个都用也可以，`devflow init` 会为两者都生成文件。\n\n---\n\n## 快速入门\n\n做完这一节，你会有一个启用了 DevFlow、提交门禁生效、能跑验证命令的项目。大约 5 分钟。\n\n**前提**：Node 22 或更高版本，git，以及一个**至少已有一次提交**的 Git 项目。\n\n### 1. 安装 devflow\n\n在 devflow 源码目录里打包，然后全局安装：\n\n```bash\nnpm install && npm pack\n```\n\n```bash\nnpm install -g ./devflow-0.2.0.tgz\n```\n\n```bash\ndevflow --version\n```\n\n预期输出：\n\n```text\n0.2.0\n```\n\n必须全局安装：终端里要能运行 `devflow`，pre-commit hook 也依赖这个命令。\n\n> 开发 devflow 本身时，可以不打包，直接运行 `node src/cli.ts \u003c命令>`（需要 Node 23.6 或更高版本）。\n\n### 2. 在项目里初始化\n\n在你的项目根目录运行：\n\n```bash\ndevflow init\n```\n\n预期输出（节选）：\n\n```text\n+ .devflow/project.yaml\n+ .devflow/specs/specs.lock\n+ .devflow/knowledge/index.md\n+ .gitignore（追加 .devflow/runtime/）\n✓ pre-commit hook 已安装：/path/to/project/.git/hooks/pre-commit\n✓ .claude/skills/devflow-propose/SKILL.md\n✓ CLAUDE.md\n✓ .claude/settings.json\n…\n```\n\n`init` 只为检测到的 Agent 生成文件：项目里有 `.claude/` 或 `CLAUDE.md`，就装 Claude Code；有 `.codex/`、`.agents/` 或 `AGENTS.md`，就装 Codex。两种都没检测到时，两个都装。要指定，写 `--agents claude`、`--agents codex` 或 `--agents claude,codex`。\n\n`init` 可以重复运行，不会覆盖已有文件。`CLAUDE.md` 和 `AGENTS.md` 里，只有 `\u003c!-- devflow:begin -->` 和 `\u003c!-- devflow:end -->` 之间的内容由 DevFlow 维护，其余内容不会被改动。\n\n> **注意**\n> 项目里已经有别的 pre-commit hook 时，`init` 不会覆盖它，而是提示你手动加一行。\n\n### 3. 声明验证命令（人来做）\n\n编辑 `.devflow/project.yaml`，把 `verify: []` 换成你平时用来确认\"没改坏\"的命令：\n\n```yaml\nverify:\n  - name: unit-tests     # 名称，不能重复；任务的验收条件会用这个名字引用它\n    run: npm test        # 用 sh -c 执行\n  - name: backend-test\n    run: mvn -q -B test\n    cwd: backend         # 可选，相对项目根目录\n```\n\n> **注意**\n> 只有这里声明的命令会被 `devflow verify` 运行，所有命令退出码为 0 才算通过。这个文件由人维护，并计入每次批准的哈希：如果 Agent 能改它，就能删掉测试让自己通过。所以批准之后改动它，已有的批准会失效。\n\n常见技术栈：\n\n| 技术栈 | `run` |\n| --- | --- |\n| Node | `npm test`；前端没有测试时，至少配 `npm run build` |\n| Maven | `mvn -q -B test`（`-B` 关闭交互输出） |\n| Gradle | `./gradlew test --console=plain` |\n| Python | `pytest -q` |\n| Go | `go test ./...` |\n\n验证命令生成的文件（`dist/`、`target/`、`node_modules/` 等）必须写进 `.gitignore`。否则验证期间工作树发生变化，结果会被记为 `unknown`。\n\n### 4. 验证你的安装\n\n```bash\ndevflow doctor\n```\n\n预期输出：\n\n```text\n✓ Node：v26.13.0\n✓ git：git version 2.39.5\n✓ 仓库：/path/to/project\n✓ 初始化：.devflow/ 存在\n✓ hook：指向 /opt/homebrew/lib/node_modules/devflow/dist/cli.js\n✓ Agent 文件（claude）：与当前版本一致\n! 知识页：知识页为空，devflow-archive 没有页面可更新\n    修复：用 devflow-scan 技能生成知识页；小项目可以跳过\n✓ .gitignore：已忽略 .devflow/runtime/\n```\n\n`✓` 表示正常，`!` 表示警告，`✗` 表示错误。有 `✗` 时退出码为 1，每个问题下面都附有修复命令。知识页为空的警告可以先不管，见[可选：生成知识页](#可选生成知识页)。\n\n**如果出现以下问题**\n\n- `! project.yaml：没有声明验证命令`：回到第 3 步。不声明验证命令时，验证结果永远是 `unknown`，变更无法归档。\n- `✗ hook：…不存在`：devflow 的安装位置变了，重新运行 `devflow init`。\n- `✗ Agent 文件…不一致`：运行 `devflow update`。\n\n### 5. 提交\n\n```bash\ngit add -A && git commit -m \"启用 DevFlow\"\n```\n\n预期输出中会有一行，表示提交门禁已经生效：\n\n```text\n✓ devflow check 通过\n```\n\n> 使用 Codex 时，第一次在项目里打开 Codex 要选择**信任**该项目，`.codex/rules/` 才会加载。\n\n---\n\n## 走一遍完整的变更\n\n下面以一个最小的需求为例：给 `math.js` 新增 `subtract(a, b)`。每一步都标明由谁来做。\n\n### 第 1 步：提方案（Agent）\n\n在 Agent 里说：\n\n> 用 devflow-propose 提一个变更：在 math.js 中新增 subtract(a, b)，返回 a 减 b。\n\nAgent 信息不足时会先问你，然后读相关代码和当前规范，运行 `devflow new \u003cid>` 生成目录，写好方案，最后运行 `devflow validate` 和 `devflow render`。**这一步 Agent 不会改业务代码。**\n\nAgent 生成的变更目录如下：\n\n```text\n.devflow/changes/2026-11-08-add-subtract/\n├── change.yaml            标题与影响路径\n├── proposal.md            为什么、改什么、影响、不做什么\n├── specs/math/spec.md     规范增量：本次对系统行为契约的增、改、删\n├── design.md              技术方案与流程图\n└── tasks.yaml             任务、依赖与验收条件\n```\n\n其中 `tasks.yaml` 是后面验收的依据，每条验收条件都要写清楚怎么证明：\n\n```yaml\nschema_version: 2\ntasks:\n  - id: T1\n    title: 实现 subtract 并补测试\n    acceptance:\n      - id: AC1\n        text: subtract(5, 3) 返回 2\n        method: automated      # automated：由验证命令证明；manual：由人确认\n        check: unit-tests      # 引用 project.yaml 中的 verify.name\n```\n\n**验证**：Agent 最后会给出 render 的结果。\n\n```text\n✓ /path/to/project/.devflow/runtime/rendered/2026-11-08-add-subtract.html\n  内容哈希：sha256:79445fe7ed97bef5475cec4400d48d5e7ece7c1f033f7997691a9db2a89bc446\n  审查后由人在自己的终端运行：devflow approve 2026-11-08-add-subtract\n```\n\n### 第 2 步：审查（人）\n\n用浏览器打开上面的 HTML 文件。审查页直接从方案文件生成，没有经过模型改写，离线可用。\n\n| 面板 | 内容 |\n| --- | --- |\n| A 提案 | 为什么、改什么、影响、不做什么 |\n| B 规范增量 | 新增（绿）、修改（黄）、删除（红）的需求，每条需求附场景表（WHEN / THEN） |\n| C 设计 | 技术方案与流程图 |\n| D 任务与依赖 | 每个任务的验收条件和依赖图 |\n| E 被审文件与内容哈希 | 验证命令、每个文件的哈希，以及可以直接复制的批准命令 |\n\n重点看三处：\n\n1. 验收条件能不能真正被验证？`automated` 的条件引用的是哪个验证命令？\n2. `affected_paths` 有没有覆盖要改的代码？\n3. \"不做什么\"是否符合你的预期？\n\n**要修改时**，直接告诉 Agent 改哪里。Agent 会重新校验、重新生成审查页，哈希也会随之变化。\n\n### 第 3 步：批准（人，在自己的终端）\n\n复制审查页 E 面板末尾的命令，在你自己的终端里运行：\n\n```bash\ndevflow approve 2026-11-08-add-subtract --hash 79445fe7ed97\n```\n\n`--hash` 至少要有 12 位。它和当前内容一致时直接批准，不会再让你输入 `y`。预期输出：\n\n```text\n变更：2026-11-08-add-subtract\n基线：a1b2c3d  批准人：你的名字\n内容哈希：sha256:79445fe7ed97…\n被审文件：\n  .devflow/changes/2026-11-08-add-subtract/change.yaml\n  …\n✓ 已批准 2026-11-08-add-subtract\n下一步：在 Agent 里说\"用 devflow-apply 实现变更 2026-11-08-add-subtract\"\n```\n\n只有看到 `✓ 已批准` 才算成功。\n\n不带 `--hash` 时，终端会列出同样的信息并要求确认。核对哈希和审查页一致后，输入 `y` 并回车。\n\n**如果批准不成功**\n\n| 提示 | 原因与处理 |\n| --- | --- |\n| `--hash 与当前内容哈希不一致，未批准` | 审查之后方案又被改过，或者命令没复制完整。重新 render，从新页面复制命令 |\n| `approve 只能由人在交互终端中运行` | 命令在非交互环境中运行，例如被 Agent 代为执行、在编辑器任务面板里运行或经过管道。请在普通终端窗口里运行 |\n| `✗ 未批准：… 状态仍为 draft` | 确认时没有输入 `y`。重新运行 |\n| 未配置 git user.name | 运行 `git config user.name \"你的名字\"`，批准人取自这里 |\n\n### 第 4 步：实现并验证（Agent）\n\n在 Agent 里说：\n\n> 用 devflow-apply 实现变更 2026-11-08-add-subtract。\n\nAgent 会先记录开工：\n\n```bash\ndevflow apply 2026-11-08-add-subtract --start\n```\n\n```text\n✓ 2026-11-08-add-subtract 已开工（基于 a1b2c3d）\n```\n\n然后写代码和测试，运行验证命令：\n\n```bash\ndevflow verify 2026-11-08-add-subtract --json\n```\n\n```json\n{\n  \"result\": \"pass\",\n  \"checks\": [{ \"name\": \"unit-tests\", \"log_hash\": \"sha256:…\", \"exit\": 0, \"ms\": 412, \"log\": \".devflow/runtime/verify/…\" }],\n  \"run_id\": \"6f1c…\"\n}\n```\n\n> **注意**\n> 下一步记录证据时要用到 `run_id`，它只在 `--json` 输出里出现。不加 `--json` 时，输出是 `✓ unit-tests  退出码 0  0.4s`，后面跟一行\"配置检查结果\"。\n\nAgent 发现方案本身有问题时，会停下来告诉你，而不是自己改方案。改方案会让批准失效，需要你重新批准。\n\n### 第 5 步：记录验收证据（Agent，人工项由人确认）\n\n测试通过，不等于验收条件被覆盖了。每条验收条件都需要一份证据，说明它是由哪个测试、哪条断言证明的。Agent 写一个 JSON 文件：\n\n```json\n{\n  \"task\": \"T1\",\n  \"acceptance\": \"AC1\",\n  \"kind\": \"automated\",\n  \"summary\": \"subtract(5, 3) 返回 2\",\n  \"verify_run\": \"6f1c…\",\n  \"check\": \"unit-tests\",\n  \"test\": \"test/math.test.js\",\n  \"assertion\": \"assert.equal(subtract(5, 3), 2)\",\n  \"artifacts\": []\n}\n```\n\n```bash\ndevflow evidence add 2026-11-08-add-subtract --file AC1-evidence.json\n```\n\n命令会输出记录下来的证据，其中包含 `evidence_id`。\n\n自动证据必须满足三个条件，否则会被拒绝：引用的是**本轮批准之后**、**当前代码版本下**、**指定检查通过**的那次验证。\n\n**人工验收项**（`method: manual`）的证据，把 `kind` 改成 `manual`，并填写 `procedure`（怎么操作）、`expected`（预期）、`observed`（实际看到的）。Agent 记录之后，**由你在自己的终端里确认**：\n\n```bash\ndevflow evidence confirm 2026-11-08-add-subtract \u003cevidence-id>\n```\n\n所有验收条件都有有效证据后，Agent 标记任务完成：\n\n```bash\ndevflow task done 2026-11-08-add-subtract T1\n```\n\n```text\n✓ T1 已完成；任务 1/1\n```\n\n**验证**：任何时候都可以运行 `resume`，查看还缺什么以及下一步做什么。\n\n```bash\ndevflow resume 2026-11-08-add-subtract\n```\n\n```text\n2026-11-08-add-subtract: ready_to_archive — 验证通过，等待人工归档\n下一步：devflow archive 2026-11-08-add-subtract\n```\n\n**如果证据被拒**\n\n| 提示 | 处理 |\n| --- | --- |\n| `自动证据必须引用本轮批准、当前代码下成功的指定验证检查` | 验证之后代码又变了，或者 `check` 名称和验收条件里写的不一致。重新运行 `verify --json`，用新的 `run_id` |\n| `证据方式与批准的验收条件不一致` | `kind` 必须和验收条件的 `method` 一致 |\n| `任务验收条件不存在：T1/AC9` | `task` 或 `acceptance` 写错了，对照 `tasks.yaml` |\n| `当前状态不允许记录证据` | 还没开工，或者批准已经失效。运行 `devflow resume` 看原因 |\n| `任务 T2 依赖的任务尚未完成` | 先完成被依赖的任务，并补齐它的证据 |\n\n### 第 6 步：提交代码（人）\n\n什么时候提交、提交信息怎么写，由你决定。DevFlow 不会自动提交或推送。\n\n提交时，把变更目录 `.devflow/changes/\u003cid>/` 和证据目录 `.devflow/evidence/\u003cid>/` 一起提交。其中的 `events.jsonl` 是批准、验证和证据的记录。\n\n> **注意**\n> 验证结果绑定当时的工作树内容（不含 `.devflow/`）。验证之后改了任何文件，包括文档，状态都会回到 `applying`，证据也会失效，需要重新验证并重新记录证据。所以说明文档要在 verify 之前写完。\n\n### 第 7 步：归档准备（Agent）\n\n在 Agent 里说：\n\n> 用 devflow-archive 为变更 2026-11-08-add-subtract 做归档准备。\n\nAgent 会更新相关的知识页，链接到归档后的设计文档，并确认 `devflow wiki lint` 没有错误。项目里没有知识页时，可以跳过这一步。\n\n### 第 8 步：归档（人，在自己的终端）\n\n```bash\ndevflow archive 2026-11-08-add-subtract\n```\n\n终端会列出将要写入的规范文件和将要移动的目录。确认后输入 `y`：\n\n```text\n变更：2026-11-08-add-subtract  归档人：你的名字\n将写入：\n  .devflow/specs/math/spec.md\n将移动：.devflow/changes/2026-11-08-add-subtract → .devflow/changes/archive/2026-11-08-add-subtract\n确认归档？输入 y 确认：y\n✓ 已归档到 .devflow/changes/archive/2026-11-08-add-subtract；更新规范：.devflow/specs/math/spec.md\n```\n\n然后提交归档结果：\n\n```bash\ngit add -A && git commit -m \"归档 2026-11-08-add-subtract\"\n```\n\n一个功能因此分成两次提交，这是有意的：知识页的 `verified_commit` 要指向包含代码改动的那次提交，所以代码必须先提交。\n\n归档中途被打断时，再运行一次 `devflow archive \u003cid>` 即可。它会发现未完成的事务，从中断处继续，不会重复写入。\n\n### 之后\n\n在任何新会话里都可以问：\n\n> subtract 是哪次变更加的？为什么不处理非数字输入？\n\nAgent 会从 `.devflow/changes/archive/` 和 `.devflow/specs/` 里找到需求、规范和设计原因，并给出出处。\n\n---\n\n## 状态与下一步\n\n状态不存盘，每次都由变更文件、`events.jsonl` 和 git 现算。查看状态：\n\n```bash\ndevflow status                 # 所有进行中的变更\ndevflow status \u003cid>            # 一个变更\ndevflow status --all           # 同时列出已归档的变更\ndevflow resume \u003cid>            # 一个变更：状态、证据缺口和下一条命令\n```\n\n```text\n2026-11-08-add-subtract  draft  任务 0/1  尚未批准\n```\n\n| 状态 | 含义 | 下一步 |\n| --- | --- | --- |\n| `draft` | 尚未批准，或者批准后被审文件被改过 | 人审查后 `approve` |\n| `rebase_required` | 已批准、未开工，但批准后有提交改动了 `affected_paths`，或者同一能力的规范变了 | 人重新评估方案，必要时让 Agent 修改，再 `approve` |\n| `approved` | 已批准，可以开工 | Agent 用 devflow-apply 实现 |\n| `applying` | 已开工；任务未完成、证据失效，或者验证之后代码有改动 | Agent 继续实现，或者重新 `verify` 并补证据 |\n| `needs_fix` | 最近一次验证结果为 `fail` 或 `unknown` | 看验证日志修复后重新 `verify` |\n| `ready_to_archive` | 任务全部完成，证据有效，且验证通过的就是当前代码 | 人提交代码 → Agent 做归档准备 → 人 `archive` |\n| `archived` | 已归档 | — |\n\n规则：\n\n- **改方案就要重新批准**：批准后改动任何被审文件或 `project.yaml`，状态回到 `draft`。\n- **重新批准就是新的一轮**：之前的开工、验证、证据和任务完成记录都不再算数。\n- **`unknown` 不算通过**：以下情况结果都记为 `unknown`：验证命令无法运行、超时（单条命令 30 分钟）、没有声明命令、验证期间工作树发生变化。\n- **一个工作树同时只能开工一个 v2 变更**。要并行做多个变更，用独立的 git worktree。\n\n### 按场景检查验证结果\n\n| 场景 | `verify` 结果 | 状态 |\n| --- | --- | --- |\n| 所有命令退出码为 0 | `pass` | 补齐证据并完成任务后，变为 `ready_to_archive` |\n| 任一命令退出码非 0 | `fail`，并输出日志路径 | `needs_fix` |\n| 没有声明验证命令 | `unknown` | `needs_fix` |\n| 命令不存在，例如没装 `mvn` | `unknown` | `needs_fix` |\n| 构建产物没被忽略，验证期间工作树变了 | `unknown` | `needs_fix` |\n| 验证通过后又改了代码 | 上次的结果作废 | `applying` |\n\n验证日志在 `.devflow/runtime/verify/\u003cid>/` 目录下。\n\n---\n\n## 可选：生成知识页\n\n知识页（`.devflow/knowledge/pages/*.md`）记录代码\"现在是怎样\"，每条事实都带源码出处。在 Agent 里说：\n\n> 用 devflow-scan 为本项目生成知识页。\n\nAgent 会按业务模块写页面，并运行 `devflow wiki lint`，直到没有错误。\n\n> **注意**\n> 小项目可以跳过这一步。在一个 25 个文件的演示项目上评测，有没有知识页，回答准确率相同，而且有知识页时每题多用约 25% 的轮数。知识页的价值在于代码里看不出来的东西：设计原因、历史变更，以及 Agent 读不完的大项目。\n\n## 可选：本地使用记录\n\n`init` 之后，项目默认在本地记录 devflow 命令的使用情况：命令名（白名单内）、结果、原因码和耗时。不记录完整参数、输出、环境、用户名或源码，也不上传。原始记录保留 30 天，反馈保留 90 天，报告保留 180 天。\n\n```bash\ndevflow usage configure --off             # 关闭\ndevflow usage configure --on              # 打开\nDEVFLOW_USAGE=off devflow status          # 只对这一次命令关闭\ndevflow usage report --since 2026-11-01   # 本地报告\ndevflow usage feedback \u003cid> --file feedback.json\ndevflow usage export --since 2026-11-01 --out summary.json\ndevflow usage prune --before 2026-10-01\n```\n\n反馈文件格式为 `{category, impact, note, related_invocation?}`，其中 `category` 取 `blocked`、`confusing`、`false-positive`、`missed-defect` 或 `other`。`note` 是自由文本，默认不会出现在聚合导出里；不要在里面写凭据。\n\n关闭记录或记录写入失败，都不影响命令本身的退出码。\n\n## 可选：改进候选与评测\n\n同一类问题出现至少 3 次，会生成一个去重后的改进候选。候选只会生成一份待补全的提案，不会自动审批或实施。\n\n```bash\ndevflow improve list\ndevflow improve draft \u003ccandidate-id> \u003cchange-id>\ndevflow eval run --suite workflow --out regression.json\ndevflow eval compare baseline.json regression.json\ndevflow improve resolve \u003ccandidate-id> --report comparison.json\n```\n\n故障评测在临时仓库里运行。只有每个任务每个版本至少跑 5 次、关键结果不退化、目标中位指标下降至少 10% 时，才标记为 `improved`，而且这仍不代表统计显著。真实 Agent 评测需要显式启动，可能消耗账号额度。\n\n## 可选：继续使用 v1 格式\n\n0.2.0 新建的变更默认是 v2 格式（`schema_version: 2`，验收条件带证据）。旧的 v1 变更可以继续使用。要显式创建 v1 格式：\n\n```bash\ndevflow new \u003cid> --schema 1\n```\n\n已有 v2 变更的项目，不能再用旧版 CLI 往里追加事件。\n\n---\n\n## 命令参考\n\n所有命令都支持 `--json`，输出机器可读的结果。出错时退出码为 1，`✗` 后面给出原因和修复提示。标 **人** 的命令要求交互终端，Agent 无法代为运行。\n\n| 命令 | 谁运行 | 说明 |\n| --- | --- | --- |\n| `devflow init [--agents claude,codex]` | 人 | 创建 `.devflow/`、安装 hook、生成 Agent 文件。可以重复运行 |\n| `devflow update [--agents …]` | 人 | 升级 devflow 后重新生成 Agent 文件；不写 `--agents` 时更新已安装过的 |\n| `devflow doctor` | 任意 | 自检，并给出修复命令 |\n| `devflow new \u003cid> [--schema 1]` | Agent | 生成变更目录骨架。id 用小写字母、数字、连字符，建议 `\u003c日期>-\u003c英文短名>` |\n| `devflow validate \u003cid>` | Agent | 校验文件、对当前规范试算合并，并检查审查页会拒绝的写法，报错定位到行号 |\n| `devflow render \u003cid> [-o 文件]` | Agent | 生成离线审查页，默认在 `.devflow/runtime/rendered/\u003cid>.html` |\n| `devflow approve \u003cid> [--hash 前缀]` | **人** | 批准并绑定内容哈希 |\n| `devflow apply \u003cid> --start` | Agent | 记录开工，只能从 `approved` 开始 |\n| `devflow verify \u003cid>` | Agent | 运行 `project.yaml` 中的命令；全部通过时退出码为 0 |\n| `devflow evidence add \u003cid> --file \u003cjson>` | Agent | 记录一条验收证据 |\n| `devflow evidence confirm \u003cid> \u003cevidence-id>` | **人** | 确认人工验收证据 |\n| `devflow task done \u003cid> \u003c任务>` | Agent | 记录任务完成；依赖的任务必须先完成，证据必须有效 |\n| `devflow resume \u003cid>` | 任意 | 当前状态、证据缺口和下一条命令 |\n| `devflow status [id] [--all]` | 任意 | 状态、任务进度和原因 |\n| `devflow archive \u003cid>` | **人** | 合并规范增量、更新 `specs.lock`、移动变更目录；中断后重跑即可继续 |\n| `devflow wiki lint` | Agent | 校验知识页的引用和链接，并检查是否过期 |\n| `devflow check [--staged]` | hook / CI | 门禁检查 |\n\n## 文件格式参考\n\n### project.yaml（人维护）\n\n```yaml\nschema_version: 1\nverify:                  # devflow verify 只运行这里的命令\n  - name: unit-tests     # 不能重复\n    run: npm test        # 用 sh -c 执行\n    cwd: .               # 可选，相对仓库根目录\nexclude:                 # 知识页和证据不得引用的文件，规则同 .gitignore\n  - \".env*\"\n  - \"**/*.pem\"\n  - \"**/*.key\"\n  - \"**/node_modules/**\"\nenforce: warn            # warn | strict：暂存了未开工变更的代码时，警告还是拒绝提交\n```\n\n### change.yaml\n\n```yaml\nschema_version: 2\nmin_cli_version: 0.2.0\ntitle: 新增减法函数\naffected_paths:          # 本变更会改动的代码（glob），不能写 .devflow/ 下的路径\n  - math.js\n  - test/**\n```\n\n`affected_paths` 有两个用途：批准后有提交改动了这些路径时，状态变为 `rebase_required`；提交未开工变更的这些文件时，门禁会警告。\n\n### proposal.md\n\n写四节：`## 为什么`、`## 改什么`、`## 影响`、`## 不做什么`。不能只有标题没有正文。超过 3 句的段落，validate 会给出警告。\n\n### 规范增量 specs/\u003c能力>/spec.md\n\n```markdown\n## ADDED Requirements\n\n### Requirement: 减法\n系统 SHALL 导出 subtract(a, b)，返回 a 减 b 的结果。\n\n#### Scenario: 整数相减\n- WHEN 调用 subtract(5, 3)\n- THEN 返回 2\n\n## MODIFIED Requirements\n### Requirement: \u003c当前规范中已有的名称>\n（这条需求修改后的全文）\n\n## REMOVED Requirements\n### Requirement: \u003c当前规范中已有的名称>\n**Reason**: 删除原因\n```\n\n- 能力名（目录名）只能用小写字母、数字、连字符。\n- 每条新增或修改的需求都必须含 `SHALL`、`MUST` 或\"必须\"，并且至少有一个 `#### Scenario:`。\n- 新能力只能用 ADDED，可以加一节 `## Purpose` 说明这个能力是什么。\n- MODIFIED 和 REMOVED 里的名称，必须和当前规范完全一致。\n- 不改变对外行为的变更（例如纯重构）可以不写规范增量。validate 只会提醒，不算错误。\n\n### tasks.yaml（v2）\n\n```yaml\nschema_version: 2\ntasks:\n  - id: T1\n    title: 实现 subtract 并补测试\n    acceptance:\n      - id: AC1\n        text: subtract(5, 3) 返回 2\n        method: automated        # automated | manual\n        check: unit-tests        # automated 必填，引用 verify.name\n  - id: T2\n    title: 更新使用说明\n    depends_on: [T1]\n    acceptance:\n      - id: AC2\n        text: README 示例可以照抄运行\n        method: manual\n```\n\n- 任务 id 以字母开头，不能重复。`depends_on` 引用的任务必须存在，依赖不能成环。\n- 验收条件的 id 在整个变更内唯一。\n- **不要写进度字段**（如 `status`、`done`）。进度记在事件日志里；写在这个文件里的话，每勾选一次任务，批准就会失效一次。\n\n> **注意**\n> 在 0.2.0 中，`devflow new` 生成的 `tasks.yaml` 骨架里，注释示例仍是 v1 写法（`acceptance: [字符串]`）。请按上面的 v2 对象格式写。\n\n### execution.md\n\n可选的实施笔记。它是变更目录里唯一不参与批准哈希的文件，改它不会让批准失效。\n\n### design.md 与审查页的写法限制\n\n流程图写在代码块里：\n\n````markdown\n```flow TB\n(开始) -> {a、b 都是数字?}\n{a、b 都是数字?} -> 返回 a - b: 是\n{a、b 都是数字?} -> 行为未定义: 否\n```\n````\n\n- `A -> B: 标签`：冒号后面是连线上的标签。`{条件?}` 是判断节点，`(开始)` 是起止节点。\n- 可用的图：`flow`、`sequence`、`tree`、`er`。\n- 普通代码块只写语言名，例如 ` ```java `。\n\n审查页会**拒绝**以下写法：`html` 和 `svg` 代码块、带属性的代码块（如 ` ```ts src=… `）、`:::` 块、图片。正文里的 `\u003c` 和 `>` 会被转义，按原样显示。validate 通过，render 就不会因为写法问题失败。\n\n### 证据 JSON\n\n| 字段 | automated | manual | 说明 |\n| --- | --- | --- | --- |\n| `task`、`acceptance` | 必填 | 必填 | 对应 `tasks.yaml` 中的 id |\n| `kind` | `automated` | `manual` | 必须和验收条件的 `method` 一致 |\n| `summary` | 必填 | 必填 | 一句话结论 |\n| `verify_run` | 必填 | — | `verify --json` 输出的 `run_id` |\n| `check` | 必填 | — | 和验收条件的 `check` 一致 |\n| `test` | 必填 | — | 测试文件路径，必须在仓库内 |\n| `assertion` | 必填 | — | 证明这条验收条件的断言 |\n| `procedure`、`expected`、`observed` | — | 必填 | 操作步骤、预期、实际 |\n| `artifacts` | 可选 | 可选 | 最多 10 个仓库内文件，每个不超过 1 MiB；不能是 exclude 中的文件，也不能是符号链接 |\n\n附件会被复制到 `.devflow/evidence/\u003cid>/\u003cevidence-id>/`，并记录哈希。附件被改动或丢失，证据就会失效。\n\n### events.jsonl\n\n每行一个事件，记录批准、开工、验证、证据、任务完成和归档。**只能由 devflow 命令追加**。已提交的行被改动或删除时，提交会被门禁拒绝。\n\n### 知识页 knowledge/pages/\u003cslug>.md\n\n```markdown\n---\nschema_version: 1\ntitle: 数学工具\nverified_commit: \"9f3a2c1\"\nsources:\n  - path: math.js\n    symbol: subtract\n  - path: test/math.test.js\n    lines: [1, 10]\nrelated_specs: []\n---\n\n# 数学工具\n……\n```\n\n- `verified_commit` **要加引号**：`1234567` 这样的短哈希不加引号，会被 YAML 当成数字读取。\n- `symbol` 写成 `类名` 或 `类名#方法名`，必须和源码里的文字一致。\n- 正文里用完整路径引用的文件，也要列进 `sources`。漏列的文件改了，这页不会被标为过期。\n- 每个页面都要在 `knowledge/index.md` 里有一行：`- [标题](pages/\u003cslug>.md) — 摘要`。\n\n`devflow wiki lint` 报**错误**的情况：frontmatter 缺失或字段不合法；引用的文件不存在、符号找不到或行号越界；引用了 `exclude` 中的文件；`index.md` 漏列页面或列了不存在的页面；正文链接指向不存在的目标。报**警告**的情况：引用的文件在 `verified_commit` 之后有改动；正文引用了没列入 `sources` 的文件；一个知识页都没有。\n\n## Agent 技能参考\n\n`devflow init` 为每个 Agent 安装五个技能。\n\n| 技能 | 什么时候用 | 典型说法 |\n| --- | --- | --- |\n| `devflow-propose` | 新功能、行为修改、修复，先出方案 | \"用 devflow-propose 提一个变更：……\" |\n| `devflow-apply` | 实现已批准的变更，并验证、记录证据 | \"用 devflow-apply 实现变更 \u003cid>\" |\n| `devflow-archive` | 验证通过后、归档前，更新知识页 | \"用 devflow-archive 为变更 \u003cid> 做归档准备\" |\n| `devflow-scan` | 生成或修复知识页 | \"用 devflow-scan 生成知识页\" |\n| `devflow-ask` | 带出处回答关于项目的问题 | \"X 在哪里实现？\"（不说技能名也会用到） |\n\n## 提交门禁\n\npre-commit hook 运行 `devflow check --staged`。CI 中可以运行 `devflow check`，检查工作树。\n\n| 规则 | 结果 |\n| --- | --- |\n| `.devflow/` 下的文件格式错误 | 拒绝提交 |\n| `.devflow/specs/` 和 `specs.lock` 不符（手改、手加、手删） | 拒绝提交 |\n| `events.jsonl` 中已提交的行被修改或删除 | 拒绝提交 |\n| 暂存了某个变更 `affected_paths` 内的代码，而该变更还没开工 | 警告；`enforce: strict` 时拒绝 |\n| 暂存了已开工变更的代码，但它的 `events.jsonl` 没有暂存或不是最新 | 警告，提示 `git add .devflow/changes/\u003cid>` |\n| 有已开工的变更时，暂存了不属于任何进行中变更、也不在 `.devflow/` 下的文件 | 警告，列出这些文件 |\n| 知识页有问题（过期、引用失效等） | 警告 |\n\n规范、事件日志、批准快照和证据附件，按暂存区的内容检查。方案格式和业务状态仍然按工作树计算，所以用 `git add -p` 部分暂存时，请核对相关文件是否都暂存了。\n\n紧急情况可以用 `git commit --no-verify` 跳过本地门禁，CI 中的检查仍然有效。\n\n## 安全模型\n\nDevFlow 防的是 Agent 的**失误和越级**：跳过审批、自己判定通过、手改规范。它**不防恶意篡改**，有写权限的 Agent 理论上能改任何文件。防线有三层：\n\n1. **人专属命令要求交互终端**：`approve`、`archive`、`evidence confirm` 在非交互终端中直接拒绝。在 Codex 下，这一层可以被绕过（见[选择你的 Agent](#选择你的-agent)）。\n2. **Agent 侧的禁止规则**：Claude Code 用 `.claude/settings.json` 禁止运行 approve 和 archive，并禁止直接编辑 `.devflow/specs/` 和 `events.jsonl`；Codex 用 `.codex/rules/devflow.rules`。\n3. **git 门禁和代码审查**：批准记录随 `events.jsonl` 进入提交，审查代码时能看到谁在什么时候批准了什么。\n\n另外：\n\n- `verify` 只运行 `project.yaml` 中的命令，而 `project.yaml` 计入批准哈希。\n- 审查页离线生成，不加载任何外部资源，也不执行方案里的 HTML 或脚本。\n- 知识页和证据都不能引用 `exclude` 中的文件。\n\n## 常见问题与排错\n\n**提交后状态从 `ready_to_archive` 变回了 `applying`**\n提交本身不会造成这种情况。原因是验证之后有文件被改过，包括文档。运行 `devflow resume \u003cid>` 查看原因，然后重新 `verify` 并补齐证据。\n\n**状态是 `rebase_required`**\n批准之后，有提交改动了 `affected_paths` 中的文件，或者同一能力的规范被别的变更改了。让 Agent 检查方案是否仍然适用，必要时修改，然后重新批准。\n\n**archive 被拒：\"规范 X 在本变更批准后被修改过\"**\n另一个修改同一能力的变更先归档了。让 Agent 根据最新规范更新本变更的规范增量，然后重新批准、重新验证。\n\n**archive 被拒：\"知识页有 N 个错误\"**\n运行 `devflow wiki lint` 查看，或者让 Agent 用 devflow-scan 修复。\n\n**提交被拒：\"内容与 specs.lock 不符\"**\n有人手改了 `.devflow/specs/`。用 `git restore \u003c文件>` 撤销，新加的文件直接删除。要改规范，请新建一个变更并归档。\n\n**提交被拒：\"事件日志的已提交内容被修改或删除\"**\n用 `git restore .devflow/changes/\u003cid>/events.jsonl` 恢复。\n\n**`.DS_Store` 或编辑器临时文件让批准失效、提交被拒**\ndevflow 只看 git 会跟踪的文件。出现这类问题，说明这些临时文件没有被忽略。把它们加进 `.gitignore`：\n\n```bash\necho '.DS_Store' >> .gitignore\n```\n\n**render 报\"审查页内容有 N 处不允许的写法\"**\n错误信息里有文件名和行号。把 `html`、`svg` 代码块改成 `flow` 等图形块，去掉代码块属性和图片。\n\n**知识页报 `verified_commit ... 必须是提交哈希`**\n给哈希加上引号：`verified_commit: \"1234567\"`。\n\n**Codex 没有拦截 `devflow approve`**\n第一次在项目中使用 Codex 时，要选择信任该项目，`.codex/rules/` 才会加载。即使加载了规则，交互终端检查在 Codex 下仍可能被绕过。\n\n## 升级 devflow\n\n1. 重新打包，并全局安装新版本。\n2. 在每个已启用 DevFlow 的项目里运行 `devflow update`，重新生成技能和说明段落。手工改过的技能文件会被覆盖。\n3. 运行 `devflow doctor`，确认 hook 和 Agent 文件都是最新的。\n\n## 已知限制\n\n- **规范从变更中逐步积累**：`.devflow/specs/` 一开始是空的，只随着归档增长。DevFlow 不会从现有代码自动生成规范，因为那样的规范没有经过审核。\n- **没有图形界面**：审查靠离线 HTML 页面，批准和归档靠终端命令。\n- **不自动提交、推送或部署**：这些都由人决定。\n\n## 另请参阅\n\n- [README.md](../README.md)：项目概览\n- [体验反馈.md](体验反馈.md)：早期试用记录\n- `.devflow/knowledge/index.md`：本仓库自身的知识页索引\n- [THIRD_PARTY_LICENSES.md](../THIRD_PARTY_LICENSES.md)：第三方许可证\n";
+const toast=(t)=>{const el=document.querySelector('.toast');el.textContent=t;el.classList.add('show');setTimeout(()=>el.classList.remove('show'),1400)};
+const copy=(t,msg)=>navigator.clipboard.writeText(t).then(()=>toast(msg),()=>toast('复制失败，请手动选择'));
+// 第一段正文是副标题
+const first=document.querySelector('article h1+p');if(first)first.className='subtitle';
+document.querySelectorAll('.code .copy').forEach(b=>b.addEventListener('click',()=>copy(b.closest('.code').querySelector('code').textContent,'已复制代码')));
+document.getElementById('copy-md').addEventListener('click',()=>copy(MD,'已复制 Markdown 全文'));
+// 跳到折叠的可选章节里时，先展开它
+const openTarget=()=>{const el=location.hash&&document.getElementById(decodeURIComponent(location.hash.slice(1)));if(!el)return;const d=el.closest('details')||(el.tagName==='DETAILS'?el:null);if(d&&!d.open){d.open=true;el.scrollIntoView()}};
+addEventListener('hashchange',openTarget);openTarget();
+// 目录高亮当前章节
+const links=new Map([...document.querySelectorAll('nav a')].map(a=>[decodeURIComponent(a.hash.slice(1)),a]));
+const spy=new IntersectionObserver(es=>{for(const e of es)if(e.isIntersecting){links.forEach(a=>a.classList.remove('active'));links.get(e.target.id)?.classList.add('active')}},{rootMargin:'-60px 0px -75% 0px'});
+document.querySelectorAll('h2[id],h3[id],details[id]').forEach(h=>spy.observe(h));
+// 目录筛选与 / 快捷键
+const search=document.querySelector('.search');
+search.addEventListener('input',()=>{const q=search.value.trim().toLowerCase();document.querySelectorAll('nav li').forEach(li=>li.classList.toggle('hidden',!!q&&!li.textContent.toLowerCase().includes(q)))});
+addEventListener('keydown',e=>{if(e.key==='/'&&document.activeElement!==search){e.preventDefault();search.focus()}});
+</script>
+</body>
+</html>

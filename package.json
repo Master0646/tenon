@@ -19,6 +19,7 @@
   },
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "docs:html": "node scripts/build-manual-html.mjs",
     "prepack": "npm run -s build",
     "test": "node --test \"test/**/*.test.ts\"",
     "typecheck": "tsc"
