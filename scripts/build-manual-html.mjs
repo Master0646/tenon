@@ -1,12 +1,33 @@
 #!/usr/bin/env node
 // 从 docs/使用手册.md 生成 docs/使用手册.html（Stripe 风格单页）。Markdown 是唯一源文件。
 // shortcut: 只支持使用手册用到的 Markdown 子集（标题、段落、列表、表格、引用、代码块、行内代码/粗体/链接），手册用上新语法时再扩展。
-import { readFileSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const src = fileURLToPath(new URL('../docs/使用手册.md', import.meta.url));
 const out = src.replace(/\.md$/, '.html');
 const md = readFileSync(src, 'utf8');
+
+// 概览页和写作检查都交给随包附带的 answer-me-with-html；独立 AM_HOME，不碰用户自己的配置
+const AM = fileURLToPath(new URL('../vendor/answer-me-with-html/am.mjs', import.meta.url));
+const amHome = mkdtempSync(join(tmpdir(), 'devflow-am-'));
+const am = (...args) => {
+  try {
+    return { ok: true, text: execFileSync(process.execPath, [AM, ...args], { env: { ...process.env, AM_HOME: amHome }, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }) };
+  } catch (e) { return { ok: false, text: String(e.stdout || '') + String(e.stderr || e.message) }; }
+};
+try {
+  const lint = am('lint', src, '--style', '80');
+  // 写作警告只提示，不阻止生成
+  console.log(/0 warnings/.test(lint.text) || !lint.text.trim() ? '✓ 使用手册.md 写作检查无警告' : `! 使用手册.md 写作检查：\n${lint.text.trimEnd()}`);
+  const overview = src.replace(/\.md$/, '-概览.md');
+  const r = am('render', overview, '-o', overview.replace(/\.md$/, '.html'), '--no-open');
+  if (!r.ok) { console.error(`✗ 概览页渲染失败：\n${r.text}`); process.exit(1); }
+  console.log(r.text.trimEnd());
+} finally { rmSync(amHome, { recursive: true, force: true }); }
 
 const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 // 与 GitHub 的标题锚点规则一致，手册里的 #链接 才能对上
@@ -198,6 +219,7 @@ details.optional>div{padding-bottom:8px}
 <div class="logo">DevFlow<span>DOCS</span></div>
 <div class="spacer"></div>
 <input class="search" type="search" placeholder="筛选目录　按 / 聚焦" aria-label="筛选目录">
+<a class="btn" href="使用手册-概览.html">一页概览</a>
 <button class="btn" type="button" id="copy-md">复制给 LLM</button>
 <a class="btn" href="使用手册.md">查看 Markdown</a>
 </header>
