@@ -9,9 +9,11 @@ const ID = 'role-access';
 
 test('toPanelBody：标题降级、去掉首个一级标题、转义 HTML、保留行内代码与代码块', () => {
   const p: Problem[] = [];
-  const out = toPanelBody('# 提案\n\n## 为什么\n<script>x</script> 与 `<b>`\n```java\nif (a < b) {}\n```\n# 第二个一级标题', 'f', p);
+  const out = toPanelBody('# 提案\n\n## 为什么\n<script>x</script> 与 `<b>`\n```java\nif (a < b) {}\n```\n### 细节\n# 第二个一级标题', 'f', p);
   assert.deepEqual(p, []);
-  assert.match(out, /^#### 为什么$/m);
+  // 面板标题是 h2：## 降成 h3、### 降成 h4，不跳级
+  assert.match(out, /^### 为什么$/m);
+  assert.match(out, /^#### 细节$/m);
   assert.doesNotMatch(out, /^# 提案/m);
   assert.match(out, /&lt;script&gt;x&lt;\/script&gt; 与 `<b>`/);
   assert.match(out, /if \(a < b\) \{\}/); // 代码块内不转义

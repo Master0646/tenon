@@ -52,7 +52,8 @@ export function toPanelBody(text: string, file: string, problems: Problem[]): st
         droppedTitle = true;
         return;
       }
-      out.push(`${'#'.repeat(Math.min(h[1].length + 2, 6))} ${escapeInline(h[2])}`);
+      // 面板标题是 h2，文件里的 ## 降一级成 h3，不跳级；多出来的 # 也落到 h3，不会另起面板
+      out.push(`${'#'.repeat(Math.min(Math.max(h[1].length + 1, 3), 6))} ${escapeInline(h[2])}`);
       return;
     }
     out.push(escapeInline(line));
@@ -114,11 +115,11 @@ export function buildDraft(root: string, id: string): { draft: string; hash: str
     ? decisionAnswers(root, id).map((d) => `- ${escapeInline(d.question)} → **${escapeInline(d.answer)}**${d.by === 'human' ? '' : '（未作答，按推荐项）'}`)
     : decisions.map((d) => `\`\`\`\`ask\n${escapeInline(d.question)}\n${d.options.map((o) => `${o === d.recommend ? '*' : '-'} ${escapeInline(o)}`).join('\n')}\n\`\`\`\``);
   const points = meta?.summary?.length ? meta.summary.map((s) => `- ${escapeInline(s.replace(/\n/g, ' '))}`).join('\n') : `- ${cell(meta?.title ?? id)}\n- （change.yaml 没有填写 summary）`;
-  panels.push(`## ${settled ? '已拍板' : '待你拍板'}（${decisions.length} 项）与方案要点\n${asks.join(settled ? '\n' : '\n\n') || '没有需要你拍板的事项。'}\n\n#### 方案要点\n\n${points}\n\n#### 影响范围\n\n${meta?.affected_paths.map((p) => `- \`${p.replace(/`/g, '')}\``).join('\n') || '- 未填写'}`);
+  panels.push(`## ${settled ? '已拍板' : '待你拍板'}（${decisions.length} 项）与方案要点\n${asks.join(settled ? '\n' : '\n\n') || '没有需要你拍板的事项。'}\n\n### 方案要点\n\n${points}\n\n### 影响范围\n\n${meta?.affected_paths.map((p) => `- \`${p.replace(/`/g, '')}\``).join('\n') || '- 未填写'}`);
 
   // 重新批准：只列改动的行；没改的面板在标题上注明，可以不再看
   const changed = diff.available ? diff.files : [];
-  if (changed.length) panels.push(`## 批准差异（${changed.length} 个文件，相对上次批准）\n${changed.map((f) => `#### ${cell(f.path)}\n\n${lineDiff(f.before, f.after)}`).join('\n\n')}`);
+  if (changed.length) panels.push(`## 批准差异（${changed.length} 个文件，相对上次批准）\n${changed.map((f) => `### ${cell(f.path)}\n\n${lineDiff(f.before, f.after)}`).join('\n\n')}`);
   const same = (...match: string[]) => (changed.length && !changed.some((f) => match.some((m) => f.path.startsWith(`${base}/${m}`))) ? ' · 与上次批准相同' : '');
   // 没有任何证据时矩阵只是任务面板里验收条件的重复，不显示
   if (matrix.some((e) => e.status !== 'missing')) panels.push(`## 验收矩阵\n| 条件 | 方式 | 证据 | 代码版本 | 状态 | 原因 |\n| --- | --- | --- | --- | --- | --- |\n${matrix.map((e) => `| ${cell(e.acceptance + ' ' + e.text)} | ${e.method} | ${cell(e.evidence_id ?? '缺失')} | ${cell(e.worktree_hash ?? '未知')} | ${e.status} | ${cell(e.reason ?? '')} |`).join('\n')}`);
