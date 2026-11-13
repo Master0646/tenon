@@ -82,6 +82,17 @@ function index(root: string, token: string): string {
   return SHELL('DevFlow 审查台', `<h1>变更</h1><p class="lead">本页每 5 秒自动刷新。需要你操作的变更排在前面。</p><div class="panel">${body}</div>`, true);
 }
 
+// 只在审查台注入：把 answer-me 纸张主题的变量换成 Linear 深色；离线审查页（devflow render）不受影响。
+// 用户要求保留：面板字母徽标、右侧大纲、差异与状态的红绿色、图表原有强调色。
+const PAGE_STYLE = `<style>
+html[data-theme][data-mode]{color-scheme:dark;${TOKENS};--font-sans:var(--lin-font);--font-serif:var(--lin-font);--head-font:var(--lin-font);--font-mono:var(--lin-mono);--radius:8px;--bg:var(--lin-canvas);--paper:var(--lin-s1);--fill:var(--lin-s2);--ink:var(--lin-ink);--ink-2:var(--lin-ink-2);--ink-3:var(--lin-ink-3);--line:var(--lin-line-2);--line-2:var(--lin-line);--accent:var(--lin-primary-hover);--accent-bg:rgb(94 106 210/.16);--ok:#8cc79a;--ok-bg:#1c3122;--err:#f0928a;--err-bg:#3a1d1a;--warn:#e3b866;--warn-bg:#352a13;--head-bg:var(--lin-ink);--head-fg:var(--lin-canvas)}
+html[data-theme] .am-head h1{font-weight:600;letter-spacing:-.6px}
+html[data-theme] .am-panel{border-radius:12px;border-color:var(--lin-line);box-shadow:inset 0 1px 0 rgb(255 255 255/.04)}
+html[data-theme] .am-panel-head h2{font-weight:500;letter-spacing:-.2px}
+html[data-theme] .am-md p,html[data-theme] .am-md li,html[data-theme] .am-intro{line-height:1.6}
+html[data-theme] .am-diagram{--accent:#e59a7d;--accent-bg:#3a2219}
+</style>`;
+
 const BAR_STYLE = `<style>
 body{padding-bottom:72px}
 .df-bar,.df-dlg{${TOKENS};color-scheme:dark}
@@ -165,7 +176,7 @@ function actionBar(root: string, id: string, token: string, hash: string): strin
   const dialog = `<dialog class="df-dlg"><h3>确认人工证据</h3><p>勾选你认可的条目。不认可的取消勾选，回到 Agent 说明要补什么。</p>${pending.map((e) => `<label><input type="checkbox" value="${esc(e.evidence_id)}" checked> <b>${esc(e.task)} / ${esc(e.acceptance)}</b> ${esc(e.summary)}
 <dl>${row('步骤', e.procedure)}${row('预期', e.expected)}${row('实际', e.observed)}</dl></label>`).join('')}
 <menu><button type="button" data-df="cancel">取消</button><button type="button" data-df="confirm">确认所选</button></menu></dialog>`;
-  return `${BAR_STYLE}<div class="df-bar" data-home="/${token}/"><a href="/${token}/">← 全部变更</a><span class="df-state">${esc(st.status)} · ${esc(st.reason)}</span>${action}<span class="df-msg" role="status"></span></div>${dialog}${BAR_SCRIPT}`;
+  return `${PAGE_STYLE}${BAR_STYLE}<div class="df-bar" data-home="/${token}/"><a href="/${token}/">← 全部变更</a><span class="df-state">${esc(st.status)} · ${esc(st.reason)}</span>${action}<span class="df-msg" role="status"></span></div>${dialog}${BAR_SCRIPT}`;
 }
 
 /** 页面提交的选项序号 → 写进批准事件的结论；序号无效或数量对不上时拒绝 */
