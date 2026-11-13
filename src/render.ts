@@ -193,8 +193,6 @@ title: ${JSON.stringify(title)}
 subtitle: ${JSON.stringify(`变更 ${id} · 当前状态 ${st.status}（${st.reason}）`)}
 file: ${id}
 ---
-本页由 devflow render 从被审文件确定性生成，不经过模型改写。
-
 ${panels.join('\n\n')}
 `;
   return { draft, hash, problems };
