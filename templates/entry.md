@@ -6,6 +6,6 @@
 - 以源码为准。关于本项目的事实必须带文件引用（`path:行号` 或 `path#符号`）。查不到就回答"未知"，不要凭通用经验推测。
 - `.devflow/specs/` 是已批准的行为规范，只能经 `devflow archive` 修改，不要手改。
 - `.devflow/changes/*/events.jsonl` 只能由 devflow 命令追加，不要手改。
-- `devflow approve` 与 `devflow archive` 只能由人在自己的终端中运行，不要代为执行。
+- 批准、确认人工证据、归档只能由人来做：人在自己的终端运行 `devflow approve` / `devflow evidence confirm` / `devflow archive`，或在审查台（人自己启动的 `devflow review`）里点按钮。不要代为执行，不要启动或访问审查台。需要等人操作时，在后台运行 `devflow wait <id>`。
 - 改代码之前先出方案：新功能或行为修改用 `devflow-propose` 写成变更，经人审批（`devflow approve`）后再实现。
 - 技能：`devflow-propose`（提出变更方案）、`devflow-apply`（实现已批准的变更并验证）、`devflow-archive`（归档前更新知识页）、`devflow-scan`（生成或更新知识页）、`devflow-ask`（带引用回答项目问题）。

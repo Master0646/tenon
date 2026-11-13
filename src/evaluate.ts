@@ -250,9 +250,10 @@ export function runWorkflowSuite(version = 'unknown'): EvalReport {
           write('test.txt', 'changed');
           assert.equal(evidenceMatrix(root, id)[0].status, 'stale'); assert.notEqual(deriveStatus(root, id).status, 'ready_to_archive');
         } else if (fault === 'old-approval') {
-          write(`.devflow/changes/${id}/proposal.md`, '# Proposal\n\nChanged requirement.\n');
+          // 重新批准时验收条件变了：旧证据不得沿用（条件和代码都没变时才沿用）
+          write(`.devflow/changes/${id}/tasks.yaml`, 'schema_version: 2\ntasks:\n  - id: T1\n    title: Evidence fixture\n    acceptance:\n      - id: AC1\n        text: Changed requirement\n        method: automated\n        check: unit\n');
           approve(root, id); applyStart(root, id);
-          assert.equal(deriveStatus(root, id).tasks.done, 0); assert.equal(evidenceMatrix(root, id)[0].status, 'missing');
+          assert.equal(deriveStatus(root, id).tasks.done, 0); assert.equal(evidenceMatrix(root, id)[0].status, 'stale');
         } else if (fault.startsWith('artifact-')) {
           const file = join(root, evidence.artifacts[0].path);
           if (fault === 'artifact-missing') rmSync(file); else writeFileSync(file, 'tampered');
@@ -271,5 +272,5 @@ export function runWorkflowSuite(version = 'unknown'): EvalReport {
     } finally { rmSync(root, { recursive: true, force: true }); }
     samples.push({ case_id: fault, critical: true, outcome, completed: outcome === 'pass', duration_ms: performance.now() - started, manual_interventions: null, detail });
   }
-  return { schema_version: 1, tool_version: version, protocol_hash: hash('workflow-fault-v1'), fixture_hash: hash({ cases: WORKFLOW_IDS, fixture_schema: 2, acceptance: ['current-approval', 'current-worktree', 'intact-artifact', 'manual-confirmation', 'mutual-exclusion', 'spec-baseline', 'resume-next-command', 'usage-fail-open', 'archive-roll-forward'], check: 'unit:true', method: 'automated-or-manual' }), at: new Date().toISOString(), samples, tokens: null, cost: null, cost_source: null };
+  return { schema_version: 1, tool_version: version, protocol_hash: hash('workflow-fault-v2'), fixture_hash: hash({ cases: WORKFLOW_IDS, fixture_schema: 2, acceptance: ['current-acceptance', 'current-worktree', 'intact-artifact', 'manual-confirmation', 'mutual-exclusion', 'spec-baseline', 'resume-next-command', 'usage-fail-open', 'archive-roll-forward'], check: 'unit:true', method: 'automated-or-manual' }), at: new Date().toISOString(), samples, tokens: null, cost: null, cost_source: null };
 }

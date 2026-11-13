@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse } from 'yaml';
-import { DF, DevflowError, approvalCycle, changeSchema, listChanges, sha256, appendEvent, headCommit, readEvents, requireChange, requireInit, worktreeHash, type DevflowEvent } from './core.ts';
+import { DF, DevflowError, approvalCycle, changeSchema, doneTasks, listChanges, sha256, appendEvent, headCommit, requireChange, requireInit, worktreeHash, type DevflowEvent } from './core.ts';
 import { evidenceIssues } from './evidence.ts';
 import { deriveStatus, type Status } from './status.ts';
 import { loadTasks, validateProject } from './validate.ts';
@@ -40,8 +40,8 @@ export function taskDone(root: string, id: string, task: string | undefined): De
   const tasks = loadTasks(root, id);
   const t = tasks.find((x) => x.id === task);
   if (!t) throw new DevflowError(`任务不存在：${task}`, `可选：${tasks.map((x) => x.id).join(', ')}`);
-  const done = new Set(approvalCycle(root, id).events.flatMap((e) => (e.type === 'task-done' ? [e.task] : [])));
-  if (done.has(task) && !(changeSchema(root, id) === 2 && approvalCycle(root, id).events.findLast((e) => e.type === 'task-done' && e.task === task && e.worktree_hash === worktreeHash(root)) === undefined)) throw new DevflowError(`任务 ${task} 已标记完成`);
+  const done = doneTasks(root, id);
+  if (done.has(task)) throw new DevflowError(`任务 ${task} 已标记完成`);
   const pending = (t.depends_on ?? []).filter((d) => !done.has(d) || (changeSchema(root, id) === 2 && evidenceIssues(root, id, d).length));
   if (pending.length) throw new DevflowError(`任务 ${task} 依赖的任务尚未完成：${pending.join(', ')}`);
   if (changeSchema(root, id) === 2) {
@@ -56,7 +56,8 @@ export function taskDone(root: string, id: string, task: string | undefined): De
 export interface VerifyResult {
   result: 'pass' | 'fail' | 'unknown';
   run_id: string;
-  checks: { name: string; exit: number | null; log_hash: string; ms: number; log: string; note?: string }[];
+  /** quiet：检查成功但没有任何输出，日志无法用来核对证据 */
+  checks: { name: string; exit: number | null; log_hash: string; ms: number; log: string; note?: string; quiet?: boolean }[];
   note?: string;
 }
 
@@ -85,7 +86,8 @@ export function verify(root: string, id: string): VerifyResult {
     const timedOut = r.signal === 'SIGTERM' || (r.error as any)?.code === 'ETIMEDOUT';
     // 127 = 命令不存在、126 = 不可执行：没跑起来，不能算失败也不能算通过
     const note = timedOut ? '超时' : r.error ? r.error.message : r.status === 127 || r.status === 126 ? '命令无法运行' : undefined;
-    return { name: c.name, log_hash: sha256(readFileSync(log)), exit: timedOut || r.error ? null : r.status, ms: Date.now() - started, log, note };
+    const quiet = r.status === 0 && !`${r.stdout ?? ''}${r.stderr ?? ''}`.trim();
+    return { name: c.name, log_hash: sha256(readFileSync(log)), exit: timedOut || r.error ? null : r.status, ms: Date.now() - started, log, note, ...(quiet ? { quiet } : {}) };
   });
   const after = worktreeHash(root);
 

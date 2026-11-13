@@ -147,3 +147,38 @@ test('CLI usage records stable failure reasons and produces a reviewable candida
   assert.equal(row.status_after, 'draft');
   assert.ok(row.reason_code);
 });
+
+test('status 行尾标出轮到谁：待你批准、待你确认 N 条人工证据、待你归档、Agent 进行中；--json 带 todo', async () => {
+  const { humanTodo } = await import('../src/status.ts');
+  const { applyStart, taskDone, verify } = await import('../src/exec.ts');
+  const { confirmEvidence, recordEvidence } = await import('../src/evidence.ts');
+  const { approve } = await import('../src/status.ts');
+  const dir = makeRepo();
+  writeChange(dir, ID);
+  write(dir, '.devflow/project.yaml', 'schema_version: 1\nverify:\n  - name: unit\n    run: echo ok\nenforce: warn\n');
+  write(dir, `.devflow/changes/${ID}/change.yaml`, 'schema_version: 2\nmin_cli_version: 0.2.0\ntitle: 新格式\naffected_paths: [backend/**]\nsummary: [要点]\n');
+  write(dir, `.devflow/changes/${ID}/tasks.yaml`, 'schema_version: 2\ntasks:\n  - id: T1\n    title: 人工验收\n    acceptance:\n      - id: AC1\n        text: 看过页面\n        method: manual\n      - id: AC2\n        text: 看过日志\n        method: manual\n');
+  write(dir, '.devflow/changes/archive/2026-01-01-a/events.jsonl', `${JSON.stringify({ type: 'archived', at: '2026-01-01T08:30:00.000Z', actor: 't' })}\n`);
+  const todo = () => humanTodo(dir, ID, deriveStatus(dir, ID));
+  const line = () => cli(dir, 'status', '--all').stdout.trim().split('\n');
+
+  assert.equal(todo(), '待你批准');
+  assert.match(line()[0], /  ← 待你批准$/);
+  assert.equal(line()[1], '2026-01-01-a  archived  2026-01-01 08:30 UTC'); // 已归档行不带这一段
+  assert.equal(JSON.parse(cli(dir, 'status', '--json').stdout)[0].todo, '待你批准');
+
+  approve(dir, ID);
+  applyStart(dir, ID);
+  assert.equal(todo(), null);
+  assert.match(line()[0], /  ← Agent 进行中$/);
+  assert.equal(JSON.parse(cli(dir, 'status', '--json').stdout)[0].todo, null);
+
+  verify(dir, ID);
+  const ids = ['AC1', 'AC2'].map((acceptance) => recordEvidence(dir, ID, { task: 'T1', acceptance, kind: 'manual', summary: 's', procedure: 'p', expected: 'e', observed: 'o' }).evidence_id);
+  assert.equal(todo(), '待你确认 2 条人工证据');
+  confirmEvidence(dir, ID, ids[0]);
+  assert.match(line()[0], /  ← 待你确认 1 条人工证据$/);
+  confirmEvidence(dir, ID, ids[1]);
+  taskDone(dir, ID, 'T1');
+  assert.equal(todo(), '待你归档');
+});

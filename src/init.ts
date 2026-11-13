@@ -10,6 +10,9 @@ verify: []
 #  - name: backend-test
 #    run: mvn -q test
 #    cwd: backend
+# 代码不在本仓库时，列出代码所在的 Git 仓库（相对本仓库根）。声明后代码哈希只算这些仓库：
+# 它们的改动会让验证和证据过期，本仓库里的文档改动不会。
+# code_roots: ["../backend", "../frontend"]
 exclude:            # 不得被知识页引用、不得出现在渲染页中
   - ".env*"
   - "**/*.pem"
@@ -75,6 +78,11 @@ const CHANGE_FILES: Record<string, string> = {
   'change.yaml': `schema_version: 1
 title: ""            # 一句话说明本变更
 affected_paths: []   # 会改动的路径（glob），例如 backend/src/main/java/example/auth/**
+summary: []          # 方案要点：最多 7 条，每条一句，显示在审查页首屏
+decisions: []        # 需要人拍板的事项；没有就留空
+# - question: 普通用户访问时返回 403 还是空列表？
+#   options: [返回 403, 返回空列表]
+#   recommend: 返回 403
 `,
   'proposal.md': '# 提案\n\n## 为什么\n\n## 改什么\n\n## 影响\n',
   'design.md': '# 设计\n\n<!-- 图用 flow / sequence / tree 代码块直接写在这里 -->\n',

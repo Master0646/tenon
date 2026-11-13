@@ -1,0 +1,24 @@
+schema_version: 2
+tasks:
+  - id: T1
+    title: 抽出 humanTodo 并让审查台复用
+    acceptance:
+      - id: AC1
+        text: 单元测试覆盖四种取值：待你批准、待你确认 N 条人工证据、待你归档、无待办
+        method: automated
+        check: unit-tests
+      - id: AC2
+        text: 类型检查通过，review.ts 不再有自己的 owed 函数
+        method: automated
+        check: typecheck
+  - id: T2
+    title: status 的文本与 JSON 输出带上待办
+    depends_on: [T1]
+    acceptance:
+      - id: AC3
+        text: 测试断言文本行尾出现「← 待你批准」，--json 含 todo 字段，已归档行不带待办
+        method: automated
+        check: unit-tests
+      - id: AC4
+        text: 在本仓库实际运行 status，进行中的变更显示正确的待办
+        method: manual

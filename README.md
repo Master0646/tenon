@@ -36,12 +36,13 @@ devflow init
 
 1. **声明验证命令**（由人维护）：编辑 `.devflow/project.yaml` 的 `verify`，例如 `mvn -q test`、`npm test`。只有这里声明的命令会被 `devflow verify` 运行，验证结果决定变更能否归档。
 2. **自检**：`devflow doctor`。
-3. **提方案**：在 Agent 里说"用 devflow-propose 提一个变更：……"。Agent 写好方案后运行 `devflow render <id>`，给你一个离线审查页。
-4. **审批**：复制审查页上的 `devflow approve <id> --hash <前缀>`，在**自己的终端**运行。不带 `--hash` 时，核对哈希与审查页一致后输入 `y`。
-5. **实现与验证**：在 Agent 里说"用 devflow-apply 实现变更 <id>"。它会开工、逐个完成任务，并运行 `devflow verify <id>` 直到通过。
-6. **提交代码**：由你决定何时提交。
-7. **归档准备**：在 Agent 里说"用 devflow-archive 为变更 <id> 做归档准备"。它会更新知识页。
-8. **归档**：你在自己的终端运行 `devflow archive <id>`。规范增量合并进 `.devflow/specs/`，变更移到 `.devflow/changes/archive/`。
+3. **启动审查台**（一次）：在**自己的终端**运行 `devflow review`，保持它开着。浏览器会打开审查台，之后的批准、确认人工证据、归档都在这里点按钮。
+4. **提方案**：在 Agent 里说"用 devflow-propose 提一个变更：……"。Agent 写好方案后，变更出现在审查台首页的"待你批准"里。
+5. **审批**：打开变更。首屏是要你拍板的事项和方案要点，细节面板默认折叠。选好后点「批准此版本」。不用审查台时，也可以复制审查页上的 `devflow approve <id> --hash <前缀>` 到终端运行。
+6. **实现与验证**：在 Agent 里说"用 devflow-apply 实现变更 <id>"。它会开工、逐个完成任务，并运行 `devflow verify <id>` 直到通过。
+7. **提交代码**：由你决定何时提交。
+8. **归档准备**：在 Agent 里说"用 devflow-archive 为变更 <id> 做归档准备"。它会更新知识页。
+9. **归档**：在审查台点「归档」，或在自己的终端运行 `devflow archive <id>`。规范增量合并进 `.devflow/specs/`，变更移到 `.devflow/changes/archive/`。
 
 以后任何新会话，Agent 都能从 `.devflow/` 找回当时的需求、规范和设计原因。
 
@@ -63,7 +64,9 @@ devflow init
 | `devflow new <id>` | 生成变更目录骨架 |
 | `devflow validate <id>` | 校验变更文件、对当前规范做合并试算，并检查审查页写法与图语法 |
 | `devflow render <id> [-o 文件]` | 生成离线审查页 |
-| `devflow status [id] [--all]` | 显示派生状态与任务进度；`--all` 同时列出已归档的变更 |
+| `devflow status [id] [--all]` | 显示派生状态与任务进度，行尾标出轮到谁（待你批准、待你确认 N 条人工证据、待你归档，或 Agent 进行中）；`--json` 带 `todo` 字段；`--all` 同时列出已归档的变更 |
+| `devflow review [id]` | 启动本地审查台（只能由人在交互终端运行）：在浏览器里批准、批量确认人工证据、归档，并列出所有没收尾的变更 |
+| `devflow wait <id> [--timeout 秒]` | 等人批准、确认证据或归档后退出；Agent 在后台运行，人不用回对话里说"已批准" |
 | `devflow approve <id> [--hash 前缀]` | 批准并绑定内容哈希（只能由人在交互终端运行）；`--hash` 与审查页一致时直接批准 |
 | `devflow apply <id> --start` | 记录开工 |
 | `devflow task done <id> <任务>` | 记录任务完成 |
@@ -87,8 +90,9 @@ devflow init
 ## 安全模型与已知限制
 
 - **防的是失误与越级，不防恶意篡改。** 有写权限的 Agent 理论上能改任何文件。
-- **人专属命令**：`approve`、`archive` 要求交互终端（TTY）。Claude Code 的 shell 不是 TTY，此防线有效；Codex 可以让模型选择分配 TTY，此防线在 Codex 下**可被绕过**。
+- **人专属命令**：`approve`、`archive`、`evidence confirm`、`review` 要求交互终端（TTY）。Claude Code 的 shell 不是 TTY，此防线有效；Codex 可以让模型选择分配 TTY，此防线在 Codex 下**可被绕过**。
 - **禁止规则**：`init` 为 Claude Code 写入 deny 规则（已实测拦截 `devflow approve`），为 Codex 写入 `.codex/rules/devflow.rules`（只在项目被信任时加载，属实验性功能）。
+- **审查台**只监听 `127.0.0.1`，所有地址都带启动时生成的随机令牌，令牌只打印在你的终端里；令牌不对或 Host 不是本机一律返回 404。批准时页面提交它显示的内容哈希，与当前内容不一致就拒绝。能读到你终端输出或浏览器历史的进程可以拿到令牌，所以它和 TTY 检查一样只防越级。
 - **最后一道防线**是 git：pre-commit 与 CI 中的 `devflow check` 会拒绝手改 `.devflow/specs/`、改写已提交的事件日志等行为；批准记录随 `events.jsonl` 进入代码审查。
 - `check --staged` 对规范、事件日志及受控快照/附件读取暂存区；方案格式和业务状态仍从工作树派生，部分暂存时应核对对应材料。
 - 在小项目上，知识页对"代码里能直接搜到的事实"没有带来准确率提升（见 `docs/tasks/2026-11-06-devflow-m1.md`）；它的价值在于设计原因和历史变更这类代码里看不出来的知识。
@@ -99,7 +103,7 @@ devflow init
 
 ## 0.2.0：证据与持续改进
 
-新建变更默认为 v2，change.yaml 使用 schema_version: 2 和 min_cli_version: 0.2.0；tasks.yaml 同为 v2。旧 v1 可继续使用，`devflow new <id> --schema 1` 可显式创建旧格式；重新批准后旧任务完成记录不再计数。
+新建变更默认为 v2，change.yaml 使用 schema_version: 2 和 min_cli_version: 0.2.0；tasks.yaml 同为 v2。旧 v1 可继续使用，`devflow new <id> --schema 1` 可显式创建旧格式；v1 重新批准后旧任务完成记录不再计数。
 
 v2 每个任务的 acceptance 是至少一个 `{id, text, method, check?}` 对象；id 在变更内唯一，method 为 automated/manual，自动项的 check 引用 project.yaml 已声明的 verify.name。只有固定 execution.md 实施笔记不参与批准哈希，其他契约修改仍需重批。
 
@@ -109,7 +113,7 @@ v2 每个任务的 acceptance 是至少一个 `{id, text, method, check?}` 对�
 devflow resume <id> --json
 devflow verify <id> --json
 devflow evidence add <id> --file evidence.json
-# 下面的确认仅由人在自己的终端运行
+# 下面的确认仅由人来做：在审查台勾选确认，或在自己的终端运行
 devflow evidence confirm <id> <evidence-id>
 devflow task done <id> <task>
 ```
@@ -122,7 +126,13 @@ devflow task done <id> <task>
 
 人工项改为 kind: manual，并提供 procedure、expected、observed。附件最多十个、每个最多 1 MiB，禁止 exclude 文件、越界或符号链接；证据和批准快照属于受控项目材料，应与 events.jsonl 一起提交。原始运行日志丢失仅提示，受控附件或快照损坏会阻止后续流程。
 
-代码变化需重建证据；重新批准开始新周期。一个工作树只开工一个 v2 变更，多个任务用独立 worktree 隔离；同能力规范变化进入 rebase_required，更新方案后重新批准。归档确认期间代码变化会拒绝继续，部分写入事务只能在恢复相应代码与证据后前滚。
+代码变化需重建证据。重新批准开始新周期，但验收条件（文本、方式、检查命令）和代码都没变的证据与任务完成记录自动沿用，只需重新 `apply --start` 和 `verify`。
+
+代码不在 devflow 所在的仓库时，在 `project.yaml` 里声明 `code_roots: ["../backend", "../frontend"]`（每项是一个 Git 仓库的根，路径相对本仓库）。声明后代码哈希只算这些仓库：它们的改动会让验证和证据过期，本仓库里的文档改动不会。`affected_paths` 与提交门禁仍只管本仓库。
+
+`change.yaml` 的 `summary`（方案要点，最多 7 条）和 `decisions`（待拍板事项，每项给出选项和推荐）显示在审查页首屏。在审查台批准时选的结论记入批准事件，`devflow resume` 会显示给 Agent。
+
+一个工作树只开工一个 v2 变更，多个任务用独立 worktree 隔离；同能力规范变化进入 rebase_required，更新方案后重新批准。归档确认期间代码变化会拒绝继续，部分写入事务只能在恢复相应代码与证据后前滚。
 
 ### 本地使用记录
 

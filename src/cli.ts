@@ -1,6 +1,10 @@
 #!/usr/bin/env node
 // devflow 命令行入口。所有命令支持 --json；出错时退出码为 1
-import { readFileSync, writeFileSync } from 'node:fs';
+import { spawn } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import type { AddressInfo } from 'node:net';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { createInterface } from 'node:readline/promises';
 import { doctor } from './doctor.ts';
 import { parseArgs } from 'node:util';
@@ -8,6 +12,7 @@ import { AGENTS, detectAgents, guessAgents, installAgents, parseAgents, type Age
 import { check } from './check.ts';
 import { lintWiki } from './wiki.ts';
 import { render, reviewIssues } from './render.ts';
+import { reviewServer } from './review.ts';
 import { applyStart, taskDone, verify } from './exec.ts';
 import { commitArchive, discardArchive, pendingTx, stageArchive } from './archive.ts';
 import { fileURLToPath } from 'node:url';
@@ -15,9 +20,9 @@ import { recordEvidence, confirmEvidence, evidenceMatrix } from './evidence.ts';
 import { startUsage, finishUsage, configureUsage, pruneUsage, addFeedback, usageReport, exportUsage, getCandidate, listCandidates, resolveCandidate } from './usage.ts';
 import { runWorkflowSuite, compareReports, readReport } from './evaluate.ts';
 import { resolve } from 'node:path';
-import { DevflowError, approvalCycle, worktreeHash, withWorktreeLock, listChanges, repoRoot, requireChange, requireInit, reviewedFiles, type Issue } from './core.ts';
+import { DevflowError, approvalCycle, changeDir, doneTasks, readEvents, withWorktreeLock, listChanges, repoRoot, requireChange, requireInit, reviewedFiles, type Issue } from './core.ts';
 import { init, newChange } from './init.ts';
-import { approve, deriveStatus, listArchived, prepareApproval } from './status.ts';
+import { approve, decisionAnswers, deriveStatus, humanTodo, listArchived, prepareApproval } from './status.ts';
 import { loadTasks, validateChange, validateProject } from './validate.ts';
 
 const VERSION: string = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
@@ -48,6 +53,9 @@ const HELP = `devflow ${VERSION}
   validate <id>        校验变更文件是否齐全、格式正确
   status [id] [--all]  显示变更的派生状态；--all 同时列出已归档的变更
   render <id> [-o f]   从被审文件生成离线审查页（默认 .devflow/runtime/rendered/<id>.html）
+  review [id]          启动本地审查台（只能由人在交互终端中运行）：在浏览器里批准、
+                       确认人工证据、归档；保持终端打开，Ctrl+C 结束
+  wait <id> [--timeout 秒]  等人批准、确认证据或归档后退出（Agent 在后台运行；默认 1800 秒）
   approve <id> [--hash h]  批准变更并绑定内容哈希（只能由人在交互终端中运行）；
                        --hash 为审查页上的哈希前缀，一致时直接批准
   apply <id> --start   记录开工（状态须为 approved）
@@ -61,7 +69,7 @@ const { values: opts, positionals } = parseArgs({
   allowPositionals: true,
   options: {
     json: { type: 'boolean' }, staged: { type: 'boolean' }, agents: { type: 'string' }, hash: { type: 'string' }, out: { type: 'string', short: 'o' },
-    start: { type: 'boolean' }, all: { type: 'boolean' }, version: { type: 'boolean', short: 'v' },
+    start: { type: 'boolean' }, all: { type: 'boolean' }, timeout: { type: 'string' }, version: { type: 'boolean', short: 'v' },
     'tool-version': { type: 'string' }, file: { type: 'string' }, schema: { type: 'string' }, since: { type: 'string' }, before: { type: 'string' }, off: { type: 'boolean' }, on: { type: 'boolean' }, suite: { type: 'string' }, report: { type: 'string' },
     help: { type: 'boolean', short: 'h' },
   },
@@ -141,13 +149,19 @@ async function dispatch(): Promise<number> {
       else if (['applying', 'needs_fix'].includes(state.status) && missing[0]?.status === 'unconfirmed') next = `devflow evidence confirm ${id} ${missing[0].evidence_id}`;
       else if (['applying', 'needs_fix'].includes(state.status) && missing.length && !/重新验证|尚未验证|fail|unknown/.test(state.reason)) next = `devflow evidence add ${id} --file <${missing[0].acceptance}-evidence.json>`;
       else if (state.status === 'applying' && !missing.length && state.reason.includes('任务')) {
-        const done = new Set(approvalCycle(root, id).events.flatMap((e) => e.type === 'task-done' && (!e.worktree_hash || e.worktree_hash === worktreeHash(root)) ? [e.task] : []));
+        const done = doneTasks(root, id);
         const task = loadTasks(root, id).find((t) => !done.has(t.id) && (t.depends_on ?? []).every((d) => done.has(d)));
         if (task) next = `devflow task done ${id} ${task.id}`;
       }
-      const result = { ...state, approval_id: approvalCycle(root, id).approval_id, evidence, next, blockers: missing };
+      const decisions = decisionAnswers(root, id);
+      const result = { ...state, approval_id: approvalCycle(root, id).approval_id, evidence, decisions, next, blockers: missing };
       if (opts.json) console.log(JSON.stringify(result, null, 2));
-      else { console.log(`${id}: ${state.status} — ${state.reason}`); for (const e of missing) console.log(`${e.acceptance}: ${e.status} ${e.reason ?? ''}`); console.log(`下一步：${next}`); }
+      else {
+        console.log(`${id}: ${state.status} — ${state.reason}`);
+        for (const d of decisions) console.log(`拍板：${d.question} → ${d.answer}${d.by === 'human' ? '' : '（用户未作答，按推荐项）'}`);
+        for (const e of missing) console.log(`${e.acceptance}: ${e.status} ${e.reason ?? ''}`);
+        console.log(`下一步：${next}`);
+      }
       return 0;
     }
     case 'evidence': {
@@ -235,13 +249,52 @@ async function dispatch(): Promise<number> {
     }
     case 'status': {
       requireInit(root);
-      const list = (arg ? [requireChange(root, arg)] : listChanges(root)).map((id) => deriveStatus(root, id));
+      const list = (arg ? [requireChange(root, arg)] : listChanges(root)).map((id) => { const st = deriveStatus(root, id); return { ...st, todo: humanTodo(root, id, st) }; });
       const archived = opts.all && !arg ? listArchived(root) : [];
       if (opts.json) console.log(JSON.stringify([...list, ...archived], null, 2));
       else if (!list.length && !archived.length) console.log('没有进行中的变更。用 devflow new <id> 新建');
       else {
-        for (const s of list) console.log(`${s.id}  ${s.status}  任务 ${s.tasks.done}/${s.tasks.total}  ${s.reason}`);
+        // 行尾标出轮到谁：人的待办，或 Agent 进行中（已归档的变更没有这一段）
+        for (const s of list) console.log(`${s.id}  ${s.status}  任务 ${s.tasks.done}/${s.tasks.total}  ${s.reason}  ← ${s.todo ?? 'Agent 进行中'}`);
         for (const a of archived) console.log(`${a.id}  archived  ${a.archived_at ? a.archived_at.slice(0, 16).replace('T', ' ') + ' UTC' : '归档时间未知'}`);
+      }
+      return 0;
+    }
+    case 'review': {
+      requireHuman('review');
+      requireInit(root);
+      const token = randomBytes(16).toString('hex');
+      const server = reviewServer(root, token, VERSION);
+      await new Promise<void>((done, fail) => server.once('error', fail).listen(0, '127.0.0.1', done));
+      const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/${token}/${arg ? `c/${requireChange(root, arg)}` : ''}`;
+      console.log(`审查台已启动：${url}`);
+      console.log('保持这个终端打开；按 Ctrl+C 结束。地址里带有本次启动的令牌，不要贴给 Agent。');
+      // 打不开浏览器不算失败：地址已经打印在终端里
+      spawn(process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'explorer' : 'xdg-open', [url], { stdio: 'ignore', detached: true }).on('error', () => {}).unref();
+      await new Promise(() => {}); // 一直服务到 Ctrl+C
+      return 0;
+    }
+    case 'wait': {
+      requireInit(root);
+      const id = requireChange(root, arg);
+      const seconds = opts.timeout === undefined ? 1800 : Number(opts.timeout);
+      if (!Number.isFinite(seconds) || seconds <= 0) throw new DevflowError('--timeout 必须是正数（秒）');
+      // 只有人能产生这三类事件；归档后变更目录被移走
+      const acted = () => (existsSync(changeDir(root, id)) ? readEvents(root, id).filter((e) => ['approved', 'evidence-confirmed', 'archived'].includes(e.type)).length : Infinity);
+      const start = acted();
+      const deadline = Date.now() + seconds * 1000;
+      while (acted() === start) {
+        if (Date.now() >= deadline) {
+          console.log(`等待超时：${id} 还没有新的人工操作（批准、确认证据或归档）`);
+          return 1;
+        }
+        await sleep(2000);
+      }
+      if (!existsSync(changeDir(root, id))) console.log(`${id}: archived — 已归档`);
+      else {
+        const st = deriveStatus(root, id);
+        console.log(`${id}: ${st.status} — ${st.reason}`);
+        console.log(`下一步：devflow resume ${id}`);
       }
       return 0;
     }
@@ -293,6 +346,7 @@ async function dispatch(): Promise<number> {
         for (const c of r.checks) {
           console.log(`${c.exit === 0 ? '✓' : '✗'} ${c.name}  退出码 ${c.exit ?? '—'}  ${(c.ms / 1000).toFixed(1)}s${c.note ? `  ${c.note}` : ''}`);
           if (c.exit !== 0) console.log(`    日志：${c.log}`);
+          if (c.quiet) console.warn(`! ${c.name} 没有任何输出：日志无法用来核对证据（去掉 -q 之类的静默参数，让它打印跑了哪些测试）`);
         }
         console.log(`配置检查结果：${r.result}${r.note ? `（${r.note}）` : ''}；状态：${deriveStatus(root, arg!).status}`);
       }
@@ -327,7 +381,8 @@ async function dispatch(): Promise<number> {
       else {
         console.log(`✓ ${r.file}`);
         console.log(`  内容哈希：${r.hash}`);
-        console.log(`  审查后由人在自己的终端运行：devflow approve ${id}`);
+        console.log(`  审查后由人批准：在审查台（devflow review）里点「批准此版本」，或在自己的终端运行 devflow approve ${id}`);
+        console.log(`  等待批准：devflow wait ${id}`);
       }
       return 0;
     }

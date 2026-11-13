@@ -141,10 +141,12 @@ export interface EvidenceRecord {
   task: string; acceptance: string; kind: 'automated' | 'manual'; summary: string;
   artifacts: { path: string; hash: string }[]; verify_run?: string; check?: string; test?: string; assertion?: string;
   procedure?: string; expected?: string; observed?: string;
+  /** 记录时验收条件的指纹；重新批准后指纹没变，这条证据继续有效 */
+  condition_hash?: string;
 }
 
 export type DevflowEvent =
-  | { type: 'approved'; at: string; actor: string; hash: string; base_commit: string; spec_base: Record<string, string | null>; approval_id?: string; snapshot_hash?: string }
+  | { type: 'approved'; at: string; actor: string; hash: string; base_commit: string; spec_base: Record<string, string | null>; approval_id?: string; snapshot_hash?: string; decisions?: { question: string; answer: string }[] }
   | { type: 'apply-started'; at: string; head: string; approval_id?: string }
   | { type: 'task-done'; at: string; task: string; approval_id?: string; worktree_hash?: string }
   | { type: 'verified'; at: string; diff_hash: string; result: 'pass' | 'fail' | 'unknown'; checks: { name: string; exit: number | null; log_hash?: string }[]; run_id?: string; approval_id?: string }
@@ -219,11 +221,36 @@ export function changedPaths(root: string, base: string, globs: string[]): strin
     .split('\n').filter(Boolean);
 }
 
+/** project.yaml 的 code_roots：代码所在的 Git 仓库（相对本仓库根，可以是兄弟目录）。未声明时为 null */
+export function codeRoots(root: string): string[] | null {
+  let p: any;
+  try { p = parse(readFileSync(join(root, DF, 'project.yaml'), 'utf8')); } catch { return null; }
+  const list = p?.code_roots;
+  return Array.isArray(list) && list.length && list.every((r: unknown) => typeof r === 'string' && r.trim()) ? list : null;
+}
+
 /**
- * 工作树内容哈希（排除 .devflow/，遵守 .gitignore）。
- * 用临时索引 + write-tree 得到 git 树哈希：不受文件是否暂存、是否已提交影响。
+ * 代码内容哈希。未声明 code_roots 时是本仓库的工作树哈希；
+ * 声明后只算列出的仓库：代码在兄弟仓库时改动能被发现，本仓库里的文档改动也不再让验证失效。
  */
 export function worktreeHash(root: string): string {
+  const roots = codeRoots(root);
+  if (!roots) return 'git-tree:' + treeHash(root);
+  const h = createHash('sha256');
+  for (const rel of [...roots].sort()) {
+    let tree: string;
+    try { tree = treeHash(resolve(root, rel)); }
+    catch { throw new DevflowError(`code_roots 中的 ${rel} 不是可用的 Git 仓库`, `检查 ${DF}/project.yaml；路径相对本仓库根目录`); }
+    h.update(rel + '\0' + tree + '\0');
+  }
+  return 'git-trees:' + h.digest('hex');
+}
+
+/**
+ * 一个仓库的工作树内容哈希（排除 .devflow/，遵守 .gitignore）。
+ * 用临时索引 + write-tree 得到 git 树哈希：不受文件是否暂存、是否已提交影响。
+ */
+function treeHash(root: string): string {
   const tmp = mkdtempSync(join(tmpdir(), 'devflow-idx-'));
   const index = join(tmp, 'index');
   const real = resolve(root, git(root, ['rev-parse', '--git-path', 'index']).trim());
@@ -232,7 +259,7 @@ export function worktreeHash(root: string): string {
   try {
     git(root, ['add', '-A', '--', '.'], env);
     git(root, ['rm', '-r', '--cached', '-q', '--ignore-unmatch', '--', DF], env);
-    return 'git-tree:' + git(root, ['write-tree'], env).trim();
+    return git(root, ['write-tree'], env).trim();
   } finally {
     rmSync(dirname(index), { recursive: true, force: true });
   }
@@ -241,6 +268,19 @@ export function worktreeHash(root: string): string {
 export function changeSchema(root: string, id: string): number {
   try { return parse(readFileSync(join(changeDir(root, id), 'change.yaml'), 'utf8'))?.schema_version ?? 1; }
   catch { return 1; }
+}
+
+/**
+ * 已标记完成的任务。v2 认当前代码哈希下的记录，重新批准后沿用（验收证据是否仍有效由调用方另查）；
+ * v1 只认本轮批准内的记录。
+ */
+export function doneTasks(root: string, id: string, hash?: string): Set<string> {
+  if (changeSchema(root, id) === 2) {
+    const current = hash ?? worktreeHash(root);
+    return new Set(readEvents(root, id).flatMap((e) => (e.type === 'task-done' && e.worktree_hash === current ? [e.task] : [])));
+  }
+  const cycle = approvalCycle(root, id);
+  return new Set(cycle.events.flatMap((e) => (e.type === 'task-done' && (!e.approval_id || e.approval_id === cycle.approval_id) ? [e.task] : [])));
 }
 
 export function approvalCycle(root: string, id: string) {

@@ -260,3 +260,46 @@ test('archive rechecks code after staging transaction and before writing specs',
   write(dir, 'backend/src/Auth.java', 'class Auth { int modifiedDuringConfirmation; }\n');
   assert.throws(() => commitArchive(dir, ID), /确认或恢复期间/);
 });
+
+test('code_roots：代码哈希只算声明的仓库；兄弟仓库改动使验证过期，本仓库文档改动不影响；路径无效时 validate 报错', async () => {
+  const { worktreeHash } = await import('../src/core.ts');
+  const { validateProject } = await import('../src/validate.ts');
+  const { g } = await import('./fixture.ts');
+  const { mkdirSync } = await import('node:fs');
+  const { join } = await import('node:path');
+  const dir = makeRepo();
+  const single = worktreeHash(dir);
+  assert.match(single, /^git-tree:/);
+  const code = join(dir, '..', `${dir.split('/').pop()}-code`);
+  mkdirSync(code);
+  g(code, 'init', '-q');
+  write(code, 'src/app.js', 'v1\n');
+  const rel = `../${code.split('/').pop()}`;
+  write(dir, '.devflow/project.yaml', `schema_version: 1\nverify: []\ncode_roots: ["${rel}"]\nenforce: warn\n`);
+  assert.deepEqual(validateProject(dir), []);
+
+  const before = worktreeHash(dir);
+  assert.match(before, /^git-trees:/);
+  write(dir, 'docs/readme.md', '本仓库的文档改动\n');
+  assert.equal(worktreeHash(dir), before);
+  write(code, 'src/app.js', 'v2\n');
+  assert.notEqual(worktreeHash(dir), before);
+
+  write(dir, '.devflow/project.yaml', 'schema_version: 1\nverify: []\ncode_roots: ["../no-such-repo", "backend"]\nenforce: warn\n');
+  const messages = validateProject(dir).map((i) => i.message).join('|');
+  assert.match(messages, /no-such-repo 不是 Git 仓库的根目录/);
+  assert.match(messages, /backend 不是 Git 仓库的根目录/); // 仓库的子目录不算
+  assert.throws(() => worktreeHash(dir), /code_roots 中的 \.\.\/no-such-repo/);
+});
+
+test('verify：检查成功但没有输出时标记 quiet，CLI 给出提醒', () => {
+  const dir = makeRepo();
+  writeChange(dir, ID);
+  write(dir, '.devflow/project.yaml', 'schema_version: 1\nverify:\n  - name: silent\n    run: "true"\n  - name: loud\n    run: echo 3 tests passed\nenforce: warn\n');
+  approve(dir, ID);
+  applyStart(dir, ID);
+  const r = cli(dir, 'verify', ID);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stderr, /! silent 没有任何输出/);
+  assert.doesNotMatch(r.stderr, /loud 没有任何输出/);
+});

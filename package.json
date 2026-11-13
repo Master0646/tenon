@@ -1,6 +1,6 @@
 {
   "name": "devflow",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "规范驱动、带项目长期知识的 AI 软件工程内核（嵌入现有 Agent 使用）",
   "type": "module",

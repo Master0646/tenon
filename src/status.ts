@@ -2,10 +2,10 @@
 import { existsSync, readFileSync, readdirSync, mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
-import { evidenceIssues } from './evidence.ts';
+import { evidenceIssues, evidenceMatrix } from './evidence.ts';
 import {
   DF, DevflowError, appendEvent, parseEvents, changedPaths, currentSpecHash, git, hashFiles, headCommit, readEvents,
-  requireChange, requireInit, reviewedFiles, specCaps, worktreeHash, changeSchema, approvalCycle, sha256, type DevflowEvent,
+  requireChange, requireInit, reviewedFiles, specCaps, worktreeHash, changeSchema, approvalCycle, doneTasks, sha256, type DevflowEvent,
 } from './core.ts';
 import { loadChangeMeta, loadTasks, validateChange } from './validate.ts';
 
@@ -43,8 +43,7 @@ export function deriveStatus(root: string, id: string): ChangeStatus {
   const taskIds = loadTasks(root, id).map((t) => t.id);
   const cycle = approvalCycle(root, id);
   const v2 = changeSchema(root, id) === 2;
-  const currentHash = v2 ? worktreeHash(root) : undefined;
-  const done = new Set(cycle.events.flatMap((e) => (e.type === 'task-done' && (!v2 || e.worktree_hash === currentHash) && (e.approval_id === cycle.approval_id || (!v2 && !e.approval_id)) ? [e.task] : [])));
+  const done = doneTasks(root, id);
   const tasks = { done: taskIds.filter((t) => done.has(t) && (!v2 || !evidenceIssues(root, id, t).length)).length, total: taskIds.length };
   const r = (status: Status, reason: string): ChangeStatus => ({ id, status, reason, tasks });
 
@@ -84,6 +83,14 @@ export function deriveStatus(root: string, id: string): ChangeStatus {
   return r('ready_to_archive', '验证通过，等待人工归档');
 }
 
+/** 这个变更现在轮到人做什么；不需要人时为 null。status 与审查台首页共用 */
+export function humanTodo(root: string, id: string, st: ChangeStatus): string | null {
+  if (st.status === 'draft' || st.status === 'rebase_required') return '待你批准';
+  if (st.status === 'ready_to_archive') return '待你归档';
+  const n = ['applying', 'needs_fix'].includes(st.status) ? evidenceMatrix(root, id).filter((r) => r.status === 'unconfirmed').length : 0;
+  return n ? `待你确认 ${n} 条人工证据` : null;
+}
+
 /** 计算批准事件（不写入）。CLI 先展示给人确认，确认后再调用 approve */
 export function prepareApproval(root: string, id: string): Of<'approved'> {
   requireInit(root);
@@ -110,8 +117,9 @@ export function prepareApproval(root: string, id: string): Of<'approved'> {
 }
 
 /** 写入批准；expectHash 用于确认"人看到的"与"写入的"是同一份内容 */
-export function approve(root: string, id: string, expectHash?: string): Of<'approved'> {
+export function approve(root: string, id: string, expectHash?: string, decisions?: { question: string; answer: string }[]): Of<'approved'> {
   const ev = prepareApproval(root, id);
+  if (decisions?.length) ev.decisions = decisions;
   if (expectHash && ev.hash !== expectHash) {
     throw new DevflowError('确认期间被审文件发生了变化，已取消批准', `重新运行 devflow approve ${id}`);
   }
@@ -137,6 +145,15 @@ export function approve(root: string, id: string, expectHash?: string): Of<'appr
   }
   appendEvent(root, id, ev);
   return ev;
+}
+
+/** 每个待拍板事项的结论：人在审查台选的，或未作答时的推荐项 */
+export function decisionAnswers(root: string, id: string): { question: string; answer: string; by: 'human' | 'recommend' }[] {
+  const picked = approvalCycle(root, id).approved?.decisions ?? [];
+  return (loadChangeMeta(root, id)?.decisions ?? []).map((d) => {
+    const hit = picked.find((p) => p.question === d.question && d.options.includes(p.answer));
+    return hit ? { question: d.question, answer: hit.answer, by: 'human' as const } : { question: d.question, answer: d.recommend, by: 'recommend' as const };
+  });
 }
 
 interface SnapshotFile { path: string; content: string }

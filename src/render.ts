@@ -1,8 +1,9 @@
 // devflow render：把被审文件确定性地拼成 am 草稿，再交给随包附带的 am 渲染为离线 HTML
 import { evidenceMatrix } from './evidence.ts';
-import { approvalDiff } from './status.ts';
+import { approvalDiff, decisionAnswers } from './status.ts';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -67,6 +68,32 @@ function escapeInline(line: string): string {
 
 const cell = (s: string) => escapeInline(s).replace(/\|/g, '\\|').replace(/\n/g, ' ');
 
+/** 两份文本的行级差异，写成 diff 代码块；新增或删除的文件只说明，不贴全文 */
+export function lineDiff(before: string | null, after: string | null): string {
+  if (before === null) return `新增文件（${(after ?? '').split('\n').length} 行），全文见下方对应面板。`;
+  if (after === null) return '文件已删除。';
+  const tmp = mkdtempSync(join(tmpdir(), 'devflow-diff-'));
+  try {
+    writeFileSync(join(tmp, 'a'), before);
+    writeFileSync(join(tmp, 'b'), after);
+    let out = '';
+    // git diff --no-index 在有差异时退出码为 1，输出在 stdout
+    try {
+      execFileSync('git', ['diff', '--no-index', '--no-color', '--no-ext-diff', '-U2', 'a', 'b'], { cwd: tmp, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    } catch (e: any) {
+      out = String(e.stdout ?? '');
+    }
+    const lines = out.split('\n');
+    const body = lines.slice(Math.max(0, lines.findIndex((l) => l.startsWith('@@')))).filter((l) => !l.startsWith('\\ No newline')).join('\n').trim();
+    if (!body) return '只有空白或换行符差异。';
+    // 围栏比正文里最长的反引号串多一个，正文里的代码块不会把它截断
+    const fence = '`'.repeat(Math.max(3, ...(body.match(/`+/g) ?? []).map((m) => m.length + 1)));
+    return `${fence}diff\n${body}\n${fence}`;
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
 export function buildDraft(root: string, id: string): { draft: string; hash: string; problems: Problem[] } {
   const base = changeRel(id);
   const problems: Problem[] = [];
@@ -78,18 +105,34 @@ export function buildDraft(root: string, id: string): { draft: string; hash: str
   const panels: string[] = [];
   const diff = approvalDiff(root, id);
   const matrix = evidenceMatrix(root, id);
-  panels.push(`## 决策摘要\n- 业务变化：${cell(meta?.title ?? id)}\n- 影响范围：${cell(meta?.affected_paths.join(', ') ?? '未填写')}\n- 批准范围：除 v2 execution.md 外的方案文件及 project.yaml\n- 未决事项：${matrix.filter((e) => e.status !== 'valid').map((e) => cell(`${e.acceptance} ${e.status}`)).join('；') || '未发现验收证据缺口；仍需人工审查方案完整性'}`);
-  const changes = diff.available ? diff.files.filter((f) => f.before !== f.after).map((f) => `### ${cell(f.path)}\n\n修改前：\n\n\`\`\`text\n${(f.before ?? '（新增文件）').replace(/`/g, 'ˋ')}\n\`\`\`\n\n修改后：\n\n\`\`\`text\n${(f.after ?? '（删除文件）').replace(/`/g, 'ˋ')}\n\`\`\``).join('\n\n') : cell(diff.reason ?? '没有批准快照');
-  panels.push(`## 批准差异\n${changes || '批准范围未变；实施笔记无需重新批准。'}`);
-  if (matrix.length) panels.push(`## 验收矩阵\n| 条件 | 方式 | 证据 | 代码版本 | 状态 | 原因 |\n| --- | --- | --- | --- | --- | --- |\n${matrix.map((e) => `| ${cell(e.acceptance + ' ' + e.text)} | ${e.method} | ${cell(e.evidence_id ?? '缺失')} | ${cell(e.worktree_hash ?? '未知')} | ${e.status} | ${cell(e.reason ?? '')} |`).join('\n')}`);
 
-  panels.push(`## A 提案\n${toPanelBody(read(`${base}/proposal.md`), `${base}/proposal.md`, problems) || '（空）'}`);
+  // 首屏：要人拍板的事项 + 方案要点。细节面板（A–E）在页面上默认折叠
+  const decisions = meta?.decisions ?? [];
+  // 当前内容已批准时不再让人选：列出批准时定下的结论
+  const settled = !['draft', 'rebase_required'].includes(st.status);
+  const asks = settled
+    ? decisionAnswers(root, id).map((d) => `- ${escapeInline(d.question)} → **${escapeInline(d.answer)}**${d.by === 'human' ? '' : '（未作答，按推荐项）'}`)
+    : decisions.map((d) => `\`\`\`\`ask\n${escapeInline(d.question)}\n${d.options.map((o) => `${o === d.recommend ? '*' : '-'} ${escapeInline(o)}`).join('\n')}\n\`\`\`\``);
+  const points = meta?.summary?.length ? meta.summary.map((s) => `- ${escapeInline(s.replace(/\n/g, ' '))}`).join('\n') : `- ${cell(meta?.title ?? id)}\n- （change.yaml 没有填写 summary）`;
+  panels.push(`## ${settled ? '已拍板' : '待你拍板'}（${decisions.length} 项）与方案要点\n${asks.join(settled ? '\n' : '\n\n') || '没有需要你拍板的事项。'}\n\n#### 方案要点\n\n${points}\n\n#### 影响范围\n\n${meta?.affected_paths.map((p) => `- \`${p.replace(/`/g, '')}\``).join('\n') || '- 未填写'}`);
+
+  // 重新批准：只列改动的行；没改的面板在标题上注明，可以不再看
+  const changed = diff.available ? diff.files : [];
+  if (changed.length) panels.push(`## 批准差异（${changed.length} 个文件，相对上次批准）\n${changed.map((f) => `#### ${cell(f.path)}\n\n${lineDiff(f.before, f.after)}`).join('\n\n')}`);
+  const same = (...match: string[]) => (changed.length && !changed.some((f) => match.some((m) => f.path.startsWith(`${base}/${m}`))) ? ' · 与上次批准相同' : '');
+  // 没有任何证据时矩阵只是任务面板里验收条件的重复，不显示
+  if (matrix.some((e) => e.status !== 'missing')) panels.push(`## 验收矩阵\n| 条件 | 方式 | 证据 | 代码版本 | 状态 | 原因 |\n| --- | --- | --- | --- | --- | --- |\n${matrix.map((e) => `| ${cell(e.acceptance + ' ' + e.text)} | ${e.method} | ${cell(e.evidence_id ?? '缺失')} | ${cell(e.worktree_hash ?? '未知')} | ${e.status} | ${cell(e.reason ?? '')} |`).join('\n')}`);
+
+  const proposal = read(`${base}/proposal.md`);
+  panels.push(`## A 提案（${proposal.split('\n').filter((l) => /^\s*[-*]\s/.test(l)).length} 条${same('proposal.md')}）\n${toPanelBody(proposal, `${base}/proposal.md`, problems) || '（空）'}`);
 
   // 规范增量：按 ADDED / MODIFIED / REMOVED 分色
   const specParts: string[] = [];
+  const reqCount = { added: 0, modified: 0, removed: 0 };
   for (const cap of specCaps(root, id)) {
     const rel = `${base}/specs/${cap}/spec.md`;
     const { delta } = parseDelta(read(rel));
+    for (const k of ['added', 'modified', 'removed'] as const) reqCount[k] += delta[k].length;
     const isNew = !existsSync(join(root, DF, 'specs', cap, 'spec.md'));
     specParts.push(`### 能力 ${cap}${isNew ? '（新能力）' : ''}`);
     if (delta.purpose) specParts.push(`目的：${escapeInline(delta.purpose)}`);
@@ -107,9 +150,12 @@ export function buildDraft(root: string, id: string): { draft: string; hash: str
     group('warn', '修改需求（整条替换当前同名需求）', delta.modified);
     group('err', '删除需求', delta.removed);
   }
-  panels.push(`## B 规范增量\n${specParts.join('\n\n') || '本变更不修改任何行为规范。'}`);
+  panels.push(`## B 规范增量（新增 ${reqCount.added} · 修改 ${reqCount.modified} · 删除 ${reqCount.removed}${same('specs/')}）\n${specParts.join('\n\n') || '本变更不修改任何行为规范。'}`);
 
-  panels.push(`## C 设计\n${toPanelBody(read(`${base}/design.md`), `${base}/design.md`, problems) || '（无设计文档）'}`);
+  const design = read(`${base}/design.md`);
+  const sections = design.split('\n').filter((l) => /^##\s/.test(l)).length;
+  const diagrams = diagramBlocks(design, '').length;
+  panels.push(`## C 设计（${sections} 节 · ${diagrams} 张图${same('design.md')}）\n${toPanelBody(design, `${base}/design.md`, problems) || '（无设计文档）'}`);
 
   // 任务：每个任务一段（验收条件逐条列出）+ 由 depends_on 生成的依赖图
   const tasks = loadTasks(root, id);
@@ -123,7 +169,8 @@ export function buildDraft(root: string, id: string): { draft: string; hash: str
     const acc = t.acceptance?.length ? t.acceptance.map((a) => `- ${escapeInline((typeof a === 'string' ? a : `${a.id}: ${a.text}`).replace(/\n/g, ' '))}`).join('\n') : '（未写验收条件）';
     return `${head}\n\n${acc}`;
   });
-  panels.push(`## D 任务与依赖\n${tasks.length ? `${cards.join('\n\n')}\n\n\`\`\`flow LR\n${edges.join('\n')}\n\`\`\`` : '（无任务）'}`);
+  const accCount = tasks.reduce((n, t) => n + (t.acceptance?.length ?? 0), 0);
+  panels.push(`## D 任务与依赖（${tasks.length} 个任务 · ${accCount} 条验收${same('tasks.yaml')}）\n${tasks.length ? `${cards.join('\n\n')}\n\n\`\`\`flow LR\n${edges.join('\n')}\n\`\`\`` : '（无任务）'}`);
 
   // 被审文件与哈希：人批准的就是这些文件的这份内容；project.yaml 只显示哈希看不出内容，单列验证命令
   const files = reviewedFiles(root, id);
@@ -135,7 +182,7 @@ export function buildDraft(root: string, id: string): { draft: string; hash: str
   const verifyTable = verify.length
     ? `验证命令（\`${DF}/project.yaml\`，devflow verify 只运行这些）：\n\n| name | run | cwd |\n| --- | --- | --- |\n${verify.map((v) => `| ${cell(String(v.name ?? ''))} | \`${String(v.run ?? '').replace(/[`|\n]/g, ' ')}\` | ${cell(String(v.cwd ?? '.'))} |`).join('\n')}`
     : `未声明验证命令（\`${DF}/project.yaml\` 的 verify 为空）：devflow verify 的结果只会是 unknown，变更无法归档。`;
-  panels.push(`## E 被审文件与内容哈希\n${verifyTable}\n\n批准时绑定的哈希：\`${hash}\`\n\n| 文件 | 内容 sha256 |\n| --- | --- |\n${files.map((f) => `| \`${f}\` | \`${sha256(readFileSync(join(root, f))).slice(7, 19)}…\` |`).join('\n')}\n\n确认无误后，复制下面的命令到你自己的终端运行。哈希与本页不一致时，命令会拒绝批准：\n\n\`\`\`bash\ndevflow approve ${id} --hash ${hash.slice(7, 19)}\n\`\`\``);
+  panels.push(`## E 被审文件与内容哈希（${files.length} 个文件）\n${verifyTable}\n\n批准时绑定的哈希：\`${hash}\`\n\n| 文件 | 内容 sha256 |\n| --- | --- |\n${files.map((f) => `| \`${f}\` | \`${sha256(readFileSync(join(root, f))).slice(7, 19)}…\` |`).join('\n')}\n\n批准方式二选一。哈希与本页不一致时都会拒绝批准：\n\n- 审查台：在你自己的终端运行一次 \`devflow review\`，之后都在浏览器里点「批准此版本」。\n- 终端：复制下面的命令运行。\n\n\`\`\`bash\ndevflow approve ${id} --hash ${hash.slice(7, 19)}\n\`\`\``);
 
   const title = (meta?.title || id).replace(/\n/g, ' ');
   const draft = `---
@@ -318,19 +365,77 @@ export function reviewIssues(root: string, id: string): Issue[] {
   return [...issues, ...(found.length ? found : [{ level: 'error' as const, file: base, message: '图块无法渲染', hint: output }])];
 }
 
-export function render(root: string, id: string, out?: string): RenderResult {
+// 细节面板（A–E）默认折叠：点标题展开，从目录或锚点跳转时自动展开，打印时全部展开。
+// 这段由 devflow 自己注入，不来自被审文件；被审文件里的原始 HTML 仍由 toPanelBody 拦截。
+const FOLD = `<style>
+.am-colophon{display:none}
+.am-panel-head[role=button]{cursor:pointer}
+.am-panel-head[role=button]::after{content:"收起 ▾";margin-left:auto;align-self:center;padding:0 12px;font-size:12px;opacity:.6;white-space:nowrap}
+.am-panel.df-closed .am-panel-head::after{content:"展开 ▸"}
+.am-panel.df-closed .am-panel-body{display:none}
+@media print{.am-panel.df-closed .am-panel-body{display:block}}
+</style>
+<script>
+(() => {
+  const set = (p, open) => { p.classList.toggle('df-closed', !open); p.querySelector('.am-panel-head').setAttribute('aria-expanded', String(open)); };
+  for (const p of document.querySelectorAll('.am-panel')) {
+    if (!/^panel-[A-E]$/.test(p.id)) continue;
+    const head = p.querySelector('.am-panel-head');
+    head.tabIndex = 0;
+    head.setAttribute('role', 'button');
+    head.addEventListener('click', () => set(p, p.classList.contains('df-closed')));
+    head.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); head.click(); } });
+    set(p, false);
+  }
+  const reveal = () => {
+    const el = location.hash.length > 1 && document.getElementById(decodeURIComponent(location.hash.slice(1)));
+    const p = el && el.closest('.am-panel.df-closed');
+    if (p) { set(p, true); el.scrollIntoView(); }
+  };
+  addEventListener('hashchange', reveal);
+  document.addEventListener('click', (e) => { if (e.target.closest && e.target.closest('a[href^="#"]')) setTimeout(reveal); });
+  reveal();
+})();
+</script>
+`;
+
+/** 在渲染好的页面末尾注入折叠脚本；extra 是审查台追加的操作栏 */
+export function decorate(html: string, extra = ''): string {
+  const i = html.lastIndexOf('</body>');
+  if (i < 0) return html;
+  const added = FOLD + extra;
+  // 页面的内容安全策略只放行登记过哈希的脚本：把 devflow 自己注入的脚本登记进去
+  const hashes = [...added.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => `'sha256-${createHash('sha256').update(m[1]).digest('base64')}'`);
+  return (html.slice(0, i) + added + html.slice(i)).replace(/(<meta http-equiv="Content-Security-Policy" content="[^"]*script-src)/, `$1 ${hashes.join(' ')}`);
+}
+
+/** 校验并渲染为 HTML 字符串；审查台每次打开页面都调用，保证看到的是当前内容 */
+export function renderHtml(root: string, id: string, extra?: (hash: string) => string): { html: string; hash: string } {
   const errors = validateChange(root, id, true).filter((i) => i.level === 'error');
   if (errors.length) throw new DevflowError(`变更校验有 ${errors.length} 个错误，先修正再渲染`, `运行 devflow validate ${id}`);
   const { draft, hash, problems } = buildDraft(root, id);
   if (problems.length) {
     throw new DevflowError(`审查页内容有 ${problems.length} 处不允许的写法`, problems.map((p) => `${p.file}:${p.line} ${p.message}`).join('\n'));
   }
-  const file = out ?? join(root, DF, 'runtime', 'rendered', `${id}.html`);
-  mkdirSync(dirname(file), { recursive: true });
-  const failed = runAm(draft, file);
-  if (failed !== null) throw new DevflowError('渲染失败', failed);
+  const tmp = mkdtempSync(join(tmpdir(), 'devflow-render-'));
+  let html: string;
+  try {
+    const failed = runAm(draft, join(tmp, 'page.html'));
+    if (failed !== null) throw new DevflowError('渲染失败', failed);
+    html = readFileSync(join(tmp, 'page.html'), 'utf8');
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
   if (hashFiles(root, reviewedFiles(root, id)) !== hash) {
     throw new DevflowError('渲染期间被审文件发生了变化', `重新运行 devflow render ${id}`);
   }
+  return { html: decorate(html, extra?.(hash)), hash };
+}
+
+export function render(root: string, id: string, out?: string): RenderResult {
+  const { html, hash } = renderHtml(root, id);
+  const file = out ?? join(root, DF, 'runtime', 'rendered', `${id}.html`);
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, html);
   return { file, hash };
 }

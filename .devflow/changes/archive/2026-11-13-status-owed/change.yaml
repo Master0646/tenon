@@ -1,0 +1,21 @@
+schema_version: 2
+min_cli_version: 0.2.0
+title: devflow status 显示轮到人做什么
+affected_paths:
+  - src/status.ts
+  - src/review.ts
+  - src/cli.ts
+  - test/cli-feedback.test.ts
+  - README.md
+summary:
+  - "`devflow status` 每行末尾标出轮到人的操作：待你批准、待你确认 N 条人工证据、待你归档"
+  - "`--json` 输出增加 `todo` 字段，没有待办时为 null"
+  - 判断逻辑从审查台首页抽出来共用，两处文字保证一致
+  - 不改状态机，不改审查台页面
+decisions:
+  - question: 文本输出里，待办写在哪里？
+    options: [写在该行末尾, 另起一行缩进显示]
+    recommend: 写在该行末尾
+  - question: 不需要人操作的变更，要不要也给出提示？
+    options: [不显示任何内容, 显示「Agent 进行中」]
+    recommend: 不显示任何内容

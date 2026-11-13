@@ -1,10 +1,10 @@
 # 由 devflow 生成；devflow update 会覆盖本文件。
-# approve / archive 只能由人在自己的终端中运行。
+# approve / archive / review 只能由人在自己的终端中运行。
 prefix_rule(
-    pattern = ["devflow", ["approve", "archive"]],
+    pattern = ["devflow", ["approve", "archive", "review"]],
     decision = "forbidden",
-    justification = "devflow approve / archive 只能由人在自己的终端中运行",
-    match = ["devflow approve demo", "devflow archive demo"],
+    justification = "devflow approve / archive / review 只能由人在自己的终端中运行",
+    match = ["devflow approve demo", "devflow archive demo", "devflow review"],
     not_match = ["devflow status", "devflow wiki lint"],
 )
 

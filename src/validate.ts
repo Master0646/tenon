@@ -1,8 +1,8 @@
 // schema 校验：报错写给 Agent 看，带文件、原因和正确示例
-import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readFileSync, realpathSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { parse } from 'yaml';
-import { DF, changeRel, repoFiles, type Issue } from './core.ts';
+import { DF, changeRel, git, repoFiles, type Issue } from './core.ts';
 import { mergeSpec, parseDelta } from './spec.ts';
 
 const EX_PROJECT = `schema_version: 1
@@ -16,7 +16,15 @@ enforce: warn`;
 const EX_CHANGE = `schema_version: 1
 title: 新增角色权限控制
 affected_paths:
-  - backend/src/main/java/example/auth/**`;
+  - backend/src/main/java/example/auth/**
+summary:                 # 方案要点：最多 7 条，每条一句，显示在审查页首屏
+  - 用户列表接口只允许 ADMIN 访问
+decisions:               # 需要人拍板的事项；没有就写 []
+  - question: 普通用户访问时返回 403 还是空列表？
+    options: [返回 403, 返回空列表]
+    recommend: 返回 403`;
+
+export const MAX_SUMMARY = 7;
 
 const EX_TASKS = `schema_version: 1
 tasks:
@@ -75,6 +83,15 @@ export function validateProject(root: string): Issue[] {
     });
   }
   if (p.exclude !== undefined && !isStrList(p.exclude)) err('exclude 必须是字符串数组');
+  if (p.code_roots !== undefined) {
+    if (!isStrList(p.code_roots) || !p.code_roots.length) err('code_roots 必须是非空字符串数组：代码所在的 Git 仓库，路径相对本仓库根，例如 [../backend, ../frontend]');
+    else for (const rel of p.code_roots) {
+      // 必须是仓库根：子目录的树哈希会混进仓库其他部分的暂存状态
+      let top = '';
+      try { top = realpathSync(git(resolve(root, rel), ['rev-parse', '--show-toplevel']).trim()); } catch { /* 不存在或不是仓库 */ }
+      if (!top || top !== realpathSync(resolve(root, rel))) err(`code_roots 中的 ${rel} 不是 Git 仓库的根目录`);
+    }
+  }
   if (!['warn', 'strict'].includes(p.enforce)) err('enforce 必须是 warn 或 strict');
   return issues;
 }
@@ -88,7 +105,27 @@ export function enforceLevel(root: string): 'warn' | 'strict' {
   }
 }
 
-export interface ChangeMeta { title: string; affected_paths: string[] }
+export interface Decision { question: string; options: string[]; recommend: string }
+export interface ChangeMeta { title: string; affected_paths: string[]; summary?: string[]; decisions?: Decision[] }
+
+// 选项会写进审查页的 ask 块：一行一个，`|` 是选项与备注的分隔符
+const oneLine = (v: unknown): v is string => isStr(v) && !/[\n|]/.test(v);
+
+/** decisions 的格式问题；合法时为空 */
+function decisionErrors(list: unknown): string[] {
+  if (!Array.isArray(list)) return ['decisions 必须是数组（没有待拍板事项时写 []）'];
+  const out: string[] = [];
+  list.forEach((d: any, i: number) => {
+    const at = `decisions[${i}]`;
+    if (!isObj(d) || !isStr(d.question) || d.question.includes('\n')) return out.push(`${at}.question 必须是单行非空字符串`);
+    if (!Array.isArray(d.options) || d.options.length < 2 || !d.options.every(oneLine) || new Set(d.options).size !== d.options.length) {
+      return out.push(`${at}.options 至少两个互不相同的单行选项，且不含 |`);
+    }
+    // 审查页的单选组件要求恰好一个建议项；提方案的人也应当给出推荐
+    if (!d.options.includes(d.recommend)) out.push(`${at}.recommend 必须是 options 中的一项（每个事项都要给出推荐）`);
+  });
+  return out;
+}
 export interface Acceptance { id: string; text: string; method: 'automated' | 'manual'; check?: string }
 export interface TaskDef { id: string; title: string; depends_on?: string[]; acceptance?: (string | Acceptance)[] }
 
@@ -96,7 +133,13 @@ export interface TaskDef { id: string; title: string; depends_on?: string[]; acc
 export function loadChangeMeta(root: string, id: string): ChangeMeta | null {
   const issues: Issue[] = [];
   const m = loadYaml(root, `${changeRel(id)}/change.yaml`, issues, '');
-  return isObj(m) && isStr(m.title) && isStrList(m.affected_paths) ? (m as ChangeMeta) : null;
+  if (!isObj(m) || !isStr(m.title) || !isStrList(m.affected_paths)) return null;
+  // 格式不对的 summary / decisions 由 validate 报错；这里按"没有"处理，调用方不必再判断
+  return {
+    title: m.title, affected_paths: m.affected_paths,
+    summary: isStrList(m.summary) ? m.summary : [],
+    decisions: m.decisions !== undefined && !decisionErrors(m.decisions).length ? m.decisions : [],
+  };
 }
 
 export function loadTasks(root: string, id: string): TaskDef[] {
@@ -134,6 +177,12 @@ export function validateChange(root: string, id: string, complete: boolean): Iss
         }
       }
     }
+    // 审查页首屏：方案要点与待拍板事项。缺 summary 只提醒，不拦已在进行中的旧变更
+    const warn = (message: string) => issues.push({ level: 'warn', file: `${base}/change.yaml`, message, hint: hc });
+    if (m.summary !== undefined && !isStrList(m.summary)) err('change.yaml', 'summary 必须是字符串数组：每条一句方案要点', hc);
+    else if (complete && !m.summary?.length) warn('没有 summary：审查页首屏不会显示方案要点');
+    else if ((m.summary?.length ?? 0) > MAX_SUMMARY) warn(`summary 有 ${m.summary.length} 条，审查页首屏建议不超过 ${MAX_SUMMARY} 条`);
+    if (m.decisions !== undefined) for (const e of decisionErrors(m.decisions)) err('change.yaml', e, hc);
   }
 
   // tasks.yaml

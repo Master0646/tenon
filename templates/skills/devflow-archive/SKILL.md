@@ -1,6 +1,6 @@
 ---
 name: devflow-archive
-description: 为验证通过的 DevFlow 变更做归档前的准备：更新相关知识页，确认 wiki lint 通过，然后请用户在自己的终端运行 devflow archive。变更状态为 ready_to_archive，或用户说"归档变更 X""收尾"时使用。
+description: 为验证通过的 DevFlow 变更做归档前的准备：更新相关知识页，确认 wiki lint 通过，然后请用户在审查台或自己的终端归档。变更状态为 ready_to_archive，或用户说"归档变更 X""收尾"时使用。
 ---
 
 # 归档前准备
@@ -18,7 +18,7 @@ description: 为验证通过的 DevFlow 变更做归档前的准备：更新相�
    - 在相关页面写一句设计原因的链接：`见 [<变更标题>](../../changes/archive/<归档目录名>/design.md)`。归档目录名为 `<日期>-<id>`，id 已以日期开头时就是 id 本身；
    - 在 `.devflow/knowledge/log.md` 末尾追加 `- <日期> 更新 <slug>：<变更 id> <一句话>`。
 4. 运行 `devflow wiki lint`，直到没有错误（指向本变更归档位置的链接在归档前也算有效）。
-5. 告诉用户在自己的终端运行 `devflow archive <id>`。它会合并规范增量、更新 `specs.lock`、把变更移到 `.devflow/changes/archive/`。
+5. 请用户归档：在审查台打开该变更点「归档」，或在自己的终端运行 `devflow archive <id>`。它会合并规范增量、更新 `specs.lock`、把变更移到 `.devflow/changes/archive/`。可以在后台运行 `devflow wait <id>` 等用户归档。
 
 ## 规则
 

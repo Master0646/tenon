@@ -18,6 +18,8 @@ export const CLAUDE_DENY = [
   'Bash(devflow approve *)',
   'Bash(devflow archive *)',
   'Bash(devflow evidence confirm *)',
+  'Bash(devflow review)',
+  'Bash(devflow review *)',
   'Edit(/.devflow/specs/**)',
   'Write(/.devflow/specs/**)',
   'Edit(/.devflow/changes/**/events.jsonl)',

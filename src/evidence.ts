@@ -5,7 +5,7 @@ import { basename, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { parse } from 'yaml';
 import {
   DF, DevflowError, appendEvent, approvalCycle, git, hashFiles, requireChange, requireInit,
-  reviewedFiles, sha256, worktreeHash, type DevflowEvent,
+  readEvents, reviewedFiles, sha256, worktreeHash, type DevflowEvent,
 } from './core.ts';
 import { loadTasks } from './validate.ts';
 import { isExcluded, loadExcludes } from './wiki.ts';
@@ -55,6 +55,21 @@ function conditions(root: string, id: string, task?: string): { task: string; co
   );
 }
 
+/**
+ * 验收条件的指纹：条件文本、验收方式、检查名及其命令。
+ * 重新批准后指纹没变的条件，旧批准下记录的证据（代码也没变时）仍然证明它。
+ */
+function conditionHash(root: string, c: Condition): string {
+  let command: unknown = null;
+  if (c.check) {
+    try {
+      const v = parse(readFileSync(join(root, DF, 'project.yaml'), 'utf8'))?.verify?.find((x: any) => x?.name === c.check);
+      command = v ? [v.run, v.cwd ?? null] : null;
+    } catch { /* 格式错误由 validate 报告 */ }
+  }
+  return sha256(JSON.stringify([c.text, c.method, c.check ?? null, command]));
+}
+
 function active(root: string, id: string) {
   requireInit(root);
   requireChange(root, id);
@@ -84,7 +99,7 @@ export function recordEvidence(root: string, id: string, input: unknown): Record
   const event: Recorded = {
     type: 'evidence-recorded', at: new Date().toISOString(), evidence_id: randomUUID(), approval_id: cycle.approval_id,
     worktree_hash: currentHash, task, acceptance, kind,
-    summary: text(value.summary, 'summary'), artifacts: [],
+    summary: text(value.summary, 'summary'), artifacts: [], condition_hash: conditionHash(root, found.condition),
   };
   if (kind === 'automated') {
     event.verify_run = text(value.verify_run, 'verify_run', 128);
@@ -132,8 +147,12 @@ export function recordEvidence(root: string, id: string, input: unknown): Record
 
 export function confirmEvidence(root: string, id: string, evidenceId: string): DevflowEvent {
   const cycle = active(root, id);
-  const recorded = cycle.events.find((e) => e.type === 'evidence-recorded' && e.evidence_id === evidenceId);
-  if (recorded?.type !== 'evidence-recorded' || recorded.kind !== 'manual') throw new DevflowError('本轮批准没有该人工证据');
+  const recorded = readEvents(root, id).find((e) => e.type === 'evidence-recorded' && e.evidence_id === evidenceId);
+  const condition = recorded?.type === 'evidence-recorded' ? conditions(root, id, recorded.task).find((c) => c.condition.id === recorded.acceptance)?.condition : undefined;
+  // 旧批准下记录的证据：验收条件没变才可以继续确认
+  if (recorded?.type !== 'evidence-recorded' || recorded.kind !== 'manual' || !condition || (recorded.approval_id !== cycle.approval_id && recorded.condition_hash !== conditionHash(root, condition))) {
+    throw new DevflowError('本轮批准没有该人工证据');
+  }
   const hash = worktreeHash(root);
   if (recorded.worktree_hash !== hash || artifactProblem(root, recorded)) throw new DevflowError('证据已失效，请重新建立');
   const actor = git(root, ['config', 'user.name']).trim();
@@ -153,23 +172,26 @@ function artifactProblem(root: string, event: Recorded): string | undefined {
 
 export function evidenceMatrix(root: string, id: string): EvidenceRow[] {
   const cycle = approvalCycle(root, id);
+  const all = readEvents(root, id);
   const hash = worktreeHash(root);
   return conditions(root, id).map(({ task, condition }) => {
     const row: EvidenceRow = { task, acceptance: condition.id, text: condition.text, method: condition.method, status: 'missing', reason: '缺少本轮验收证据' };
-    const event = cycle.events.findLast((e) => e.type === 'evidence-recorded' && e.task === task && e.acceptance === condition.id);
+    const event = all.findLast((e) => e.type === 'evidence-recorded' && e.task === task && e.acceptance === condition.id);
     if (event?.type !== 'evidence-recorded') return row;
     row.evidence_id = event.evidence_id;
     row.worktree_hash = event.worktree_hash;
-    if (event.approval_id !== cycle.approval_id || event.worktree_hash !== hash) return { ...row, status: 'stale', reason: '批准或代码已变化，需要重新验证' };
+    // 旧批准下的证据：验收条件（含检查命令）没变、代码没变时沿用，不用重录
+    const carried = event.approval_id !== cycle.approval_id;
+    if ((carried && event.condition_hash !== conditionHash(root, condition)) || event.worktree_hash !== hash) return { ...row, status: 'stale', reason: '验收条件或代码已变化，需要重新验证' };
     const badArtifact = artifactProblem(root, event);
     if (badArtifact) return { ...row, status: 'invalid', reason: badArtifact };
     if (event.kind !== condition.method) return { ...row, status: 'invalid', reason: '验收方式不一致' };
     if (event.kind === 'automated') {
-      const run = cycle.events.find((e) => e.type === 'verified' && e.run_id === event.verify_run);
+      const run = all.find((e) => e.type === 'verified' && e.run_id === event.verify_run);
       if (run?.type !== 'verified' || run.diff_hash !== hash || run.result === 'unknown' || event.check !== condition.check || !run.checks.some((c) => c.name === event.check && c.exit === 0)) {
         return { ...row, status: 'invalid', reason: '指定检查没有有效成功记录' };
       }
-    } else if (!cycle.events.some((e) => e.type === 'evidence-confirmed' && e.evidence_id === event.evidence_id && e.approval_id === cycle.approval_id && e.worktree_hash === hash)) {
+    } else if (!all.some((e) => e.type === 'evidence-confirmed' && e.evidence_id === event.evidence_id && e.worktree_hash === hash)) {
       return { ...row, status: 'unconfirmed', reason: '等待人工确认' };
     }
     return { ...row, status: 'valid', reason: undefined };
