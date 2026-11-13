@@ -369,6 +369,7 @@ export function reviewIssues(root: string, id: string): Issue[] {
 // 这段由 devflow 自己注入，不来自被审文件；被审文件里的原始 HTML 仍由 toPanelBody 拦截。
 const FOLD = `<style>
 .am-colophon{display:none}
+.am-toolbar>:not(.am-btn--reply){display:none}
 .am-panel-head[role=button]{cursor:pointer}
 .am-panel-head[role=button]::after{content:"收起 ▾";margin-left:auto;align-self:center;padding:0 12px;font-size:12px;opacity:.6;white-space:nowrap}
 .am-panel.df-closed .am-panel-head::after{content:"展开 ▸"}
