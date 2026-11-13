@@ -7,12 +7,27 @@ import { commitArchive, pendingTx, stageArchive } from './archive.ts';
 import { CHANGE_ID, DevflowError, listChanges, readEvents, requireChange, requireInit, withWorktreeLock, type EvidenceRecord } from './core.ts';
 import { confirmEvidence, evidenceMatrix } from './evidence.ts';
 import { renderHtml } from './render.ts';
-import { approve, deriveStatus, humanTodo, prepareApproval } from './status.ts';
+import { approve, deriveStatus, humanTodo, prepareApproval, type Status } from './status.ts';
 import { finishUsage, startUsage } from './usage.ts';
 import { loadChangeMeta } from './validate.ts';
 
 const esc = (s: string): string => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 const MAX_BODY = 64 * 1024;
+
+// 审查台上状态的中文名与颜色：薰衣草=轮到人批准，琥珀=需重新批准，红=待修复，蓝=Agent 在做，绿=可归档，灰=已结束
+const STATUS: Record<Status, [label: string, color: string]> = {
+  draft: ['待批准', '#828fff'],
+  rebase_required: ['需重新批准', '#e3b866'],
+  approved: ['已批准', '#6ea8fe'],
+  applying: ['开发中', '#6ea8fe'],
+  needs_fix: ['待修复', '#f0928a'],
+  ready_to_archive: ['待归档', '#4cc764'],
+  archived: ['已归档', '#8a8f98'],
+};
+const statusLabel = (s: string): string => STATUS[s as Status]?.[0] ?? s;
+// 每个状态一个类，颜色放在 --st 里；页面有内容安全策略，不用行内 style 属性
+const STATUS_CSS = Object.entries(STATUS).map(([s, [, c]]) => `.st-${s}{--st:${c}}`).join('');
+const STATUS_PILL = 'color:var(--st,#d0d6e0);background:color-mix(in srgb,var(--st,#8a8f98) 14%,transparent);border:1px solid color-mix(in srgb,var(--st,#8a8f98) 35%,transparent);border-radius:9999px';
 
 /** 等待人确认的人工证据（当前代码、当前批准下已记录但未确认） */
 function pendingEvidence(root: string, id: string): EvidenceRecord[] {
@@ -57,7 +72,8 @@ tbody tr:hover{background:var(--lin-s2)}
 .id{white-space:nowrap;font-family:var(--lin-mono);font-size:13px}
 .todo{white-space:nowrap;display:inline-flex;align-items:center;gap:8px;font-weight:500}
 .todo::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--lin-primary);flex:none}
-.pill{display:inline-block;padding:2px 8px;border-radius:9999px;background:var(--lin-s3);color:var(--lin-ink-2);font:400 12px/1.4 var(--lin-mono)}
+.pill{display:inline-block;padding:2px 8px;font:500 12px/1.4 var(--lin-font);white-space:nowrap;${STATUS_PILL}}
+${STATUS_CSS}
 .muted{color:var(--lin-ink-3);font-size:12px}
 .num{color:var(--lin-ink-2);font-variant-numeric:tabular-nums;white-space:nowrap}
 .empty{padding:48px 24px;text-align:center;color:var(--lin-ink-3)}
@@ -77,16 +93,21 @@ function index(root: string, token: string): string {
     ? `<table><thead><tr><th>变更</th><th>轮到你</th><th>状态</th><th>任务</th><th>最后活动</th></tr></thead><tbody>${rows.map((r) => `<tr>
 <td><a class="id" href="/${token}/c/${r.id}">${esc(r.id)}</a><br><span class="muted">${esc(r.title)}</span></td>
 <td>${r.todo ? `<span class="todo">${esc(r.todo)}</span>` : '<span class="muted">Agent 进行中</span>'}</td>
-<td><span class="pill">${esc(r.status)}</span><br><span class="muted">${esc(r.reason)}</span></td><td class="num">${r.tasks}</td><td class="num">${ago(r.last)}</td></tr>`).join('')}</tbody></table>`
+<td><span class="pill st-${esc(r.status)}">${esc(statusLabel(r.status))}</span><br><span class="muted">${esc(r.reason)}</span></td><td class="num">${r.tasks}</td><td class="num">${ago(r.last)}</td></tr>`).join('')}</tbody></table>`
     : '<p class="empty">没有进行中的变更。</p>';
   return SHELL('DevFlow 审查台', `<h1>变更</h1><p class="lead">本页每 5 秒自动刷新。需要你操作的变更排在前面。</p><div class="panel">${body}</div>`, true);
 }
 
 // 只在审查台注入：把 answer-me 纸张主题的变量换成 Linear 深色；离线审查页（devflow render）不受影响。
 // 用户要求保留：面板字母徽标、右侧大纲、差异与状态的红绿色、图表原有强调色。
-const PAGE_STYLE = `<style>
+const PAGE_STYLE = (status: Status) => `<style>
 html[data-theme][data-mode]{color-scheme:dark;${TOKENS};--font-sans:var(--lin-font);--font-serif:var(--lin-font);--head-font:var(--lin-font);--font-mono:var(--lin-mono);--radius:8px;--bg:var(--lin-canvas);--paper:var(--lin-s1);--fill:var(--lin-s2);--ink:var(--lin-ink);--ink-2:var(--lin-ink-2);--ink-3:var(--lin-ink-3);--line:var(--lin-line-2);--line-2:var(--lin-line);--accent:var(--lin-primary-hover);--accent-bg:rgb(94 106 210/.16);--ok:#8cc79a;--ok-bg:#1c3122;--err:#f0928a;--err-bg:#3a1d1a;--warn:#e3b866;--warn-bg:#352a13;--head-bg:var(--lin-ink);--head-fg:var(--lin-canvas)}
 html[data-theme] .am-head h1{font-weight:600;letter-spacing:-.6px}
+${STATUS_CSS}
+/* 状态放在标题右侧，副标题那行（变更 ID · 英文状态）在审查台上隐藏；底部操作栏里有原因 */
+html[data-theme] .am-sub{display:none}
+html[data-theme] .am-head h1::after{content:"${STATUS[status][0]}";display:inline-block;vertical-align:middle;margin-left:12px;padding:2px 10px;font:500 13px/1.5 var(--lin-font);letter-spacing:0;${STATUS_PILL}}
+html[data-theme] .am-head h1{--st:${STATUS[status][1]}}
 html[data-theme] .am-panel{border-radius:12px;border-color:var(--lin-line);box-shadow:inset 0 1px 0 rgb(255 255 255/.04)}
 html[data-theme] .am-panel-head h2{font-weight:500;letter-spacing:-.2px}
 html[data-theme] .am-md p,html[data-theme] .am-md li,html[data-theme] .am-intro{line-height:1.6}
@@ -104,7 +125,8 @@ body{padding-bottom:72px}
 .df-bar button[data-df],.df-dlg button[data-df=confirm]{background:var(--lin-primary);border-color:var(--lin-primary);color:#fff}
 .df-bar button[data-df]:hover,.df-dlg button[data-df=confirm]:hover{background:var(--lin-primary-hover);border-color:var(--lin-primary-hover)}
 .df-bar button:focus-visible,.df-dlg button:focus-visible,.df-dlg input:focus-visible{outline:2px solid color-mix(in srgb,var(--lin-focus) 50%,transparent);outline-offset:2px}
-.df-state{color:var(--lin-ink-3);font:400 12px/1.4 var(--lin-mono);padding:2px 8px;border-radius:9999px;background:var(--lin-s3)}
+.df-state{font:500 12px/1.4 var(--lin-font);padding:2px 8px;${STATUS_PILL}}
+${STATUS_CSS}
 .df-msg{margin-left:auto;color:var(--lin-ink-2)}
 .df-dlg{max-width:720px;width:90%;padding:24px;border:1px solid var(--lin-line);border-radius:12px;background:var(--lin-s1);color:var(--lin-ink);font:400 14px/1.5 var(--lin-font)}
 .df-dlg::backdrop{background:rgb(0 0 0/.7)}
@@ -176,7 +198,7 @@ function actionBar(root: string, id: string, token: string, hash: string): strin
   const dialog = `<dialog class="df-dlg"><h3>确认人工证据</h3><p>勾选你认可的条目。不认可的取消勾选，回到 Agent 说明要补什么。</p>${pending.map((e) => `<label><input type="checkbox" value="${esc(e.evidence_id)}" checked> <b>${esc(e.task)} / ${esc(e.acceptance)}</b> ${esc(e.summary)}
 <dl>${row('步骤', e.procedure)}${row('预期', e.expected)}${row('实际', e.observed)}</dl></label>`).join('')}
 <menu><button type="button" data-df="cancel">取消</button><button type="button" data-df="confirm">确认所选</button></menu></dialog>`;
-  return `${PAGE_STYLE}${BAR_STYLE}<div class="df-bar" data-home="/${token}/"><a href="/${token}/">← 全部变更</a><span class="df-state">${esc(st.status)} · ${esc(st.reason)}</span>${action}<span class="df-msg" role="status"></span></div>${dialog}${BAR_SCRIPT}`;
+  return `${PAGE_STYLE(st.status)}${BAR_STYLE}<div class="df-bar" data-home="/${token}/"><a href="/${token}/">← 全部变更</a><span class="df-state st-${st.status}">${statusLabel(st.status)} · ${esc(st.reason)}</span>${action}<span class="df-msg" role="status"></span></div>${dialog}${BAR_SCRIPT}`;
 }
 
 /** 页面提交的选项序号 → 写进批准事件的结论；序号无效或数量对不上时拒绝 */
