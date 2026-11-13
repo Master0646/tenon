@@ -46,7 +46,9 @@ function ago(at: string | undefined): string {
 
 // 外观按 Linear 的 DESIGN.md：近黑画布、四级表面、1px 细线、唯一强调色薰衣草蓝。
 // surface-1..4 与 line-2/line-3 文档未给取值，取自 Linear 的 CSS 变量。
-const TOKENS = `--lin-canvas:#010102;--lin-s1:#0f1011;--lin-s2:#141516;--lin-s3:#18191b;--lin-line:#23252a;--lin-line-2:#34343a;--lin-ink:#f7f8f8;--lin-ink-2:#d0d6e0;--lin-ink-3:#8a8f98;--lin-primary:#5e6ad2;--lin-primary-hover:#828fff;--lin-focus:#5e69d1;--lin-font:Inter,"SF Pro Display",-apple-system,system-ui,"Segoe UI",Roboto,"PingFang SC",sans-serif;--lin-mono:"JetBrains Mono","SF Mono",ui-monospace,Menlo,monospace`;
+// 选区、滚动条这些浏览器自带的部分也跟主题走
+const CHROME = '::selection{background:rgb(94 106 210/.45);color:#fff}html{scrollbar-color:#34343a transparent}';
+const TOKENS = `--lin-canvas:#010102;--lin-s1:#0f1011;--lin-s2:#141516;--lin-s3:#18191b;--lin-line:#23252a;--lin-line-2:#34343a;--lin-ink:#f7f8f8;--lin-ink-2:#d0d6e0;--lin-ink-3:#8a8f98;--lin-primary:#5e6ad2;--lin-primary-hover:#828fff;--lin-primary-press:#4f5bbf;--lin-focus:#5e69d1;--lin-font:Inter,"SF Pro Display",-apple-system,system-ui,"Segoe UI",Roboto,"PingFang SC",sans-serif;--lin-mono:"JetBrains Mono","SF Mono",ui-monospace,Menlo,monospace`;
 
 const SHELL = (title: string, body: string, refresh = false) => `<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${refresh ? '<meta http-equiv="refresh" content="5">' : ''}
@@ -54,6 +56,7 @@ const SHELL = (title: string, body: string, refresh = false) => `<!doctype html>
 <style>
 :root{color-scheme:dark;${TOKENS}}
 *{box-sizing:border-box}
+${CHROME}
 body{margin:0;background:var(--lin-canvas);color:var(--lin-ink);font:400 14px/1.5 var(--lin-font);-webkit-font-smoothing:antialiased}
 a{color:var(--lin-ink);text-decoration:none}
 a:hover{color:var(--lin-primary-hover)}
@@ -68,7 +71,11 @@ table{width:100%;border-collapse:collapse}
 th{white-space:nowrap;font-size:12px;font-weight:500;color:var(--lin-ink-3);text-align:left;padding:10px 16px;background:var(--lin-s2);border-bottom:1px solid var(--lin-line)}
 td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--lin-line);vertical-align:top}
 tbody tr:last-child td{border-bottom:0}
+tbody tr{position:relative}
 tbody tr:hover{background:var(--lin-s2)}
+.id::after{content:"";position:absolute;inset:0}
+/* 窄屏把每行叠成两层：标题一行，「轮到你」与状态一行；任务数和最后活动不显示 */
+@media (max-width:640px){table,tbody{display:block}thead{display:none}tbody tr{display:grid;grid-template-columns:1fr auto;gap:8px 12px;padding:14px 16px;border-bottom:1px solid var(--lin-line)}tbody tr:last-child{border-bottom:0}td{padding:0;border:0}td:first-child{grid-column:1/-1}td:nth-child(3){text-align:right}td:nth-child(n+4){display:none}}
 .id{white-space:nowrap;font-family:var(--lin-mono);font-size:13px}
 .todo{white-space:nowrap;display:inline-flex;align-items:center;gap:8px;font-weight:500}
 .todo::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--lin-primary);flex:none}
@@ -102,6 +109,7 @@ function index(root: string, token: string): string {
 // 用户要求保留：面板字母徽标、右侧大纲、差异与状态的红绿色、图表原有强调色。
 const PAGE_STYLE = (status: Status) => `<style>
 html[data-theme][data-mode]{color-scheme:dark;${TOKENS};--font-sans:var(--lin-font);--font-serif:var(--lin-font);--head-font:var(--lin-font);--font-mono:var(--lin-mono);--radius:8px;--bg:var(--lin-canvas);--paper:var(--lin-s1);--fill:var(--lin-s2);--ink:var(--lin-ink);--ink-2:var(--lin-ink-2);--ink-3:var(--lin-ink-3);--line:var(--lin-line-2);--line-2:var(--lin-line);--accent:var(--lin-primary-hover);--accent-bg:rgb(94 106 210/.16);--ok:#8cc79a;--ok-bg:#1c3122;--err:#f0928a;--err-bg:#3a1d1a;--warn:#e3b866;--warn-bg:#352a13;--head-bg:var(--lin-ink);--head-fg:var(--lin-canvas)}
+${CHROME}
 html[data-theme] .am-head h1{font-weight:600;letter-spacing:-.6px}
 ${STATUS_CSS}
 /* 状态放在标题右侧，副标题那行（变更 ID · 英文状态）在审查台上隐藏；底部操作栏里有原因 */
@@ -111,6 +119,8 @@ html[data-theme] .am-head h1{--st:${STATUS[status][1]}}
 html[data-theme] .am-panel{border-radius:12px;border-color:var(--lin-line);box-shadow:inset 0 1px 0 rgb(255 255 255/.04)}
 html[data-theme] .am-panel-head h2{font-weight:500;letter-spacing:-.2px}
 html[data-theme] .am-md p,html[data-theme] .am-md li,html[data-theme] .am-intro{line-height:1.6}
+html[data-theme] .am-btn--reply{background:var(--lin-primary);border-color:var(--lin-primary);color:#fff}
+html[data-theme] .am-btn--reply:hover{background:var(--lin-primary-press);border-color:var(--lin-primary-press);opacity:1}
 html[data-theme] .am-diagram{--accent:#e59a7d;--accent-bg:#3a2219}
 </style>`;
 
@@ -123,9 +133,12 @@ body{padding-bottom:72px}
 .df-bar button,.df-dlg button{font:500 14px/1.2 var(--lin-font);padding:8px 14px;min-height:36px;border-radius:8px;border:1px solid var(--lin-line);background:var(--lin-s2);color:var(--lin-ink);cursor:pointer}
 .df-bar button:hover,.df-dlg button:hover{border-color:var(--lin-line-2)}
 .df-bar button[data-df],.df-dlg button[data-df=confirm]{background:var(--lin-primary);border-color:var(--lin-primary);color:#fff}
-.df-bar button[data-df]:hover,.df-dlg button[data-df=confirm]:hover{background:var(--lin-primary-hover);border-color:var(--lin-primary-hover)}
+.df-bar button[data-df]:hover,.df-dlg button[data-df=confirm]:hover{background:var(--lin-primary-press);border-color:var(--lin-primary-press)}
 .df-bar button:focus-visible,.df-dlg button:focus-visible,.df-dlg input:focus-visible{outline:2px solid color-mix(in srgb,var(--lin-focus) 50%,transparent);outline-offset:2px}
-.df-state{font:500 12px/1.4 var(--lin-font);padding:2px 8px;${STATUS_PILL}}
+.df-state{font:500 12px/1.4 var(--lin-font);padding:2px 8px;white-space:nowrap;${STATUS_PILL}}
+.df-reason{color:var(--lin-ink-3);font-size:13px;margin-left:-4px}
+.df-bar button:disabled,.df-dlg button:disabled{opacity:.55;cursor:progress}
+.df-msg[data-tone=err]{color:#f0928a}
 ${STATUS_CSS}
 .df-msg{margin-left:auto;color:var(--lin-ink-2)}
 .df-dlg{max-width:720px;width:90%;padding:24px;border:1px solid var(--lin-line);border-radius:12px;background:var(--lin-s1);color:var(--lin-ink);font:400 14px/1.5 var(--lin-font)}
@@ -147,13 +160,17 @@ const BAR_SCRIPT = `<script>
   const dlg = document.querySelector('.df-dlg');
   const base = location.pathname.replace(/\\/$/, '');
   const post = async (action, body, done) => {
+    const btns = [...document.querySelectorAll('button[data-df]')];
+    const fail = (text) => { btns.forEach((x) => { x.disabled = false; }); msg.dataset.tone = 'err'; msg.textContent = text; };
+    btns.forEach((x) => { x.disabled = true; });
+    delete msg.dataset.tone;
     msg.textContent = '处理中…';
     try {
       const r = await fetch(base + '/' + action, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
       const j = await r.json();
-      if (!j.ok) { msg.textContent = '✗ ' + j.error + (j.hint ? '（' + j.hint + '）' : ''); return; }
+      if (!j.ok) return fail(j.error + (j.hint ? '（' + j.hint + '）' : ''));
       done ? done() : location.reload();
-    } catch { msg.textContent = '✗ 审查台没有响应：devflow review 还在运行吗？'; }
+    } catch { fail('审查台没有响应：devflow review 还在运行吗？'); }
   };
   // 没有按钮时是在等 Agent：定时刷新，轮到人时按钮自己出现
   if (!bar.querySelector('[data-df]')) setInterval(() => { if (!dlg.open) location.reload(); }, 5000);
@@ -198,7 +215,7 @@ function actionBar(root: string, id: string, token: string, hash: string): strin
   const dialog = `<dialog class="df-dlg"><h3>确认人工证据</h3><p>勾选你认可的条目。不认可的取消勾选，回到 Agent 说明要补什么。</p>${pending.map((e) => `<label><input type="checkbox" value="${esc(e.evidence_id)}" checked> <b>${esc(e.task)} / ${esc(e.acceptance)}</b> ${esc(e.summary)}
 <dl>${row('步骤', e.procedure)}${row('预期', e.expected)}${row('实际', e.observed)}</dl></label>`).join('')}
 <menu><button type="button" data-df="cancel">取消</button><button type="button" data-df="confirm">确认所选</button></menu></dialog>`;
-  return `${PAGE_STYLE(st.status)}${BAR_STYLE}<div class="df-bar" data-home="/${token}/"><a href="/${token}/">← 全部变更</a><span class="df-state st-${st.status}">${statusLabel(st.status)} · ${esc(st.reason)}</span>${action}<span class="df-msg" role="status"></span></div>${dialog}${BAR_SCRIPT}`;
+  return `${PAGE_STYLE(st.status)}${BAR_STYLE}<div class="df-bar" data-home="/${token}/"><a href="/${token}/">← 全部变更</a><span class="df-state st-${st.status}">${statusLabel(st.status)}</span><span class="df-reason">${esc(st.reason)}</span>${action}<span class="df-msg" role="status"></span></div>${dialog}${BAR_SCRIPT}`;
 }
 
 /** 页面提交的选项序号 → 写进批准事件的结论；序号无效或数量对不上时拒绝 */
