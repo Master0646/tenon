@@ -1,0 +1,46 @@
+schema_version: 2
+tasks:
+  - id: T1
+    title: affected_paths 与基线检测覆盖 code_roots
+    acceptance:
+      - id: AC1
+        text: 测试覆盖：兄弟仓库路径通过校验，未声明的 .. 路径被拒；兄弟仓库在批准后有提交改动影响路径时状态为 rebase_required
+        method: automated
+        check: unit-tests
+  - id: T2
+    title: 证据文件可位于代码仓库，自动证据支持日志引文核对
+    acceptance:
+      - id: AC2
+        text: 测试覆盖：引文出现在日志中则 quote_checked 为 true；不在日志中、日志被改或丢失时拒绝；兄弟仓库内的 test 路径被接受，越界路径被拒
+        method: automated
+        check: unit-tests
+      - id: AC3
+        text: 验收矩阵显示日志核对一列
+        method: automated
+        check: unit-tests
+  - id: T3
+    title: 停滞提醒
+    acceptance:
+      - id: AC4
+        text: 测试覆盖：最后事件早于阈值的已开工变更在 status 行尾带停滞标记，其余不带；stale_hours 改小后标记随之出现，非正数被 validate 拒绝
+        method: automated
+        check: unit-tests
+  - id: T5
+    title: 代码仓库的提交门禁钩子
+    depends_on: [T1]
+    acceptance:
+      - id: AC7
+        text: 测试覆盖：init 给每个代码仓库装上带标记的钩子，已有其他钩子时不覆盖；在代码仓库暂存未开工变更的文件，strict 下提交被拒、warn 下只警告；已开工后放行；doctor 报出缺失的钩子
+        method: automated
+        check: unit-tests
+  - id: T4
+    title: 更新使用手册与技能模板
+    depends_on: [T1, T2, T3, T5]
+    acceptance:
+      - id: AC5
+        text: 类型检查通过
+        method: automated
+        check: typecheck
+      - id: AC6
+        text: 使用手册的完整变更流程与当前命令一致，HTML 已重新生成
+        method: manual

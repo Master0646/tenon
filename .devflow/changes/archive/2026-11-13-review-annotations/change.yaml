@@ -1,0 +1,34 @@
+schema_version: 2
+min_cli_version: 0.2.0
+title: 审查页选中文字批注，直接送达正在等待的 Agent
+affected_paths:
+  - src/review.ts
+  - src/render.ts
+  - src/evidence.ts
+  - src/feedback.ts
+  - src/cli.ts
+  - test/**
+  - templates/**
+  - README.md
+  - docs/使用手册.md
+summary:
+  - 在审查台的变更页上选中任意文字，点「批注」写意见；可以攒多条
+  - 点「发送批注」直接送达，不用复制粘贴
+  - 送达方式：Agent 在后台运行的 `devflow wait` 收到批注就退出，并把引用的原文和意见打印出来
+  - 页面显示有没有 Agent 正在等待；没有时批注留到它下次运行 `wait` 或 `resume`
+  - 批注存在 `.devflow/runtime/`，不进批准哈希和事件日志；离线审查页（`devflow render` 生成的文件）不带这个功能
+  - （按批注修改）审查台里渲染器自带的「回复」并入「批注」：去掉「回复」按钮、标注模式和面板评论框，每个面板标题旁加「批注」按钮，用来对整个面板提意见，与选中文字的批注一起发送
+  - （按批注修改）验收矩阵去掉「证据」「代码版本」两列，改为：验收条件、状态（中文）、依据（自动项的测试文件与日志原文，人工项的实际观察）、说明
+decisions:
+  - question: 离线审查页（devflow render 生成的文件）里的「回复」怎么办？
+    options: [保持不变（离线页不能发送，只能复制）, 也改名为「批注」]
+    recommend: 保持不变（离线页不能发送，只能复制）
+  - question: 批注的粒度？
+    options: [选中任意一段文字, 只能整段标注（复用渲染器自带的标注模式）]
+    recommend: 选中任意一段文字
+  - question: 没有 Agent 在等待时，能不能发送批注？
+    options: [可以发送，页面提示会在 Agent 下次等待时送达, 不允许发送]
+    recommend: 可以发送，页面提示会在 Agent 下次等待时送达
+  - question: 还有没发送的批注时点「批准」，怎么处理？
+    options: [拦住，提示先发送或删除批注, 批注随批准一起送达]
+    recommend: 拦住，提示先发送或删除批注

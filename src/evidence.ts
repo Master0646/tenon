@@ -1,11 +1,11 @@
 // 验收证据只证明检查有来源；业务覆盖充分性由审查者判断。
 import { randomUUID } from 'node:crypto';
-import { copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { basename, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { parse } from 'yaml';
 import {
   DF, DevflowError, appendEvent, approvalCycle, git, hashFiles, requireChange, requireInit,
-  readEvents, reviewedFiles, sha256, worktreeHash, type DevflowEvent,
+  readEvents, reviewedFiles, rootOf, sha256, worktreeHash, type DevflowEvent,
 } from './core.ts';
 import { loadTasks } from './validate.ts';
 import { isExcluded, loadExcludes } from './wiki.ts';
@@ -16,6 +16,10 @@ export interface EvidenceRow {
   task: string; acceptance: string; text: string; method: string;
   status: 'valid' | 'missing' | 'stale' | 'unconfirmed' | 'invalid';
   evidence_id?: string; worktree_hash?: string; reason?: string;
+  /** 自动证据的日志引文是否已核对；人工证据与缺证据时为 — */
+  log_check: '已核对' | '未核对' | '—';
+  /** 给人看的依据：自动项是测试文件与日志原文，人工项是实际观察 */
+  basis?: string;
 }
 
 function text(value: unknown, label: string, limit = 4096): string {
@@ -27,16 +31,20 @@ function text(value: unknown, label: string, limit = 4096): string {
 
 function safeFile(root: string, path: unknown): string {
   const rel = text(path, '文件路径', 1024);
-  if (isAbsolute(rel) || rel.includes('\\') || rel.split('/').some((p) => p === '..' || !p)) {
-    throw new DevflowError(`文件路径必须位于仓库内：${rel}`);
+  // code_roots 里的仓库与本仓库同等对待：以该仓库为界检查越界与符号链接
+  const code = rootOf(root, rel);
+  const base = resolve(root, code?.rel ?? '.');
+  const inner = code?.rest ?? rel;
+  if (isAbsolute(rel) || rel.includes('\\') || inner.split('/').some((p) => p === '..' || !p)) {
+    throw new DevflowError(`文件路径必须位于本仓库或 code_roots 声明的仓库内：${rel}`);
   }
-  const abs = resolve(root, rel);
-  if (relative(resolve(root), abs).startsWith('..') || isExcluded(rel, loadExcludes(root))) {
+  const abs = resolve(base, inner);
+  if (relative(base, abs).startsWith('..') || isExcluded(inner, loadExcludes(root))) {
     throw new DevflowError(`文件越界或属于 exclude：${rel}`);
   }
-  let current = resolve(root);
+  let current = base;
   try {
-    for (const part of relative(resolve(root), abs).split(sep)) {
+    for (const part of relative(base, abs).split(sep)) {
       current = join(current, part);
       if (lstatSync(current).isSymbolicLink()) throw new DevflowError(`不允许符号链接：${rel}`);
     }
@@ -47,6 +55,18 @@ function safeFile(root: string, path: unknown): string {
     throw new DevflowError(`文件不存在或不可读：${rel}`);
   }
   return abs;
+}
+
+/** 在本变更的验证日志里找内容哈希与运行记录一致的那份；日志目录以验证开始时刻命名，与事件时间对不上，所以按哈希找 */
+function findLog(root: string, id: string, check: string, hash: string): string | undefined {
+  const dir = join(root, DF, 'runtime', 'verify', id);
+  if (!existsSync(dir)) return undefined;
+  for (const stamp of readdirSync(dir)) {
+    const f = join(dir, stamp, `${check}.log`);
+    if (!existsSync(f)) continue;
+    const buf = readFileSync(f);
+    if (sha256(buf) === hash) return buf.toString('utf8');
+  }
 }
 
 function conditions(root: string, id: string, task?: string): { task: string; condition: Condition }[] {
@@ -87,7 +107,7 @@ export function recordEvidence(root: string, id: string, input: unknown): Record
   const cycle = active(root, id);
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new DevflowError('证据输入必须是 JSON 对象');
   const value = input as Record<string, unknown>;
-  const allowed = new Set(['task', 'acceptance', 'kind', 'summary', 'verify_run', 'check', 'test', 'assertion', 'procedure', 'expected', 'observed', 'artifacts']);
+  const allowed = new Set(['task', 'acceptance', 'kind', 'summary', 'verify_run', 'check', 'test', 'assertion', 'log_quote', 'procedure', 'expected', 'observed', 'artifacts']);
   for (const key of Object.keys(value)) if (!allowed.has(key)) throw new DevflowError(`未知证据字段：${key}`);
   const task = text(value.task, 'task', 128);
   const acceptance = text(value.acceptance, 'acceptance', 128);
@@ -113,6 +133,16 @@ export function recordEvidence(root: string, id: string, input: unknown): Record
     event.test = text(value.test, 'test', 1024);
     safeFile(root, event.test);
     event.assertion = text(value.assertion, 'assertion');
+    if (value.log_quote !== undefined) {
+      const quote = text(value.log_quote, 'log_quote', 300);
+      if (quote.includes('\n')) throw new DevflowError('log_quote 只能是一行');
+      const logHash = run.checks.find((c) => c.name === event.check)?.log_hash;
+      const log = logHash ? findLog(root, id, event.check, logHash) : undefined;
+      if (log === undefined) throw new DevflowError(`找不到验证运行 ${event.verify_run} 的 ${event.check} 日志，或日志已被改动`, '重新运行 devflow verify');
+      if (!log.includes(quote)) throw new DevflowError(`log_quote 不在 ${event.check} 的日志中`, '从日志里原样复制一行');
+      event.log_quote = quote;
+      event.quote_checked = true;
+    }
   } else {
     event.procedure = text(value.procedure, 'procedure');
     event.expected = text(value.expected, 'expected');
@@ -175,11 +205,15 @@ export function evidenceMatrix(root: string, id: string): EvidenceRow[] {
   const all = readEvents(root, id);
   const hash = worktreeHash(root);
   return conditions(root, id).map(({ task, condition }) => {
-    const row: EvidenceRow = { task, acceptance: condition.id, text: condition.text, method: condition.method, status: 'missing', reason: '缺少本轮验收证据' };
+    const row: EvidenceRow = { task, acceptance: condition.id, text: condition.text, method: condition.method, status: 'missing', reason: '缺少本轮验收证据', log_check: '—' };
     const event = all.findLast((e) => e.type === 'evidence-recorded' && e.task === task && e.acceptance === condition.id);
     if (event?.type !== 'evidence-recorded') return row;
     row.evidence_id = event.evidence_id;
     row.worktree_hash = event.worktree_hash;
+    if (event.kind === 'automated') row.log_check = event.quote_checked ? '已核对' : '未核对';
+    row.basis = event.kind === 'automated'
+      ? `自动：${event.test ?? ''}${event.log_quote ? `；日志「${event.log_quote}」${event.quote_checked ? '已核对' : '未核对'}` : '；日志未核对'}`
+      : `人工：${event.observed ?? ''}`;
     // 旧批准下的证据：验收条件（含检查命令）没变、代码没变时沿用，不用重录
     const carried = event.approval_id !== cycle.approval_id;
     if ((carried && event.condition_hash !== conditionHash(root, condition)) || event.worktree_hash !== hash) return { ...row, status: 'stale', reason: '验收条件或代码已变化，需要重新验证' };

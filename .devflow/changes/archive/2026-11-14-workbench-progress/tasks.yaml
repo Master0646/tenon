@@ -1,0 +1,36 @@
+schema_version: 2
+tasks:
+  - id: T1
+    title: 计算工作节点
+    acceptance:
+      - id: AC1
+        text: 测试覆盖：9 个节点各有一个用例（含 applying 的三种原因、wiki lint 有无错误两种情况），人要操作的节点 human 为真
+        method: automated
+        check: unit-tests
+  - id: T2
+    title: 首页工作节点列、已归档列表与只读页
+    depends_on: [T1]
+    acceptance:
+      - id: AC2
+        text: 测试覆盖：首页显示工作节点；已归档列表按时间倒序；只读页能打开且没有操作按钮和批注脚本；向 /a/ 提交 POST 返回 404
+        method: automated
+        check: unit-tests
+  - id: T3
+    title: 状态接口、提示后刷新、恢复视图
+    depends_on: [T1]
+    acceptance:
+      - id: AC3
+        text: 测试覆盖：页面里没有 meta refresh 和定时整页刷新；state 接口在追加事件或改被审文件后 v 改变，只有等待进程起停时 v 不变；令牌错误返回 404
+        method: automated
+        check: unit-tests
+      - id: AC4
+        text: 在浏览器里实测：停在变更页中间时 Agent 推进一步，页面出现「有新进展，点此刷新」且没有跳动；点击后展开的面板和滚动位置恢复；首页能打开一个已归档变更的只读页
+        method: manual
+  - id: T4
+    title: 使用手册与 README
+    depends_on: [T2, T3]
+    acceptance:
+      - id: AC5
+        text: 类型检查通过；使用手册写明工作节点的含义、已归档只读页和刷新提示
+        method: automated
+        check: typecheck

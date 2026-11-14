@@ -141,12 +141,14 @@ export interface EvidenceRecord {
   task: string; acceptance: string; kind: 'automated' | 'manual'; summary: string;
   artifacts: { path: string; hash: string }[]; verify_run?: string; check?: string; test?: string; assertion?: string;
   procedure?: string; expected?: string; observed?: string;
+  /** 日志里的一行原文；quote_checked 表示记录时已在该次验证的日志中核对到它 */
+  log_quote?: string; quote_checked?: boolean;
   /** 记录时验收条件的指纹；重新批准后指纹没变，这条证据继续有效 */
   condition_hash?: string;
 }
 
 export type DevflowEvent =
-  | { type: 'approved'; at: string; actor: string; hash: string; base_commit: string; spec_base: Record<string, string | null>; approval_id?: string; snapshot_hash?: string; decisions?: { question: string; answer: string }[] }
+  | { type: 'approved'; at: string; actor: string; hash: string; base_commit: string; spec_base: Record<string, string | null>; approval_id?: string; snapshot_hash?: string; base_commits?: Record<string, string>; decisions?: { question: string; answer: string }[] }
   | { type: 'apply-started'; at: string; head: string; approval_id?: string }
   | { type: 'task-done'; at: string; task: string; approval_id?: string; worktree_hash?: string }
   | { type: 'verified'; at: string; diff_hash: string; result: 'pass' | 'fail' | 'unknown'; checks: { name: string; exit: number | null; log_hash?: string }[]; run_id?: string; approval_id?: string }
@@ -227,6 +229,31 @@ export function codeRoots(root: string): string[] | null {
   try { p = parse(readFileSync(join(root, DF, 'project.yaml'), 'utf8')); } catch { return null; }
   const list = p?.code_roots;
   return Array.isArray(list) && list.length && list.every((r: unknown) => typeof r === 'string' && r.trim()) ? list : null;
+}
+
+/** path 属于哪个 code_root（最长前缀）；不属于任何一个时为 null。rest 是去掉前缀后的仓库内路径 */
+export function rootOf(root: string, path: string): { rel: string; rest: string } | null {
+  const hit = (codeRoots(root) ?? []).map((r) => r.replace(/\/+$/, '')).filter((r) => path.startsWith(`${r}/`)).sort((a, b) => b.length - a.length)[0];
+  return hit ? { rel: hit, rest: path.slice(hit.length + 1) } : null;
+}
+
+/** 把影响路径按仓库分组：本仓库的键是 '.'，代码仓库的键是它在 code_roots 里的写法，值是仓库内的 glob */
+export function splitPaths(root: string, globs: string[]): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  for (const g of globs) {
+    const hit = rootOf(root, g);
+    const key = hit?.rel ?? '.';
+    out.set(key, [...(out.get(key) ?? []), hit?.rest ?? g]);
+  }
+  return out;
+}
+
+/** project.yaml 的 stale_hours：已批准或已开工的变更多久没有新记录算停滞。默认 24 */
+export function staleLimit(root: string): number {
+  try {
+    const n = parse(readFileSync(join(root, DF, 'project.yaml'), 'utf8'))?.stale_hours;
+    return typeof n === 'number' && n > 0 ? n : 24;
+  } catch { return 24; }
 }
 
 /**

@@ -1,10 +1,10 @@
 // devflow check：pre-commit hook 与 CI 的门禁
 // --staged 时规范锁与事件日志按暂存区内容检查：提交的是暂存区，不是工作树
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readFileSync, realpathSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import {
-  DF, DevflowError, parseEvents, changeDir, changeRel, git, listChanges, readEvents, repoFiles, requireInit, sha256, type Issue,
+  DF, DevflowError, parseEvents, changeDir, changeRel, codeRoots, git, listChanges, readEvents, repoFiles, requireInit, sha256, splitPaths, type Issue,
 } from './core.ts';
 import { snapshotIssues } from './status.ts';
 import { evidenceIssues } from './evidence.ts';
@@ -113,9 +113,21 @@ function checkSpecLock(root: string, staged: boolean): Issue[] {
  * 暂存了变更影响路径内的代码时：变更未开工 → 警告（strict 拒绝）；已开工但事件日志未暂存 → 警告。
  * 有已开工的变更时，暂存了不属于任何进行中变更影响路径的文件 → 警告。
  */
-function checkStagedCode(root: string): Issue[] {
+/** 代码仓库（code_roots 之一）的 pre-commit：只做暂存代码检查，规范锁与事件日志由 devflow 仓库自己的钩子把关 */
+export function checkCodeRepo(root: string, repo: string): Issue[] {
+  requireInit(root);
+  const key = (codeRoots(root) ?? []).map((r) => r.replace(/\/+$/, '')).find((r) => {
+    try { return realpathSync(resolve(root, r)) === realpathSync(repo); } catch { return false; }
+  });
+  if (!key) throw new DevflowError(`${repo} 不在 ${root} 的 code_roots 中`, `检查 ${root}/${DF}/project.yaml，或删除这个仓库的 pre-commit 钩子`);
+  return checkStagedCode(root, repo, key);
+}
+
+/** repo / key：暂存文件所在的仓库及其在 code_roots 里的写法；默认是 devflow 所在的仓库 */
+function checkStagedCode(root: string, repo = root, key = '.'): Issue[] {
+  const here = (paths: string[]) => splitPaths(root, paths).get(key) ?? [];
   // affected_paths 不能在 .devflow/ 下，只暂存了 .devflow/ 时三条规则都不适用
-  if (!stagedFiles(root).some((f) => !f.startsWith(`${DF}/`))) return [];
+  if (!stagedFiles(repo).some((f) => !f.startsWith(`${DF}/`))) return [];
   const level = enforceLevel(root) === 'strict' ? 'error' : 'warn';
   const issues: Issue[] = [];
   const globs: string[] = [];
@@ -123,8 +135,9 @@ function checkStagedCode(root: string): Issue[] {
   const pending: { id: string; paths: string[]; status: string; reason: string }[] = [];
   for (const id of listChanges(root)) {
     const meta = loadChangeMeta(root, id);
-    if (!meta?.affected_paths.length || !existsSync(changeDir(root, id))) continue;
-    globs.push(...meta.affected_paths);
+    const paths = here(meta?.affected_paths ?? []);
+    if (!paths.length || !existsSync(changeDir(root, id))) continue;
+    globs.push(...paths);
     let st;
     try {
       st = deriveStatus(root, id);
@@ -132,10 +145,11 @@ function checkStagedCode(root: string): Issue[] {
       continue; // 事件日志损坏，已在上面报告
     }
     if (STARTED.has(st.status)) {
-      startedGlobs.push(...meta.affected_paths);
-      const staged = stagedFiles(root, meta.affected_paths);
+      startedGlobs.push(...paths);
+      const staged = stagedFiles(repo, paths);
       const rel = `${changeRel(id)}/events.jsonl`;
-      if (staged.length && (indexContent(root, rel) ?? '') !== worktreeText(root, rel)) {
+      // 事件日志在 devflow 仓库里：只有在那个仓库提交时才能要求一起暂存
+      if (key === '.' && staged.length && (indexContent(root, rel) ?? '') !== worktreeText(root, rel)) {
         issues.push({
           level: 'warn', file: rel,
           message: `变更 ${id} 的记录未暂存：批准与验证记录（events.jsonl）不会随这次提交进入仓库`,
@@ -144,12 +158,12 @@ function checkStagedCode(root: string): Issue[] {
       }
       continue;
     }
-    pending.push({ id, paths: meta.affected_paths, status: st.status, reason: st.reason });
+    pending.push({ id, paths, status: st.status, reason: st.reason });
   }
   // 已被某个已开工变更覆盖的文件，不再以其他未开工变更的名义报"未开工"
-  const byStarted = new Set(startedGlobs.length ? stagedFiles(root, startedGlobs) : []);
+  const byStarted = new Set(startedGlobs.length ? stagedFiles(repo, startedGlobs) : []);
   for (const { id, paths, status, reason } of pending) {
-    const staged = stagedFiles(root, paths).filter((f) => !byStarted.has(f));
+    const staged = stagedFiles(repo, paths).filter((f) => !byStarted.has(f));
     if (!staged.length) continue;
     issues.push({
       level, file: staged.slice(0, 5).join(', ') + (staged.length > 5 ? ' …' : ''),
@@ -158,8 +172,8 @@ function checkStagedCode(root: string): Issue[] {
     });
   }
   if (startedGlobs.length) {
-    const covered = new Set(stagedFiles(root, globs, 'd'));
-    const outside = stagedFiles(root, undefined, 'd').filter((f) => !covered.has(f) && !f.startsWith(`${DF}/`));
+    const covered = new Set(stagedFiles(repo, globs, 'd'));
+    const outside = stagedFiles(repo, undefined, 'd').filter((f) => !covered.has(f) && !f.startsWith(`${DF}/`));
     if (outside.length) {
       issues.push({
         level: 'warn', file: outside.slice(0, 5).join(', ') + (outside.length > 5 ? ' …' : ''),

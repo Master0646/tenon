@@ -49,9 +49,9 @@ test('审查台：令牌或 Host 不对一律 404；首页列出轮到人的变�
     assert.match(home, /role-access[\s\S]*待你批准/);
     const page = await (await fetch(`${origin}/${TOKEN}/c/${ID}`)).text();
     assert.match(page, /data-df="approve" data-hash="sha256:[0-9a-f]{64}"/);
-    // 注入了两段脚本（折叠、操作栏），内容安全策略里相应多出两个哈希
+    // 注入了四段脚本（折叠、目录、操作栏、批注），内容安全策略里相应多出四个哈希
     const csp = /Content-Security-Policy" content="([^"]*)"/.exec(page)![1];
-    assert.equal(csp.match(/'sha256-/g)!.length, 4);
+    assert.equal(csp.match(/'sha256-/g)!.length, 6);
     assert.doesNotMatch(page, /\son[a-z]+="/); // 没有行内事件处理器：会被策略拦掉
     assert.equal((await fetch(`${origin}/${TOKEN}/c/no-such-change`)).status, 400);
   } finally { server.close(); }
@@ -78,7 +78,7 @@ test('审查台批准：页面哈希过期被拒；未选项按序号校验；�
     assert.deepEqual(ok.json, { ok: true, message: '已批准' });
     assert.equal(deriveStatus(dir, ID).status, 'approved');
     assert.deepEqual(decisionAnswers(dir, ID), [{ question: '返回什么？', answer: '返回空列表', by: 'human' }]);
-    assert.match(buildDraft(dir, ID).draft, /## 已拍板（1 项）与方案要点\n- 返回什么？ → \*\*返回空列表\*\*/);
+    assert.match(buildDraft(dir, ID).draft, /### 已拍板（1 项）\n\n- 返回什么？ → \*\*返回空列表\*\*/);
     assert.match((await post('approve', { hash, answers: [1] })).json.error, /不需要批准/);
   } finally { server.close(); }
 });

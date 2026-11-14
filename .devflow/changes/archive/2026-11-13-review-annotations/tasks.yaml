@@ -1,0 +1,54 @@
+schema_version: 2
+tasks:
+  - id: T1
+    title: 审查台接收并保存批注
+    acceptance:
+      - id: AC1
+        text: 测试覆盖：合法批注落盘；空批注、超长、条数超限、令牌错误被拒
+        method: automated
+        check: unit-tests
+  - id: T2
+    title: devflow wait 送达批注，等待标记与 resume 提示
+    acceptance:
+      - id: AC2
+        text: 测试覆盖：wait 运行中收到批注后退出码 0 并打印原文与意见；启动时已有未读批注立即返回；读过的批注不再重复打印
+        method: automated
+        check: unit-tests
+      - id: AC3
+        text: 测试覆盖：wait 运行期间页面显示 Agent 正在等待，退出后显示没有；resume 显示未读条数
+        method: automated
+        check: unit-tests
+  - id: T3
+    title: 页面上选中文字批注并发送
+    depends_on: [T1]
+    acceptance:
+      - id: AC4
+        text: 测试覆盖：变更页含批注脚本，其哈希已登记进内容安全策略，没有行内事件处理器；离线审查页不含该脚本
+        method: automated
+        check: unit-tests
+      - id: AC5
+        text: 在浏览器里实测：选中文字、对整个面板各写一条批注并发送，另一端的 devflow wait 打印出原文与意见；页面上没有「回复」按钮；有未发送批注时页面不自动刷新，点批准被拦住
+        method: manual
+  - id: T5
+    title: 审查台并入渲染器的「回复」，支持整个面板的批注
+    depends_on: [T3]
+    acceptance:
+      - id: AC7
+        text: 测试覆盖：审查台变更页隐藏回复、标注模式与面板评论框的样式已注入，每个面板标题旁有批注按钮；离线审查页仍有渲染器的回复
+        method: automated
+        check: unit-tests
+  - id: T6
+    title: 验收矩阵改为人关心的四列
+    acceptance:
+      - id: AC8
+        text: 测试覆盖：矩阵表头为验收条件、状态、依据、说明，不含证据 ID 与代码版本；自动项依据含测试文件与已核对的日志原文，人工项依据含实际观察，状态为中文
+        method: automated
+        check: unit-tests
+  - id: T4
+    title: 技能模板与文档
+    depends_on: [T2, T3, T5, T6]
+    acceptance:
+      - id: AC6
+        text: 类型检查通过；propose 与 apply 技能说明 wait 可能带回批注及处理方式
+        method: automated
+        check: typecheck

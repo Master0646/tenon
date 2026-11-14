@@ -2,7 +2,7 @@
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parse } from 'yaml';
-import { DF, changeRel, git, repoFiles, type Issue } from './core.ts';
+import { DF, changeRel, git, repoFiles, rootOf, type Issue } from './core.ts';
 import { mergeSpec, parseDelta } from './spec.ts';
 
 const EX_PROJECT = `schema_version: 1
@@ -92,6 +92,7 @@ export function validateProject(root: string): Issue[] {
       if (!top || top !== realpathSync(resolve(root, rel))) err(`code_roots 中的 ${rel} 不是 Git 仓库的根目录`);
     }
   }
+  if (p.stale_hours !== undefined && !(typeof p.stale_hours === 'number' && p.stale_hours > 0)) err('stale_hours 必须是正数（小时）');
   if (!['warn', 'strict'].includes(p.enforce)) err('enforce 必须是 warn 或 strict');
   return issues;
 }
@@ -172,8 +173,10 @@ export function validateChange(root: string, id: string, complete: boolean): Iss
     } else {
       if (complete && !m.affected_paths.length) err('change.yaml', 'affected_paths 不能为空：列出本变更会改动的路径（glob）', hc);
       for (const p of m.affected_paths as string[]) {
-        if (!p.trim() || p.startsWith('/') || p.split('/').includes('..') || p === DF || p.startsWith(`${DF}/`)) {
-          err('change.yaml', `affected_paths 路径无效：${JSON.stringify(p)}（须为仓库内相对路径，且不在 ${DF}/ 下）`, hc);
+        // 代码仓库里的路径：以某个 code_roots 项开头，去掉前缀后按仓库内路径检查
+        const inner = rootOf(root, p)?.rest ?? p;
+        if (!inner.trim() || inner.startsWith('/') || inner.split('/').includes('..') || inner === DF || inner.startsWith(`${DF}/`)) {
+          err('change.yaml', `affected_paths 路径无效：${JSON.stringify(p)}（须为本仓库或 code_roots 声明的仓库内的相对路径，且不在 ${DF}/ 下）`, hc);
         }
       }
     }

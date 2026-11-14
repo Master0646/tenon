@@ -37,8 +37,8 @@ devflow init
 1. **声明验证命令**（由人维护）：编辑 `.devflow/project.yaml` 的 `verify`，例如 `mvn -q test`、`npm test`。只有这里声明的命令会被 `devflow verify` 运行，验证结果决定变更能否归档。
 2. **自检**：`devflow doctor`。
 3. **启动审查台**（一次）：在**自己的终端**运行 `devflow review`，保持它开着。浏览器会打开审查台，之后的批准、确认人工证据、归档都在这里点按钮。
-4. **提方案**：在 Agent 里说"用 devflow-propose 提一个变更：……"。Agent 写好方案后，变更出现在审查台首页的"待你批准"里。
-5. **审批**：打开变更。首屏是要你拍板的事项和方案要点，细节面板默认折叠。选好后点「批准此版本」。不用审查台时，也可以复制审查页上的 `devflow approve <id> --hash <前缀>` 到终端运行。
+4. **提方案**：在 Agent 里说"用 devflow-propose 提一个变更：……"。Agent 写好方案后，变更出现在审查台首页，工作节点为"待你批准"。首页的「工作节点」一列显示每个变更走到哪一步，下方的「已归档」可以打开归档过的变更的只读页；状态变化时页面提示「有新进展，点此刷新」，不会自己刷新。
+5. **审批**：打开变更。操作栏固定在顶部，左侧是可跳转的目录；首屏写明现在到哪一步、要你做什么和待拍板事项，方案要点紧接其后，细节面板默认折叠，页面最后是发过的批注记录。选好后点「批准此版本」。不用审查台时，也可以复制审查页上的 `devflow approve <id> --hash <前缀>` 到终端运行。
 6. **实现与验证**：在 Agent 里说"用 devflow-apply 实现变更 <id>"。它会开工、逐个完成任务，并运行 `devflow verify <id>` 直到通过。
 7. **提交代码**：由你决定何时提交。
 8. **归档准备**：在 Agent 里说"用 devflow-archive 为变更 <id> 做归档准备"。它会更新知识页。
@@ -66,7 +66,7 @@ devflow init
 | `devflow render <id> [-o 文件]` | 生成离线审查页 |
 | `devflow status [id] [--all]` | 显示派生状态与任务进度，行尾标出轮到谁（待你批准、待你确认 N 条人工证据、待你归档，或 Agent 进行中）；`--json` 带 `todo` 字段；`--all` 同时列出已归档的变更 |
 | `devflow review [id]` | 启动本地审查台（只能由人在交互终端运行）：在浏览器里批准、批量确认人工证据、归档，并列出所有没收尾的变更 |
-| `devflow wait <id> [--timeout 秒]` | 等人批准、确认证据或归档后退出；Agent 在后台运行，人不用回对话里说"已批准" |
+| `devflow wait <id> [--timeout 秒]` | 等人批准、确认证据、归档或发来批注后退出；Agent 在后台运行，人不用回对话里说"已批准"，也不用复制意见 |
 | `devflow approve <id> [--hash 前缀]` | 批准并绑定内容哈希（只能由人在交互终端运行）；`--hash` 与审查页一致时直接批准 |
 | `devflow apply <id> --start` | 记录开工 |
 | `devflow task done <id> <任务>` | 记录任务完成 |
@@ -121,16 +121,20 @@ devflow task done <id> <task>
 自动 evidence.json 示例（填写实际 run_id、任务和已批准条件）：
 
 ```json
-{"task":"T1","acceptance":"AC1","kind":"automated","summary":"普通用户被拒绝且数据不变","verify_run":"实际运行ID","check":"unit-tests","test":"test/access.test.ts","assertion":"断言 status=403，数据未修改","artifacts":[]}
+{"task":"T1","acceptance":"AC1","kind":"automated","summary":"普通用户被拒绝且数据不变","verify_run":"实际运行ID","check":"unit-tests","test":"test/access.test.ts","assertion":"断言 status=403，数据未修改","log_quote":"✔ 普通用户被拒绝","artifacts":[]}
 ```
+
+`log_quote` 可选：从该检查日志原样复制的一行。devflow 记录前核对它在日志里（日志被改或丢失时拒绝，提示重新 verify），验收矩阵的「日志核对」列显示「已核对」。
 
 人工项改为 kind: manual，并提供 procedure、expected、observed。附件最多十个、每个最多 1 MiB，禁止 exclude 文件、越界或符号链接；证据和批准快照属于受控项目材料，应与 events.jsonl 一起提交。原始运行日志丢失仅提示，受控附件或快照损坏会阻止后续流程。
 
 代码变化需重建证据。重新批准开始新周期，但验收条件（文本、方式、检查命令）和代码都没变的证据与任务完成记录自动沿用，只需重新 `apply --start` 和 `verify`。
 
-代码不在 devflow 所在的仓库时，在 `project.yaml` 里声明 `code_roots: ["../backend", "../frontend"]`（每项是一个 Git 仓库的根，路径相对本仓库）。声明后代码哈希只算这些仓库：它们的改动会让验证和证据过期，本仓库里的文档改动不会。`affected_paths` 与提交门禁仍只管本仓库。
+代码不在 devflow 所在的仓库时，在 `project.yaml` 里声明 `code_roots: ["../backend", "../frontend"]`（每项是一个 Git 仓库的根，路径相对本仓库）。声明后代码哈希只算这些仓库：它们的改动会让验证和证据过期，本仓库里的文档改动不会。`affected_paths` 写成以该项开头的路径（`../backend/src/**`）；批准后那个仓库有提交改动这些路径，变更进入 rebase_required。证据的 `test` 与附件也可以在这些仓库里。声明或改动 `code_roots` 后重新运行 `devflow init`，它给每个代码仓库装上 pre-commit hook（`devflow check --staged --project <本仓库>`），在那边提交未开工变更的代码时按 `enforce` 警告或拒绝；已有其他 hook 时不覆盖，打印要加的那一行。
 
-`change.yaml` 的 `summary`（方案要点，最多 7 条）和 `decisions`（待拍板事项，每项给出选项和推荐）显示在审查页首屏。在审查台批准时选的结论记入批准事件，`devflow resume` 会显示给 Agent。
+`devflow status` 对已批准或已开工、最后一条记录超过 `stale_hours`（`project.yaml`，默认 24）小时的变更在行尾标「停滞 N 小时」，审查台列表同样显示。`project.yaml` 计入批准哈希，改阈值要重新批准进行中的变更。
+
+`change.yaml` 的 `summary`（方案要点，最多 7 条）和 `decisions`（待拍板事项，每项给出选项和推荐）显示在审查页前两个面板（拍板事项在首屏，方案要点紧接其后）。在审查台批准时选的结论记入批准事件，`devflow resume` 会显示给 Agent。
 
 一个工作树只开工一个 v2 变更，多个任务用独立 worktree 隔离；同能力规范变化进入 rebase_required，更新方案后重新批准。归档确认期间代码变化会拒绝继续，部分写入事务只能在恢复相应代码与证据后前滚。
 

@@ -2,7 +2,7 @@
 import { appendFileSync, chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CHANGE_ID, DF, DevflowError, changeDir, git, requireInit } from './core.ts';
+import { CHANGE_ID, DF, DevflowError, changeDir, codeRoots, git, requireInit } from './core.ts';
 
 const PROJECT_YAML = `schema_version: 1
 # 只有这里声明的命令会被 devflow verify 执行。本文件由人维护，计入每次批准的哈希。
@@ -36,10 +36,30 @@ const IGNORE_LINE = `${DF}/runtime/`;
 export const CLI = fileURLToPath(new URL(import.meta.url.endsWith('.ts') ? './cli.ts' : './cli.js', import.meta.url));
 const shq = (s: string): string => `'${s.replaceAll("'", `'\\''`)}'`;
 
+type HookState = 'installed' | 'updated' | 'foreign';
 export interface InitResult {
   created: string[];
-  hook: 'installed' | 'updated' | 'foreign';
+  hook: HookState;
   hookPath: string;
+  /** code_roots 里每个仓库的钩子；missing = 目录不是 Git 仓库 */
+  codeHooks: { repo: string; hook: HookState | 'missing'; hookPath: string; line: string }[];
+}
+
+export const hookFile = (repo: string): string => join(resolve(repo, git(repo, ['rev-parse', '--git-path', 'hooks']).trim()), 'pre-commit');
+
+/** 写入带标记的 pre-commit；已有不带标记的钩子时不覆盖 */
+function installHook(repo: string, line: string): { hook: HookState; hookPath: string } {
+  // core.hooksPath 设置时 --git-path 会返回那个目录
+  const hookPath = hookFile(repo);
+  let hook: HookState = 'installed';
+  if (existsSync(hookPath)) {
+    if (!readFileSync(hookPath, 'utf8').includes(HOOK_MARK)) return { hook: 'foreign', hookPath };
+    hook = 'updated';
+  }
+  mkdirSync(dirname(hookPath), { recursive: true });
+  writeFileSync(hookPath, `#!/bin/sh\n${HOOK_MARK}\nexec ${line}\n`);
+  chmodSync(hookPath, 0o755);
+  return { hook, hookPath };
 }
 
 export function init(root: string): InitResult {
@@ -60,18 +80,15 @@ export function init(root: string): InitResult {
     created.push('.gitignore（追加 .devflow/runtime/）');
   }
 
-  // core.hooksPath 设置时 --git-path 会返回那个目录
-  const hookPath = join(resolve(root, git(root, ['rev-parse', '--git-path', 'hooks']).trim()), 'pre-commit');
-  const script = `#!/bin/sh\n${HOOK_MARK}\nexec ${shq(process.execPath)} ${shq(CLI)} check --staged\n`;
-  let hook: InitResult['hook'] = 'installed';
-  if (existsSync(hookPath)) {
-    if (!readFileSync(hookPath, 'utf8').includes(HOOK_MARK)) return { created, hook: 'foreign', hookPath };
-    hook = 'updated';
-  }
-  mkdirSync(dirname(hookPath), { recursive: true });
-  writeFileSync(hookPath, script);
-  chmodSync(hookPath, 0o755);
-  return { created, hook, hookPath };
+  const base = `${shq(process.execPath)} ${shq(CLI)} check --staged`;
+  // 代码仓库的钩子带上本项目的绝对路径：在那边提交时回到这里读变更
+  const codeHooks = (codeRoots(root) ?? []).map((rel) => {
+    const repo = resolve(root, rel);
+    const line = `${base} --project ${shq(root)}`;
+    try { return { repo, line, ...installHook(repo, line) }; }
+    catch { return { repo, line, hook: 'missing' as const, hookPath: '' }; }
+  });
+  return { created, ...installHook(root, base), codeHooks };
 }
 
 const CHANGE_FILES: Record<string, string> = {

@@ -1,0 +1,17 @@
+schema_version: 2
+min_cli_version: 0.2.0
+title: 补齐多仓库、自动证据核对、停滞提醒与使用手册
+affected_paths:
+  - src/**
+  - test/**
+  - templates/**
+  - docs/**
+  - README.md
+summary:
+  - "`affected_paths` 可以写兄弟仓库里的路径（写法同 code_roots，如 `../backend/src/**`）；批准后这些路径被提交改动，变更同样进入「需重新批准」"
+  - "`devflow init` 给 `code_roots` 里的每个仓库装提交门禁钩子：在那边提交未开工变更的代码时警告或拒绝"
+  - 证据里的测试文件可以位于 `code_roots` 声明的仓库
+  - 自动证据可以引用一行日志原文，devflow 核对它确实出现在那次验证的日志里；不带引文的照常记录，验收矩阵标为「未核对」
+  - "已批准或已开工的变更超过阈值没有新记录时，`status` 和审查台首页标出「停滞」；阈值在 project.yaml 的 `stale_hours` 配置，默认 24"
+  - 使用手册按审查台、`wait`、`code_roots`、证据沿用的新流程重写相关章节
+decisions: []

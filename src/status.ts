@@ -1,13 +1,14 @@
 // 派生状态与批准：状态不落盘，每次由 变更文件 + 事件日志 + git 现算
 import { existsSync, readFileSync, readdirSync, mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { evidenceIssues, evidenceMatrix } from './evidence.ts';
 import {
   DF, DevflowError, appendEvent, parseEvents, changedPaths, currentSpecHash, git, hashFiles, headCommit, readEvents,
-  requireChange, requireInit, reviewedFiles, specCaps, worktreeHash, changeSchema, approvalCycle, doneTasks, sha256, type DevflowEvent,
+  requireChange, requireInit, reviewedFiles, specCaps, worktreeHash, changeSchema, approvalCycle, doneTasks, sha256, codeRoots, splitPaths, staleLimit, type DevflowEvent,
 } from './core.ts';
 import { loadChangeMeta, loadTasks, validateChange } from './validate.ts';
+import { lintWiki } from './wiki.ts';
 
 export interface ArchivedChange { id: string; status: 'archived'; archived_at: string | null }
 
@@ -32,6 +33,8 @@ export interface ChangeStatus {
   status: Status;
   reason: string;
   tasks: { done: number; total: number };
+  /** applying 的细分：未验证 / 验证后代码有改动 / 验证通过但任务没做完或证据失效 */
+  stage?: 'unverified' | 'code-changed' | 'tasks-left';
 }
 
 type Of<T extends DevflowEvent['type']> = Extract<DevflowEvent, { type: T }>;
@@ -64,11 +67,16 @@ export function deriveStatus(root: string, id: string): ChangeStatus {
   // 开工、验证只认最近一次批准之后的记录：重新批准意味着方案变了
   const after = cycle.events.filter((e) => ('approval_id' in e && e.approval_id === cycle.approval_id) || (!v2 && (!('approval_id' in e) || !e.approval_id)));
   if (!lastOf(after, 'apply-started')) {
-    let moved: string[];
-    try {
-      moved = changedPaths(root, ok.base_commit, loadChangeMeta(root, id)?.affected_paths ?? []);
-    } catch {
-      return r('rebase_required', `批准时的基线提交 ${ok.base_commit.slice(0, 7)} 已不在当前历史中`);
+    // 逐个仓库比对：本仓库用 base_commit，代码仓库用批准时记下的 base_commits（旧批准没有记，跳过）
+    const moved: string[] = [];
+    for (const [rel, globs] of splitPaths(root, loadChangeMeta(root, id)?.affected_paths ?? [])) {
+      const base = rel === '.' ? ok.base_commit : ok.base_commits?.[rel];
+      if (!base) continue;
+      try {
+        moved.push(...changedPaths(resolve(root, rel), base, globs).map((f) => (rel === '.' ? f : `${rel}/${f}`)));
+      } catch {
+        return r('rebase_required', `批准时的基线提交 ${base.slice(0, 7)} 已不在${rel === '.' ? '当前' : ` ${rel} 的`}历史中`);
+      }
     }
     return moved.length
       ? r('rebase_required', `批准后有提交改动了影响路径：${moved.slice(0, 5).join(', ')}${moved.length > 5 ? ' …' : ''}`)
@@ -76,12 +84,21 @@ export function deriveStatus(root: string, id: string): ChangeStatus {
   }
 
   const v = lastOf(after, 'verified');
-  if (!v) return r('applying', '开工后尚未验证');
-  if (v.diff_hash !== worktreeHash(root)) return r('applying', '验证后代码有改动，需要重新验证');
+  if (!v) return { ...r('applying', '开工后尚未验证'), stage: 'unverified' };
+  if (v.diff_hash !== worktreeHash(root)) return { ...r('applying', '验证后代码有改动，需要重新验证'), stage: 'code-changed' };
   if (v.result !== 'pass') return r('needs_fix', `最近一次验证结果为 ${v.result}`);
-  if (tasks.done < tasks.total) return r('applying', `还有 ${tasks.total - tasks.done} 个任务未完成或验收证据失效`);
+  if (tasks.done < tasks.total) return { ...r('applying', `还有 ${tasks.total - tasks.done} 个任务未完成或验收证据失效`), stage: 'tasks-left' };
   return r('ready_to_archive', '验证通过，等待人工归档');
 }
+
+/** 已批准或已开工的变更距最后一条事件的小时数；没超过 stale_hours（默认 24）或不适用时为 null */
+export function staleHours(root: string, id: string, st: ChangeStatus): number | null {
+  const last = readEvents(root, id).at(-1)?.at;
+  if (!last || !['approved', 'applying', 'needs_fix'].includes(st.status)) return null;
+  const hours = (Date.now() - Date.parse(last)) / 3_600_000;
+  return hours > staleLimit(root) ? Math.floor(hours) : null;
+}
+export const staleText = (hours: number): string => (hours < 48 ? `停滞 ${hours} 小时` : `停滞 ${Math.floor(hours / 24)} 天`);
 
 /** 这个变更现在轮到人做什么；不需要人时为 null。status 与审查台首页共用 */
 export function humanTodo(root: string, id: string, st: ChangeStatus): string | null {
@@ -89,6 +106,27 @@ export function humanTodo(root: string, id: string, st: ChangeStatus): string | 
   if (st.status === 'ready_to_archive') return '待你归档';
   const n = ['applying', 'needs_fix'].includes(st.status) ? evidenceMatrix(root, id).filter((r) => r.status === 'unconfirmed').length : 0;
   return n ? `待你确认 ${n} 条人工证据` : null;
+}
+
+/** 审查台首页的工作节点：流程走到哪一步；human 为真表示轮到人操作 */
+export function workNode(root: string, id: string, st: ChangeStatus): { label: string; human: boolean } {
+  const n = ['applying', 'needs_fix'].includes(st.status) ? evidenceMatrix(root, id).filter((r) => r.status === 'unconfirmed').length : 0;
+  if (n) return { label: `待你确认 ${n} 条`, human: true };
+  const agent = (label: string) => ({ label, human: false });
+  const progress = `实现中（任务 ${st.tasks.done}/${st.tasks.total}）`;
+  switch (st.status) {
+    case 'draft': return validateChange(root, id, true).some((i) => i.level === 'error') ? agent('写方案中') : { label: '待你批准', human: true };
+    case 'rebase_required': return { label: '待你批准', human: true };
+    case 'approved': return agent('待开工');
+    case 'applying':
+      if (st.stage === 'tasks-left') return agent('补证据中');
+      if (st.stage === 'code-changed' && st.tasks.done >= st.tasks.total) return agent('待重新验证');
+      return agent(progress);
+    case 'needs_fix': return agent('修复中');
+    // 归档会被知识页错误拦住（archive.ts 的 stageArchive）：先由 Agent 更新知识页
+    case 'ready_to_archive': return lintWiki(root).issues.some((i) => i.level === 'error') ? agent('归档准备中') : { label: '待你归档', human: true };
+    default: return agent('已归档');
+  }
 }
 
 /** 计算批准事件（不写入）。CLI 先展示给人确认，确认后再调用 approve */
@@ -106,12 +144,15 @@ export function prepareApproval(root: string, id: string): Of<'approved'> {
     actor = git(root, ['config', 'user.name']).trim();
   } catch { /* 未配置 */ }
   if (!actor) throw new DevflowError('未配置 git user.name，无法记录批准人', 'git config user.name "<你的名字>"');
+  const roots = codeRoots(root);
   return {
     type: 'approved',
     at: new Date().toISOString(),
     actor,
     hash: hashFiles(root, reviewedFiles(root, id)),
     base_commit: headCommit(root),
+    // 没有提交的代码仓库在这里报错：没有基线就无法发现批准后的改动
+    ...(roots ? { base_commits: Object.fromEntries(roots.map((r) => [r.replace(/\/+$/, ''), headCommit(resolve(root, r))])) } : {}),
     spec_base: Object.fromEntries(specCaps(root, id).map((c) => [c, currentSpecHash(root, c)])),
   };
 }

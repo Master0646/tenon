@@ -2,8 +2,8 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { agentDrift, detectAgents } from './agents.ts';
-import { DF, git, listChanges } from './core.ts';
-import { HOOK_MARK } from './init.ts';
+import { DF, codeRoots, git, listChanges } from './core.ts';
+import { HOOK_MARK, hookFile } from './init.ts';
 import { validateProject, validateChange } from './validate.ts';
 import { lintWiki } from './wiki.ts';
 
@@ -41,20 +41,22 @@ export function doctor(cwd: string, nodeVersion = process.versions.node): Findin
   }
   add('ok', '初始化', `${DF}/ 存在`);
 
-  // hook：存在、带标记、exec 行指向的 node 与 cli 都存在
-  const hook = join(resolve(root, git(root, ['rev-parse', '--git-path', 'hooks']).trim()), 'pre-commit');
-  if (!existsSync(hook)) add('error', 'hook', '没有 pre-commit hook', 'devflow init');
-  else {
+  // hook：存在、带标记、exec 行指向的 node 与 cli 都存在；code_roots 里的每个仓库也要有
+  for (const rel of ['.', ...(codeRoots(root) ?? [])]) {
+    const item = rel === '.' ? 'hook' : `hook ${rel}`;
+    let hook: string;
+    try { hook = hookFile(resolve(root, rel)); } catch { add('error', item, `${rel} 不是 Git 仓库`, '检查 project.yaml 的 code_roots'); continue; }
+    if (!existsSync(hook)) { add('error', item, '没有 pre-commit hook', 'devflow init'); continue; }
     const text = readFileSync(hook, 'utf8');
     if (!text.includes(HOOK_MARK)) {
-      add(text.includes('devflow') ? 'ok' : 'warn', 'hook', text.includes('devflow') ? '已有其他 hook，其中调用了 devflow' : '已有其他 hook，其中没有调用 devflow check', '在 hook 中加一行：devflow check --staged');
-    } else {
-      const m = /exec '((?:[^']|'\\'')*)' '((?:[^']|'\\'')*)'/.exec(text);
-      const unq = (s: string) => s.replaceAll(`'\\''`, `'`);
-      const missing = m ? [unq(m[1]), unq(m[2])].filter((p) => !existsSync(p)) : ['（无法解析 exec 行）'];
-      if (missing.length) add('error', 'hook', `hook 指向的文件不存在：${missing.join(', ')}`, 'devflow init（重新安装 hook）');
-      else add('ok', 'hook', `指向 ${unq(m![2])}`);
+      add(text.includes('devflow') ? 'ok' : 'warn', item, text.includes('devflow') ? '已有其他 hook，其中调用了 devflow' : '已有其他 hook，其中没有调用 devflow check', `在 hook 中加一行：devflow check --staged${rel === '.' ? '' : ` --project ${resolve(root)}`}`);
+      continue;
     }
+    const m = /exec '((?:[^']|'\\'')*)' '((?:[^']|'\\'')*)'/.exec(text);
+    const unq = (s: string) => s.replaceAll(`'\\''`, `'`);
+    const missing = m ? [unq(m[1]), unq(m[2])].filter((p) => !existsSync(p)) : ['（无法解析 exec 行）'];
+    if (missing.length) add('error', item, `hook 指向的文件不存在：${missing.join(', ')}`, 'devflow init（重新安装 hook）');
+    else add('ok', item, `指向 ${unq(m![2])}`);
   }
 
   const agents = detectAgents(root);

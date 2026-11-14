@@ -107,8 +107,8 @@ test('首屏：待拍板事项写成 ask 块、方案要点成列表；summary �
   assert.equal(ok.status, 0, ok.stderr);
   assert.doesNotMatch(ok.stderr, /summary/);
   const { draft } = buildDraft(dir, ID);
-  assert.match(draft, /## 待你拍板（1 项）与方案要点\n````ask\n普通用户访问时返回什么？\n\* 返回 403\n- 返回空列表\n````/);
-  assert.match(draft, /### 方案要点\n\n- 用户列表只允许 ADMIN 访问/);
+  assert.match(draft, /### 待你拍板（1 项）\n\n````ask\n普通用户访问时返回什么？\n\* 返回 403\n- 返回空列表\n````/);
+  assert.match(draft, /## 方案要点与影响范围\n### 方案要点\n\n- 用户列表只允许 ADMIN 访问/);
   const html = readFileSync(render(dir, ID).file, 'utf8');
   assert.match(html, /<fieldset class="am-ask"/);
   assert.match(html, /df-closed/); // 折叠脚本已注入

@@ -1,0 +1,38 @@
+schema_version: 2
+tasks:
+  - id: T1
+    title: 首屏拆成进展与待办、方案要点两个面板
+    acceptance:
+      - id: AC1
+        text: 测试覆盖：首屏面板含 5 段进度条、当前工作节点和要你做什么；待批准时含待拍板事项；方案要点与影响范围在下一个面板；离线页也是这个结构
+        method: automated
+        check: unit-tests
+  - id: T2
+    title: 顶部固定操作栏与左侧目录
+    acceptance:
+      - id: AC2
+        text: 测试覆盖：审查台页面操作栏样式为固定在顶部；含目录脚本且哈希已登记，没有行内事件处理器；渲染器自带大纲在审查台隐藏；离线页不含目录脚本
+        method: automated
+        check: unit-tests
+  - id: T3
+    title: 批注记录面板
+    acceptance:
+      - id: AC3
+        text: 测试覆盖：发过两次批注、读过一次时，记录里分别标为已读和未读；意见含 HTML 时原样显示为文字；没有批注时不显示面板；离线页没有该面板
+        method: automated
+        check: unit-tests
+  - id: T4
+    title: 在浏览器里验收布局
+    depends_on: [T1, T2, T3]
+    acceptance:
+      - id: AC4
+        text: 在浏览器里实测：宽屏时左侧目录可见，点「C 设计」展开并跳到设计面板；滚动到底部时顶部操作栏仍可见；首屏能直接看出现在到哪一步、要你做什么；窄屏时目录按拍板结果显示；批注记录显示刚发送的批注
+        method: manual
+  - id: T5
+    title: 使用手册与 README
+    depends_on: [T4]
+    acceptance:
+      - id: AC5
+        text: 类型检查通过；使用手册的审查台一节按新布局重写
+        method: automated
+        check: typecheck

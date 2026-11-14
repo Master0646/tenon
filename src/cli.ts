@@ -7,9 +7,10 @@ import type { AddressInfo } from 'node:net';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { createInterface } from 'node:readline/promises';
 import { doctor } from './doctor.ts';
+import { formatFeedback, markWaiting, takeFeedback, unreadCount } from './feedback.ts';
 import { parseArgs } from 'node:util';
 import { AGENTS, detectAgents, guessAgents, installAgents, parseAgents, type AgentResult } from './agents.ts';
-import { check } from './check.ts';
+import { check, checkCodeRepo } from './check.ts';
 import { lintWiki } from './wiki.ts';
 import { render, reviewIssues } from './render.ts';
 import { reviewServer } from './review.ts';
@@ -22,7 +23,7 @@ import { runWorkflowSuite, compareReports, readReport } from './evaluate.ts';
 import { resolve } from 'node:path';
 import { DevflowError, approvalCycle, changeDir, doneTasks, readEvents, withWorktreeLock, listChanges, repoRoot, requireChange, requireInit, reviewedFiles, type Issue } from './core.ts';
 import { init, newChange } from './init.ts';
-import { approve, decisionAnswers, deriveStatus, humanTodo, listArchived, prepareApproval } from './status.ts';
+import { approve, decisionAnswers, deriveStatus, humanTodo, listArchived, prepareApproval, staleHours, staleText } from './status.ts';
 import { loadTasks, validateChange, validateProject } from './validate.ts';
 
 const VERSION: string = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
@@ -55,7 +56,7 @@ const HELP = `devflow ${VERSION}
   render <id> [-o f]   从被审文件生成离线审查页（默认 .devflow/runtime/rendered/<id>.html）
   review [id]          启动本地审查台（只能由人在交互终端中运行）：在浏览器里批准、
                        确认人工证据、归档；保持终端打开，Ctrl+C 结束
-  wait <id> [--timeout 秒]  等人批准、确认证据或归档后退出（Agent 在后台运行；默认 1800 秒）
+  wait <id> [--timeout 秒]  等人批准、确认证据、归档或发来批注后退出（Agent 在后台运行；默认 1800 秒）
   approve <id> [--hash h]  批准变更并绑定内容哈希（只能由人在交互终端中运行）；
                        --hash 为审查页上的哈希前缀，一致时直接批准
   apply <id> --start   记录开工（状态须为 approved）
@@ -63,6 +64,7 @@ const HELP = `devflow ${VERSION}
   verify <id>          运行 project.yaml 声明的验证命令并记录结果
   archive <id>         合并规范增量并归档变更（只能由人在交互终端中运行；中断后重跑即继续）
   check [--staged]     门禁检查（pre-commit hook 与 CI 使用）
+  check --staged --project <dir>  在 code_roots 的代码仓库里检查暂存改动（代码仓库的 hook 使用）
 `;
 
 const { values: opts, positionals } = parseArgs({
@@ -71,7 +73,7 @@ const { values: opts, positionals } = parseArgs({
     json: { type: 'boolean' }, staged: { type: 'boolean' }, agents: { type: 'string' }, hash: { type: 'string' }, out: { type: 'string', short: 'o' },
     start: { type: 'boolean' }, all: { type: 'boolean' }, timeout: { type: 'string' }, version: { type: 'boolean', short: 'v' },
     'tool-version': { type: 'string' }, file: { type: 'string' }, schema: { type: 'string' }, since: { type: 'string' }, before: { type: 'string' }, off: { type: 'boolean' }, on: { type: 'boolean' }, suite: { type: 'string' }, report: { type: 'string' },
-    help: { type: 'boolean', short: 'h' },
+    project: { type: 'string' }, help: { type: 'boolean', short: 'h' },
   },
 });
 const [cmd, arg] = positionals;
@@ -154,12 +156,14 @@ async function dispatch(): Promise<number> {
         if (task) next = `devflow task done ${id} ${task.id}`;
       }
       const decisions = decisionAnswers(root, id);
-      const result = { ...state, approval_id: approvalCycle(root, id).approval_id, evidence, decisions, next, blockers: missing };
+      const unread = unreadCount(root, id);
+      const result = { ...state, approval_id: approvalCycle(root, id).approval_id, evidence, decisions, next, blockers: missing, unread_feedback: unread };
       if (opts.json) console.log(JSON.stringify(result, null, 2));
       else {
         console.log(`${id}: ${state.status} — ${state.reason}`);
         for (const d of decisions) console.log(`拍板：${d.question} → ${d.answer}${d.by === 'human' ? '' : '（用户未作答，按推荐项）'}`);
         for (const e of missing) console.log(`${e.acceptance}: ${e.status} ${e.reason ?? ''}`);
+        if (unread) console.log(`未读批注：${unread} 条，运行 devflow wait ${id} 读取`);
         console.log(`下一步：${next}`);
       }
       return 0;
@@ -211,6 +215,11 @@ async function dispatch(): Promise<number> {
         if (r.hook === 'foreign') {
           console.warn(`! ${r.hookPath} 已有其他 hook，未覆盖。请在其中加一行：devflow check --staged`);
         } else console.log(`✓ pre-commit hook 已${r.hook === 'installed' ? '安装' : '更新'}：${r.hookPath}`);
+        for (const c of r.codeHooks) {
+          if (c.hook === 'missing') console.warn(`! ${c.repo} 不是 Git 仓库，没有安装 hook；检查 project.yaml 的 code_roots`);
+          else if (c.hook === 'foreign') console.warn(`! ${c.hookPath} 已有其他 hook，未覆盖。请在其中加一行：${c.line}`);
+          else console.log(`✓ 代码仓库 pre-commit hook 已${c.hook === 'installed' ? '安装' : '更新'}：${c.hookPath}`);
+        }
         printAgents(a);
         if (!opts.agents && !guessed) console.warn(`! 未检测到 Agent，已为全部安装（${AGENTS.join(', ')}）；可用 --agents claude 或 --agents codex 只装一种`);
       }
@@ -249,13 +258,13 @@ async function dispatch(): Promise<number> {
     }
     case 'status': {
       requireInit(root);
-      const list = (arg ? [requireChange(root, arg)] : listChanges(root)).map((id) => { const st = deriveStatus(root, id); return { ...st, todo: humanTodo(root, id, st) }; });
+      const list = (arg ? [requireChange(root, arg)] : listChanges(root)).map((id) => { const st = deriveStatus(root, id); return { ...st, todo: humanTodo(root, id, st), stale_hours: staleHours(root, id, st) }; });
       const archived = opts.all && !arg ? listArchived(root) : [];
       if (opts.json) console.log(JSON.stringify([...list, ...archived], null, 2));
       else if (!list.length && !archived.length) console.log('没有进行中的变更。用 devflow new <id> 新建');
       else {
         // 行尾标出轮到谁：人的待办，或 Agent 进行中（已归档的变更没有这一段）
-        for (const s of list) console.log(`${s.id}  ${s.status}  任务 ${s.tasks.done}/${s.tasks.total}  ${s.reason}  ← ${s.todo ?? 'Agent 进行中'}`);
+        for (const s of list) console.log(`${s.id}  ${s.status}  任务 ${s.tasks.done}/${s.tasks.total}  ${s.reason}  ← ${s.todo ?? 'Agent 进行中'}${s.stale_hours === null ? '' : ` · ${staleText(s.stale_hours)}`}`);
         for (const a of archived) console.log(`${a.id}  archived  ${a.archived_at ? a.archived_at.slice(0, 16).replace('T', ' ') + ' UTC' : '归档时间未知'}`);
       }
       return 0;
@@ -283,12 +292,27 @@ async function dispatch(): Promise<number> {
       const acted = () => (existsSync(changeDir(root, id)) ? readEvents(root, id).filter((e) => ['approved', 'evidence-confirmed', 'archived'].includes(e.type)).length : Infinity);
       const start = acted();
       const deadline = Date.now() + seconds * 1000;
-      while (acted() === start) {
-        if (Date.now() >= deadline) {
-          console.log(`等待超时：${id} 还没有新的人工操作（批准、确认证据或归档）`);
-          return 1;
+      // 审查台据此显示「Agent 正在等待」；被杀掉时标记会残留，审查台按进程是否存活判断
+      const unmark = markWaiting(root, id);
+      const bye = () => { unmark(); process.exit(130); };
+      process.once('SIGINT', bye).once('SIGTERM', bye);
+      try {
+        while (acted() === start) {
+          const fb = takeFeedback(root, id);
+          if (fb.length) {
+            console.log(formatFeedback(fb));
+            console.log(`处理完后再次运行 devflow wait ${id}`);
+            return 0;
+          }
+          if (Date.now() >= deadline) {
+            console.log(`等待超时：${id} 还没有新的人工操作（批准、确认证据、归档或批注）`);
+            return 1;
+          }
+          await sleep(2000);
         }
-        await sleep(2000);
+      } finally {
+        unmark();
+        process.off('SIGINT', bye).off('SIGTERM', bye);
       }
       if (!existsSync(changeDir(root, id))) console.log(`${id}: archived — 已归档`);
       else {
@@ -387,7 +411,7 @@ async function dispatch(): Promise<number> {
       return 0;
     }
     case 'check':
-      return report(check(root, { staged: !!opts.staged }), '✓ devflow check 通过');
+      return report(opts.project ? checkCodeRepo(resolve(opts.project), root) : check(root, { staged: !!opts.staged }), '✓ devflow check 通过');
     default:
       throw new DevflowError(`未知命令：${cmd}`, HELP);
   }
