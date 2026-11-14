@@ -1,0 +1,25 @@
+schema_version: 2
+tasks:
+  - id: T1
+    title: 更新安装包、CLI 与安装产物
+    acceptance:
+      - id: AC1
+        text: 打包安装后 tenon help 和 tenon --version 可以运行，且子命令保留原语义
+        method: automated
+        check: unit-tests
+  - id: T2
+    title: 处理新旧目录及生成文件
+    depends_on: [T1]
+    acceptance:
+      - id: AC2
+        text: 新项目创建 .tenon，旧项目可读取原有批准和归档，升级 hook 不重复且保留用户内容
+        method: automated
+        check: unit-tests
+  - id: T3
+    title: 同步产品文案、Agent 技能与使用说明
+    depends_on: [T2]
+    acceptance:
+      - id: AC3
+        text: 生成的技能、帮助和面向用户的操作示例使用 Tenon 名称
+        method: automated
+        check: unit-tests

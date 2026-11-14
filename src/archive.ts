@@ -1,9 +1,9 @@
-// devflow archive：合并 delta 到当前规范、更新 specs.lock、移动变更到 changes/archive/
+// tenon archive：合并 delta 到当前规范、更新 specs.lock、移动变更到 changes/archive/
 // 事务：先把全部输出写到 runtime/tx/<id>/ 并写 tx.json（提交点），再逐步执行；每一步可重复执行，中断后重跑即前滚
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import {
-  DF, DevflowError, worktreeHash, hashFiles, reviewedFiles, appendEvent, archiveTarget, changeDir, currentSpecHash, git, readEvents, requireChange, requireInit, sha256, specCaps,
+  dfOf, DevflowError, worktreeHash, hashFiles, reviewedFiles, appendEvent, archiveTarget, changeDir, currentSpecHash, git, readEvents, requireChange, requireInit, sha256, specCaps,
 } from './core.ts';
 import { mergeSpec, parseDelta } from './spec.ts';
 import { evidenceIssues } from './evidence.ts';
@@ -18,7 +18,7 @@ interface Tx {
   move: { from: string; to: string };
 }
 
-const txDir = (root: string, id: string) => join(root, DF, 'runtime', 'tx', id);
+const txDir = (root: string, id: string) => join(root, dfOf(root), 'runtime', 'tx', id);
 const txFile = (root: string, id: string) => join(txDir(root, id), 'tx.json');
 
 export { archiveTarget };
@@ -42,26 +42,26 @@ export function stageArchive(root: string, id: string): Tx {
   const approved = readEvents(root, id).findLast((e) => e.type === 'approved');
   if (approved?.type !== 'approved') throw new DevflowError('找不到批准记录');
 
-  const lockPath = join(root, DF, 'specs', 'specs.lock');
+  const lockPath = join(root, dfOf(root), 'specs', 'specs.lock');
   const lock: Record<string, string> = JSON.parse(readFileSync(lockPath, 'utf8'));
   const outputs: { to: string; content: string }[] = [];
   for (const cap of specCaps(root, id)) {
     // 批准之后同一能力的规范被别的变更改过：拒绝，避免后归档者覆盖先归档者
     const now = currentSpecHash(root, cap);
     if ((approved.spec_base[cap] ?? null) !== now) {
-      throw new DevflowError(`规范 ${cap} 在本变更批准后被修改过（可能有其他变更先归档了）`, `更新本变更的 delta 并重新批准：devflow approve ${id}`);
+      throw new DevflowError(`规范 ${cap} 在本变更批准后被修改过（可能有其他变更先归档了）`, `更新本变更的 delta 并重新批准：tenon approve ${id}`);
     }
-    const curFile = join(root, DF, 'specs', cap, 'spec.md');
+    const curFile = join(root, dfOf(root), 'specs', cap, 'spec.md');
     const { delta, errors } = parseDelta(readFileSync(join(changeDir(root, id), 'specs', cap, 'spec.md'), 'utf8'));
     if (errors.length) throw new DevflowError(`delta 规范 ${cap} 有错误`, errors.map((e) => `${e.line}: ${e.message}`).join('\n'));
     const merged = mergeSpec(cap, existsSync(curFile) ? readFileSync(curFile, 'utf8') : null, delta);
     if (!merged.text) throw new DevflowError(`合并规范 ${cap} 失败`, merged.errors.join('\n'));
-    outputs.push({ to: `${DF}/specs/${cap}/spec.md`, content: merged.text });
+    outputs.push({ to: `${dfOf(root)}/specs/${cap}/spec.md`, content: merged.text });
     lock[`${cap}/spec.md`] = sha256(merged.text);
   }
-  outputs.push({ to: `${DF}/specs/specs.lock`, content: JSON.stringify(Object.fromEntries(Object.entries(lock).sort()), null, 2) + '\n' });
+  outputs.push({ to: `${dfOf(root)}/specs/specs.lock`, content: JSON.stringify(Object.fromEntries(Object.entries(lock).sort()), null, 2) + '\n' });
 
-  const target = archiveTarget(id);
+  const target = archiveTarget(root, id);
   if (existsSync(join(root, target))) throw new DevflowError(`归档目录已存在：${target}`);
 
   let actor = '';
@@ -73,9 +73,9 @@ export function stageArchive(root: string, id: string): Tx {
   const dir = txDir(root, id);
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(dir, { recursive: true });
-  const tx: Tx = { id, actor, guard: { worktree_hash: worktreeHash(root), approval_hash: hashFiles(root, reviewedFiles(root, id)) }, writes: [], move: { from: `${DF}/changes/${id}`, to: target } };
+  const tx: Tx = { id, actor, guard: { worktree_hash: worktreeHash(root), approval_hash: hashFiles(root, reviewedFiles(root, id)) }, writes: [], move: { from: `${dfOf(root)}/changes/${id}`, to: target } };
   outputs.forEach((o, i) => {
-    const staged = `${DF}/runtime/tx/${id}/${i}`;
+    const staged = `${dfOf(root)}/runtime/tx/${id}/${i}`;
     writeFileSync(join(root, staged), o.content);
     tx.writes.push({ from: staged, to: o.to });
   });

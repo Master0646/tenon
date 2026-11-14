@@ -1,5 +1,5 @@
 // 为 Agent 生成技能、入口片段与禁止规则（单一模板 → 多种 Agent 的文件格式）
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DevflowError } from './core.ts';
@@ -10,20 +10,26 @@ export type Agent = (typeof AGENTS)[number];
 const TPL = fileURLToPath(new URL('../templates/', import.meta.url));
 const SKILL_DIR: Record<Agent, string> = { claude: '.claude/skills', codex: '.agents/skills' };
 const ENTRY_FILE: Record<Agent, string> = { claude: 'CLAUDE.md', codex: 'AGENTS.md' };
-const BEGIN = '<!-- devflow:begin（由 devflow 生成；devflow update 会覆盖本段） -->';
-const END = '<!-- devflow:end -->';
+const BEGIN = '<!-- tenon:begin（由 tenon 生成；tenon update 会覆盖本段） -->';
+const END = '<!-- tenon:end -->';
+// 改名前生成的托管段落：升级时原地替换成新标记，段外内容不动
+const OLD_BEGIN = /<!-- devflow:begin[^>]*-->/;
+const OLD_END = '<!-- devflow:end -->';
 
 // Claude Code 项目设置中，以 / 开头的路径相对项目根目录
+// 两种数据目录都保护：旧项目沿用 .devflow/
 export const CLAUDE_DENY = [
-  'Bash(devflow approve *)',
-  'Bash(devflow archive *)',
-  'Bash(devflow evidence confirm *)',
-  'Bash(devflow review)',
-  'Bash(devflow review *)',
-  'Edit(/.devflow/specs/**)',
-  'Write(/.devflow/specs/**)',
-  'Edit(/.devflow/changes/**/events.jsonl)',
-  'Write(/.devflow/changes/**/events.jsonl)',
+  'Bash(tenon approve *)',
+  'Bash(tenon archive *)',
+  'Bash(tenon evidence confirm *)',
+  'Bash(tenon review)',
+  'Bash(tenon review *)',
+  ...['.tenon', '.devflow'].flatMap((d) => [
+    `Edit(/${d}/specs/**)`,
+    `Write(/${d}/specs/**)`,
+    `Edit(/${d}/changes/**/events.jsonl)`,
+    `Write(/${d}/changes/**/events.jsonl)`,
+  ]),
 ];
 
 export function parseAgents(value: string | undefined): Agent[] {
@@ -44,7 +50,7 @@ export function guessAgents(root: string): Agent[] | null {
 
 /** 已安装过技能的 Agent */
 export function detectAgents(root: string): Agent[] {
-  return AGENTS.filter((a) => existsSync(join(root, SKILL_DIR[a], 'devflow-ask', 'SKILL.md')));
+  return AGENTS.filter((a) => ['tenon-ask', 'devflow-ask'].some((s) => existsSync(join(root, SKILL_DIR[a], s, 'SKILL.md'))));
 }
 
 /** 用 BEGIN/END 标记维护文件中的托管段落，段外内容不动 */
@@ -53,6 +59,9 @@ export function upsertBlock(text: string, block: string): string {
   const s = text.indexOf(BEGIN);
   const e = text.indexOf(END);
   if (s !== -1 && e > s) return text.slice(0, s) + managed + text.slice(e + END.length);
+  const os = text.search(OLD_BEGIN);
+  const oe = text.indexOf(OLD_END);
+  if (os !== -1 && oe > os) return text.slice(0, os) + managed + text.slice(oe + OLD_END.length);
   return text ? `${text.trimEnd()}\n\n${managed}\n` : `${managed}\n`;
 }
 
@@ -75,6 +84,21 @@ export function agentDrift(root: string, agent: Agent): string[] {
   return drift;
 }
 
+/** 改名前生成、内容仍带生成标记的技能与规则：删掉，免得新旧两套同时生效。被人改过（没有标记）的保留 */
+function removeOldGenerated(root: string, dir: string): string[] {
+  const removed: string[] = [];
+  const base = join(root, dir);
+  if (!existsSync(base)) return removed;
+  for (const name of readdirSync(base)) {
+    if (!/^devflow(-[a-z]+|\.rules)$/.test(name)) continue;
+    const file = name.endsWith('.rules') ? join(base, name) : join(base, name, 'SKILL.md');
+    if (!existsSync(file) || !readFileSync(file, 'utf8').includes('由 devflow 生成')) continue;
+    rmSync(join(base, name), { recursive: true, force: true });
+    removed.push(`${dir}/${name}（已删除旧版生成的文件）`);
+  }
+  return removed;
+}
+
 export function installAgents(root: string, agents: Agent[]): AgentResult {
   const written: string[] = [];
   const warnings: string[] = [];
@@ -87,6 +111,7 @@ export function installAgents(root: string, agents: Agent[]): AgentResult {
       cpSync(join(TPL, 'skills', s), join(root, dest), { recursive: true });
       written.push(`${dest}/SKILL.md`);
     }
+    written.push(...removeOldGenerated(root, SKILL_DIR[a]));
     const ef = join(root, ENTRY_FILE[a]);
     writeFileSync(ef, upsertBlock(existsSync(ef) ? readFileSync(ef, 'utf8') : '', entry));
     written.push(ENTRY_FILE[a]);
@@ -117,9 +142,10 @@ export function installAgents(root: string, agents: Agent[]): AgentResult {
   }
 
   if (agents.includes('codex')) {
-    const rel = '.codex/rules/devflow.rules';
+    const rel = '.codex/rules/tenon.rules';
     mkdirSync(join(root, '.codex/rules'), { recursive: true });
-    cpSync(join(TPL, 'devflow.rules'), join(root, rel));
+    cpSync(join(TPL, 'tenon.rules'), join(root, rel));
+    written.push(...removeOldGenerated(root, '.codex/rules'));
     written.push(rel);
     warnings.push('Codex 只在项目 .codex/ 被信任时加载 rules；首次在本项目使用 Codex 时请选择信任');
   }

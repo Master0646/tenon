@@ -1,11 +1,11 @@
 {
-  "name": "devflow",
+  "name": "tenon",
   "version": "0.3.0",
   "private": true,
   "description": "规范驱动、带项目长期知识的 AI 软件工程内核（嵌入现有 Agent 使用）",
   "type": "module",
   "bin": {
-    "devflow": "./dist/cli.js"
+    "tenon": "./dist/cli.js"
   },
   "files": [
     "dist",

@@ -1,10 +1,10 @@
-// devflow check：pre-commit hook 与 CI 的门禁
+// tenon check：pre-commit hook 与 CI 的门禁
 // --staged 时规范锁与事件日志按暂存区内容检查：提交的是暂存区，不是工作树
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import {
-  DF, DevflowError, parseEvents, changeDir, changeRel, codeRoots, git, listChanges, readEvents, repoFiles, requireInit, sha256, splitPaths, type Issue,
+  dfOf, DevflowError, parseEvents, changeDir, changeRel, codeRoots, git, listChanges, readEvents, repoFiles, requireInit, sha256, splitPaths, type Issue,
 } from './core.ts';
 import { snapshotIssues } from './status.ts';
 import { evidenceIssues } from './evidence.ts';
@@ -21,7 +21,7 @@ export function check(root: string, opts: { staged: boolean }): Issue[] {
 
   for (const id of listChanges(root)) {
     issues.push(...validateChange(root, id, false));
-    const rel = `${changeRel(id)}/events.jsonl`;
+    const rel = `${changeRel(root, id)}/events.jsonl`;
     try {
       readEvents(root, id);
     } catch (e) {
@@ -78,13 +78,13 @@ function appendOnly(root: string, rel: string, staged: boolean): Issue[] {
   const cur = staged ? indexContent(root, rel) ?? '' : worktreeText(root, rel);
   return cur.startsWith(old) ? [] : [{
     level: 'error', file: rel, message: '事件日志的已提交内容被修改或删除（只允许追加）',
-    hint: `用 git restore ${rel} 恢复；事件只能由 devflow 命令写入`,
+    hint: `用 git restore ${rel} 恢复；事件只能由 tenon 命令写入`,
   }];
 }
 
 /** 当前规范只能经 archive 修改：内容必须与 specs.lock 一致 */
 function checkSpecLock(root: string, staged: boolean): Issue[] {
-  const rel = `${DF}/specs`;
+  const rel = `${dfOf(root)}/specs`;
   const lockRel = `${rel}/specs.lock`;
   // 读取源：暂存区或工作树
   const read = (f: string): string | Buffer | null => (staged ? indexContent(root, `${rel}/${f}`) : existsSync(join(root, rel, f)) ? readFileSync(join(root, rel, f)) : null);
@@ -95,16 +95,16 @@ function checkSpecLock(root: string, staged: boolean): Issue[] {
   } catch {
     return [{ level: 'error', file: lockRel, message: 'specs.lock 缺失或不是合法的 JSON 对象', hint: `用 git restore ${lockRel} 恢复` }];
   }
-  const hint = '规范只能经 devflow archive 修改。撤销手改：git restore <文件>（新加的文件直接删除）；要改规范，请新建变更并归档';
+  const hint = '规范只能经 tenon archive 修改。撤销手改：git restore <文件>（新加的文件直接删除）；要改规范，请新建变更并归档';
   const issues: Issue[] = [];
   const files = (staged ? indexFiles(root, rel) : repoFiles(root, rel)).filter((f) => f !== 'specs.lock' && f !== '.gitkeep');
   for (const f of files) {
     if (lock[f] !== sha256(read(f) ?? '')) {
-      issues.push({ level: 'error', file: `${DF}/specs/${f}`, message: lock[f] ? '内容与 specs.lock 不符（被手动修改）' : '不在 specs.lock 中（被手动添加）', hint });
+      issues.push({ level: 'error', file: `${dfOf(root)}/specs/${f}`, message: lock[f] ? '内容与 specs.lock 不符（被手动修改）' : '不在 specs.lock 中（被手动添加）', hint });
     }
   }
   for (const f of Object.keys(lock)) {
-    if (!files.includes(f)) issues.push({ level: 'error', file: `${DF}/specs/${f}`, message: 'specs.lock 中有记录，但文件被删除', hint });
+    if (!files.includes(f)) issues.push({ level: 'error', file: `${dfOf(root)}/specs/${f}`, message: 'specs.lock 中有记录，但文件被删除', hint });
   }
   return issues;
 }
@@ -113,21 +113,21 @@ function checkSpecLock(root: string, staged: boolean): Issue[] {
  * 暂存了变更影响路径内的代码时：变更未开工 → 警告（strict 拒绝）；已开工但事件日志未暂存 → 警告。
  * 有已开工的变更时，暂存了不属于任何进行中变更影响路径的文件 → 警告。
  */
-/** 代码仓库（code_roots 之一）的 pre-commit：只做暂存代码检查，规范锁与事件日志由 devflow 仓库自己的钩子把关 */
+/** 代码仓库（code_roots 之一）的 pre-commit：只做暂存代码检查，规范锁与事件日志由 Tenon 项目仓库自己的钩子把关 */
 export function checkCodeRepo(root: string, repo: string): Issue[] {
   requireInit(root);
   const key = (codeRoots(root) ?? []).map((r) => r.replace(/\/+$/, '')).find((r) => {
     try { return realpathSync(resolve(root, r)) === realpathSync(repo); } catch { return false; }
   });
-  if (!key) throw new DevflowError(`${repo} 不在 ${root} 的 code_roots 中`, `检查 ${root}/${DF}/project.yaml，或删除这个仓库的 pre-commit 钩子`);
+  if (!key) throw new DevflowError(`${repo} 不在 ${root} 的 code_roots 中`, `检查 ${root}/${dfOf(root)}/project.yaml，或删除这个仓库的 pre-commit 钩子`);
   return checkStagedCode(root, repo, key);
 }
 
-/** repo / key：暂存文件所在的仓库及其在 code_roots 里的写法；默认是 devflow 所在的仓库 */
+/** repo / key：暂存文件所在的仓库及其在 code_roots 里的写法；默认是 Tenon 项目所在的仓库 */
 function checkStagedCode(root: string, repo = root, key = '.'): Issue[] {
   const here = (paths: string[]) => splitPaths(root, paths).get(key) ?? [];
-  // affected_paths 不能在 .devflow/ 下，只暂存了 .devflow/ 时三条规则都不适用
-  if (!stagedFiles(repo).some((f) => !f.startsWith(`${DF}/`))) return [];
+  // affected_paths 不能在数据目录下，只暂存了数据目录时三条规则都不适用
+  if (!stagedFiles(repo).some((f) => !f.startsWith(`${dfOf(root)}/`))) return [];
   const level = enforceLevel(root) === 'strict' ? 'error' : 'warn';
   const issues: Issue[] = [];
   const globs: string[] = [];
@@ -147,13 +147,13 @@ function checkStagedCode(root: string, repo = root, key = '.'): Issue[] {
     if (STARTED.has(st.status)) {
       startedGlobs.push(...paths);
       const staged = stagedFiles(repo, paths);
-      const rel = `${changeRel(id)}/events.jsonl`;
-      // 事件日志在 devflow 仓库里：只有在那个仓库提交时才能要求一起暂存
+      const rel = `${changeRel(root, id)}/events.jsonl`;
+      // 事件日志在 Tenon 项目仓库里：只有在那个仓库提交时才能要求一起暂存
       if (key === '.' && staged.length && (indexContent(root, rel) ?? '') !== worktreeText(root, rel)) {
         issues.push({
           level: 'warn', file: rel,
           message: `变更 ${id} 的记录未暂存：批准与验证记录（events.jsonl）不会随这次提交进入仓库`,
-          hint: `git add ${changeRel(id)}`,
+          hint: `git add ${changeRel(root, id)}`,
         });
       }
       continue;
@@ -168,12 +168,12 @@ function checkStagedCode(root: string, repo = root, key = '.'): Issue[] {
     issues.push({
       level, file: staged.slice(0, 5).join(', ') + (staged.length > 5 ? ' …' : ''),
       message: `这些文件属于变更 ${id} 的影响路径，但该变更状态为 ${status}（${reason}）`,
-      hint: `先批准（devflow approve ${id}）并开工，再提交这些文件`,
+      hint: `先批准（tenon approve ${id}）并开工，再提交这些文件`,
     });
   }
   if (startedGlobs.length) {
     const covered = new Set(stagedFiles(repo, globs, 'd'));
-    const outside = stagedFiles(repo, undefined, 'd').filter((f) => !covered.has(f) && !f.startsWith(`${DF}/`));
+    const outside = stagedFiles(repo, undefined, 'd').filter((f) => !covered.has(f) && !f.startsWith(`${dfOf(root)}/`));
     if (outside.length) {
       issues.push({
         level: 'warn', file: outside.slice(0, 5).join(', ') + (outside.length > 5 ? ' …' : ''),
@@ -187,22 +187,22 @@ function checkStagedCode(root: string, repo = root, key = '.'): Issue[] {
 
 function stagedProofIssues(root: string): Issue[] {
   const issues: Issue[] = [];
-  const files = indexFiles(root, DF).map((f) => `${DF}/${f}`);
+  const files = indexFiles(root, dfOf(root)).map((f) => `${dfOf(root)}/${f}`);
   const bytes = (path: string) => {
     if (!files.includes(path)) return null;
     try { return execFileSync('git', ['show', `:${path}`], { cwd: root, maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] }); }
     catch { return null; }
   };
-  for (const file of files.filter((f) => /^\.devflow\/changes\/(?:archive\/)?[^/]+\/events\.jsonl$/.test(f))) {
+  for (const file of files.filter((f) => /^\.(?:tenon|devflow)\/changes\/(?:archive\/)?[^/]+\/events\.jsonl$/.test(f))) {
     try {
       for (const event of parseEvents(bytes(file)!.toString('utf8'), file)) {
         if (event.type === 'approved' && event.snapshot_hash && event.approval_id) {
-          const snapshot = files.find((f) => f.startsWith(`${DF}/reviews/`) && f.endsWith(`/${event.approval_id}/snapshot.json`));
+          const snapshot = files.find((f) => f.startsWith(`${dfOf(root)}/reviews/`) && f.endsWith(`/${event.approval_id}/snapshot.json`));
           const data = snapshot ? bytes(snapshot) : null;
           if (!data || sha256(data) !== event.snapshot_hash) issues.push({ level: 'error', file, message: '暂存区批准快照缺失或哈希不一致' });
         }
         if (event.type === 'evidence-recorded') for (const artifact of event.artifacts) {
-          const data = artifact.path.startsWith(`${DF}/evidence/`) ? bytes(artifact.path) : null;
+          const data = artifact.path.startsWith(`${dfOf(root)}/evidence/`) ? bytes(artifact.path) : null;
           if (!data || sha256(data) !== artifact.hash) issues.push({ level: 'error', file: artifact.path, message: '暂存区证据附件缺失或哈希不一致' });
         }
       }

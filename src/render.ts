@@ -1,4 +1,4 @@
-// devflow render：把被审文件确定性地拼成 am 草稿，再交给随包附带的 am 渲染为离线 HTML
+// tenon render：把被审文件确定性地拼成 am 草稿，再交给随包附带的 am 渲染为离线 HTML
 import { evidenceMatrix } from './evidence.ts';
 import { approvalDiff, decisionAnswers } from './status.ts';
 import { execFileSync } from 'node:child_process';
@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
-import { DF, DevflowError, changeRel, hashFiles, parseEvents, reviewedFiles, sha256, specCaps, type DevflowEvent, type Issue } from './core.ts';
+import { dfOf, DevflowError, changeRel, hashFiles, parseEvents, reviewedFiles, sha256, specCaps, type DevflowEvent, type Issue } from './core.ts';
 import type { Feedback } from './feedback.ts';
 import { parseDelta } from './spec.ts';
 import { deriveStatus, workNode } from './status.ts';
@@ -74,7 +74,7 @@ const cell = (s: string) => escapeInline(s).replace(/\|/g, '\\|').replace(/\n/g,
 export function lineDiff(before: string | null, after: string | null): string {
   if (before === null) return `新增文件（${(after ?? '').split('\n').length} 行），全文见下方对应面板。`;
   if (after === null) return '文件已删除。';
-  const tmp = mkdtempSync(join(tmpdir(), 'devflow-diff-'));
+  const tmp = mkdtempSync(join(tmpdir(), 'tenon-diff-'));
   try {
     writeFileSync(join(tmp, 'a'), before);
     writeFileSync(join(tmp, 'b'), after);
@@ -155,7 +155,7 @@ function specBody(caps: { cap: string; rel: string; text: string; isNew: boolean
 
 /** notes：审查台传入的批注记录；离线页不传，也就没有这个面板 */
 export function buildDraft(root: string, id: string, notes: (Feedback & { read: boolean })[] = []): { draft: string; hash: string; problems: Problem[] } {
-  const base = changeRel(id);
+  const base = changeRel(root, id);
   const problems: Problem[] = [];
   const read = (rel: string) => (existsSync(join(root, rel)) ? readFileSync(join(root, rel), 'utf8') : '');
   const hash = hashFiles(root, reviewedFiles(root, id));
@@ -192,7 +192,7 @@ export function buildDraft(root: string, id: string, notes: (Feedback & { read: 
   const reqCount = { added: 0, modified: 0, removed: 0 };
   const specText = specBody(specCaps(root, id).map((cap) => {
     const rel = `${base}/specs/${cap}/spec.md`;
-    return { cap, rel, text: read(rel), isNew: !existsSync(join(root, DF, 'specs', cap, 'spec.md')) };
+    return { cap, rel, text: read(rel), isNew: !existsSync(join(root, dfOf(root), 'specs', cap, 'spec.md')) };
   }), problems, reqCount);
   panels.push(`## B 规范增量（新增 ${reqCount.added} · 修改 ${reqCount.modified} · 删除 ${reqCount.removed}${same('specs/')}）\n${specText || '本变更不修改任何行为规范。'}`);
 
@@ -216,13 +216,13 @@ export function buildDraft(root: string, id: string, notes: (Feedback & { read: 
   const files = reviewedFiles(root, id);
   let verify: { name?: unknown; run?: unknown; cwd?: unknown }[] = [];
   try {
-    const p = parse(read(`${DF}/project.yaml`));
+    const p = parse(read(`${dfOf(root)}/project.yaml`));
     if (Array.isArray(p?.verify)) verify = p.verify.filter((v: unknown) => v && typeof v === 'object');
   } catch { /* 格式错误已由 validate 报告 */ }
   const verifyTable = verify.length
-    ? `验证命令（\`${DF}/project.yaml\`，devflow verify 只运行这些）：\n\n| name | run | cwd |\n| --- | --- | --- |\n${verify.map((v) => `| ${cell(String(v.name ?? ''))} | \`${String(v.run ?? '').replace(/[`|\n]/g, ' ')}\` | ${cell(String(v.cwd ?? '.'))} |`).join('\n')}`
-    : `未声明验证命令（\`${DF}/project.yaml\` 的 verify 为空）：devflow verify 的结果只会是 unknown，变更无法归档。`;
-  panels.push(`## E 被审文件与内容哈希（${files.length} 个文件）\n${verifyTable}\n\n批准时绑定的哈希：\`${hash}\`\n\n| 文件 | 内容 sha256 |\n| --- | --- |\n${files.map((f) => `| \`${f}\` | \`${sha256(readFileSync(join(root, f))).slice(7, 19)}…\` |`).join('\n')}\n\n批准方式二选一。哈希与本页不一致时都会拒绝批准：\n\n- 审查台：在你自己的终端运行一次 \`devflow review\`，之后都在浏览器里点「批准此版本」。\n- 终端：复制下面的命令运行。\n\n\`\`\`bash\ndevflow approve ${id} --hash ${hash.slice(7, 19)}\n\`\`\``);
+    ? `验证命令（\`${dfOf(root)}/project.yaml\`，tenon verify 只运行这些）：\n\n| name | run | cwd |\n| --- | --- | --- |\n${verify.map((v) => `| ${cell(String(v.name ?? ''))} | \`${String(v.run ?? '').replace(/[`|\n]/g, ' ')}\` | ${cell(String(v.cwd ?? '.'))} |`).join('\n')}`
+    : `未声明验证命令（\`${dfOf(root)}/project.yaml\` 的 verify 为空）：tenon verify 的结果只会是 unknown，变更无法归档。`;
+  panels.push(`## E 被审文件与内容哈希（${files.length} 个文件）\n${verifyTable}\n\n批准时绑定的哈希：\`${hash}\`\n\n| 文件 | 内容 sha256 |\n| --- | --- |\n${files.map((f) => `| \`${f}\` | \`${sha256(readFileSync(join(root, f))).slice(7, 19)}…\` |`).join('\n')}\n\n批准方式二选一。哈希与本页不一致时都会拒绝批准：\n\n- 审查台：在你自己的终端运行一次 \`tenon review\`，之后都在浏览器里点「批准此版本」。\n- 终端：复制下面的命令运行。\n\n\`\`\`bash\ntenon approve ${id} --hash ${hash.slice(7, 19)}\n\`\`\``);
 
   // 批注是人写的任意文字：HTML 与 Markdown 记号都转成字符实体，按纯文本显示（不会变成链接、代码或页面代码）
   const plain = (s: string) => s.replace(/&/g, '&amp;').replace(/[<>`*_[\]~\\|!#]/g, (c) => `&#${c.charCodeAt(0)};`).replace(/\s+/g, ' ').trim();
@@ -285,7 +285,7 @@ export interface RenderResult { file: string; hash: string }
 /** 用随包的 am 渲染草稿；成功返回 null，失败返回 am 的输出 */
 function runAm(draft: string, out: string): string | null {
   // 用独立的 AM_HOME：不读写用户自己的 am 配置与页面目录
-  const home = mkdtempSync(join(tmpdir(), 'devflow-am-'));
+  const home = mkdtempSync(join(tmpdir(), 'tenon-am-'));
   try {
     execFileSync(process.execPath, [AM, 'render', '-', '-o', out, '--no-open', '--style', 'off'], {
       input: draft, env: { ...process.env, AM_HOME: home }, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'],
@@ -354,11 +354,11 @@ function diagramBlocks(text: string, file: string): Block[] {
 }
 
 /**
- * render 会拒绝的写法：toPanelBody 的规则 + 图块语法（交给 am 试渲染）。供 devflow validate 使用；
+ * render 会拒绝的写法：toPanelBody 的规则 + 图块语法（交给 am 试渲染）。供 tenon validate 使用；
  * check 不调用，避免每次提交都起子进程。
  */
 export function reviewIssues(root: string, id: string): Issue[] {
-  const base = changeRel(id);
+  const base = changeRel(root, id);
   const files = [`${base}/proposal.md`, `${base}/design.md`, ...specCaps(root, id).map((c) => `${base}/specs/${c}/spec.md`)]
     .filter((f) => existsSync(join(root, f)));
   const problems: Problem[] = [];
@@ -380,7 +380,7 @@ export function reviewIssues(root: string, id: string): Issue[] {
     at.push({ start: draft.length + 1, block: b });
     draft.push(...b.lines, '');
   });
-  const tmp = mkdtempSync(join(tmpdir(), 'devflow-check-'));
+  const tmp = mkdtempSync(join(tmpdir(), 'tenon-check-'));
   let output: string | null;
   try {
     output = runAm(draft.join('\n'), join(tmp, 'check.html'));
@@ -407,7 +407,7 @@ export function reviewIssues(root: string, id: string): Issue[] {
 }
 
 // 细节面板（A–E）默认折叠：点标题展开，从目录或锚点跳转时自动展开，打印时全部展开。
-// 这段由 devflow 自己注入，不来自被审文件；被审文件里的原始 HTML 仍由 toPanelBody 拦截。
+// 这段由 Tenon 自己注入，不来自被审文件；被审文件里的原始 HTML 仍由 toPanelBody 拦截。
 const FOLD = `<style>
 .am-colophon{display:none}
 .am-toolbar>:not(.am-btn--reply){display:none}
@@ -453,7 +453,7 @@ export function decorate(html: string, extra = ''): string {
   const i = html.lastIndexOf('</body>');
   if (i < 0) return html;
   const added = FOLD + extra;
-  // 页面的内容安全策略只放行登记过哈希的脚本：把 devflow 自己注入的脚本登记进去
+  // 页面的内容安全策略只放行登记过哈希的脚本：把 Tenon 自己注入的脚本登记进去
   const hashes = [...added.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => `'sha256-${createHash('sha256').update(m[1]).digest('base64')}'`);
   return (html.slice(0, i) + added + html.slice(i)).replace(/(<meta http-equiv="Content-Security-Policy" content="[^"]*script-src)/, `$1 ${hashes.join(' ')}`);
 }
@@ -461,20 +461,20 @@ export function decorate(html: string, extra = ''): string {
 /** 校验并渲染为 HTML 字符串；审查台每次打开页面都调用，保证看到的是当前内容 */
 export function renderHtml(root: string, id: string, extra?: (hash: string) => string, notes?: (Feedback & { read: boolean })[]): { html: string; hash: string } {
   const errors = validateChange(root, id, true).filter((i) => i.level === 'error');
-  if (errors.length) throw new DevflowError(`变更校验有 ${errors.length} 个错误，先修正再渲染`, `运行 devflow validate ${id}`);
+  if (errors.length) throw new DevflowError(`变更校验有 ${errors.length} 个错误，先修正再渲染`, `运行 tenon validate ${id}`);
   const { draft, hash, problems } = buildDraft(root, id, notes);
   if (problems.length) {
     throw new DevflowError(`审查页内容有 ${problems.length} 处不允许的写法`, problems.map((p) => `${p.file}:${p.line} ${p.message}`).join('\n'));
   }
   const html = amHtml(draft);
   if (hashFiles(root, reviewedFiles(root, id)) !== hash) {
-    throw new DevflowError('渲染期间被审文件发生了变化', `重新运行 devflow render ${id}`);
+    throw new DevflowError('渲染期间被审文件发生了变化', `重新运行 tenon render ${id}`);
   }
   return { html: decorate(html, extra?.(hash)), hash };
 }
 
 function amHtml(draft: string): string {
-  const tmp = mkdtempSync(join(tmpdir(), 'devflow-render-'));
+  const tmp = mkdtempSync(join(tmpdir(), 'tenon-render-'));
   try {
     const failed = runAm(draft, join(tmp, 'page.html'));
     if (failed !== null) throw new DevflowError('渲染失败', failed);
@@ -491,7 +491,7 @@ const EVENT_NAME: Record<string, string> = {
 
 /** 已归档变更的只读页：方案原文、拍板结论、事件时间线。不校验、不绑定哈希，extra 是审查台追加的样式 */
 export function renderArchived(root: string, id: string, extra = ''): string {
-  const base = `${DF}/changes/archive/${id}`;
+  const base = `${dfOf(root)}/changes/archive/${id}`;
   const read = (rel: string) => (existsSync(join(root, base, rel)) ? readFileSync(join(root, base, rel), 'utf8') : '');
   const yaml = (rel: string) => { try { return parse(read(rel)) ?? {}; } catch { return {}; } };
   const meta = yaml('change.yaml');
@@ -527,7 +527,7 @@ export function renderArchived(root: string, id: string, extra = ''): string {
 
 export function render(root: string, id: string, out?: string): RenderResult {
   const { html, hash } = renderHtml(root, id);
-  const file = out ?? join(root, DF, 'runtime', 'rendered', `${id}.html`);
+  const file = out ?? join(root, dfOf(root), 'runtime', 'rendered', `${id}.html`);
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, html);
   return { file, hash };

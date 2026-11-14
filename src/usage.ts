@@ -2,7 +2,7 @@
 import { randomUUID, createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { DevflowError, DF } from './core.ts';
+import { dfOf, DevflowError } from './core.ts';
 import { parse } from 'yaml';
 import { deriveStatus } from './status.ts';
 
@@ -52,7 +52,7 @@ export interface Candidate {
   status: 'open' | 'improved' | 'regressed' | 'inconclusive';
 }
 export interface ReportOptions { since?: string; tool_version?: string; schema_version?: number }
-const dir = (root: string) => join(root, DF, 'runtime', 'usage');
+const dir = (root: string) => join(root, dfOf(root), 'runtime', 'usage');
 const readJson = <T>(file: string): T => JSON.parse(readFileSync(file, 'utf8')) as T;
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 function atomic(file: string, value: unknown): void {
@@ -74,7 +74,7 @@ function code(value: unknown): string | undefined {
   return typeof value === 'string' && /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(value) ? value : undefined;
 }
 function enabled(root: string): boolean {
-  return process.env.DEVFLOW_USAGE !== 'off' && existsSync(join(root, DF, 'project.yaml')) && (!existsSync(join(dir(root), 'config.json')) || readJson<{ enabled: boolean }>(join(dir(root), 'config.json')).enabled !== false);
+  return process.env.DEVFLOW_USAGE !== 'off' && existsSync(join(root, dfOf(root), 'project.yaml')) && (!existsSync(join(dir(root), 'config.json')) || readJson<{ enabled: boolean }>(join(dir(root), 'config.json')).enabled !== false);
 }
 export function configureUsage(root: string, on: boolean): void { atomic(join(dir(root), 'config.json'), { enabled: on }); }
 function recordFiles(root: string): string[] {
@@ -122,7 +122,7 @@ export function pruneUsage(root: string, before: string, limit = Number.MAX_SAFE
   validDate(before); let count = 0;
   for (const file of recordFiles(root)) if (file.slice(file.lastIndexOf('/', file.lastIndexOf('/') - 1) + 1).slice(0, 10) < before && count < limit) { rmSync(file); count++; }
   const now = Date.now();
-  for (const [folder, age] of [[join(dir(root), 'feedback'), 90], [join(root, DF, 'runtime', 'reports'), 180]] as const) {
+  for (const [folder, age] of [[join(dir(root), 'feedback'), 90], [join(root, dfOf(root), 'runtime', 'reports'), 180]] as const) {
     if (!existsSync(folder)) continue;
     for (const file of readdirSync(folder)) {
       if (count >= limit) break;
@@ -154,8 +154,8 @@ export function usageReport(root: string, options: ReportOptions = {}) {
   const all = records(root); const until = new Date().toISOString();
   const changeFormat = (id: string | undefined): number | 'unknown' => {
     if (!id) return 'unknown';
-    const active = join(root, DF, 'changes', id, 'change.yaml');
-    const archive = join(root, DF, 'changes', 'archive');
+    const active = join(root, dfOf(root), 'changes', id, 'change.yaml');
+    const archive = join(root, dfOf(root), 'changes', 'archive');
     const archived = existsSync(archive) ? readdirSync(archive).find(n => n === id || n.endsWith(`-${id}`)) : undefined;
     const file = existsSync(active) ? active : archived ? join(archive, archived, 'change.yaml') : undefined;
     try { return file ? Number(parse(readFileSync(file, 'utf8')).schema_version) : 'unknown'; } catch { return 'unknown'; }
@@ -173,7 +173,7 @@ export function usageReport(root: string, options: ReportOptions = {}) {
   });
   let taskDone = 0; let taskTotal = 0; let missingTaskChanges = 0;
   for (const id of changes) {
-    try { if (!existsSync(join(root, DF, 'changes', id, 'change.yaml'))) throw new Error(); const st = deriveStatus(root, id); taskDone += st.tasks.done; taskTotal += st.tasks.total; } catch { missingTaskChanges++; }
+    try { if (!existsSync(join(root, dfOf(root), 'changes', id, 'change.yaml'))) throw new Error(); const st = deriveStatus(root, id); taskDone += st.tasks.done; taskTotal += st.tasks.total; } catch { missingTaskChanges++; }
   }
   const report = {
     schema_version: 1, window: { since, until }, versions: tally(rows.map(r => r.tool_version)), change_formats: tally(rows.map(r => String(changeFormat(r.change_id)))),
@@ -185,10 +185,10 @@ export function usageReport(root: string, options: ReportOptions = {}) {
     wall_clock_cycles: cycles, missing: { corrupt_records: all.corrupt, reason_code: rows.filter(r => !r.reason_code).length, unfinished: rows.length - ended.length },
     task_completeness: { basis: 'current-state-snapshot', done: taskDone, total: taskTotal, rate: taskTotal && !missingTaskChanges ? taskDone / taskTotal : 'unknown', missing_changes: missingTaskChanges }, missed_defect_rate: 'unknown', tokens: 'unknown', cost: 'unknown', human_time: 'unknown',
   };
-  const folder = join(root, DF, 'runtime', 'reports'); const stem = `${until.slice(0, 10)}-${randomUUID()}`;
+  const folder = join(root, dfOf(root), 'runtime', 'reports'); const stem = `${until.slice(0, 10)}-${randomUUID()}`;
   const jsonPath = join(folder, `${stem}.json`); const htmlPath = join(folder, `${stem}.html`);
   atomic(jsonPath, report);
-  writeFileSync(htmlPath, `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>DevFlow 本地使用报告</title><style>body{font:16px/1.7 system-ui;max-width:1000px;margin:40px auto;padding:0 20px;color:#17212f;background:#fafafa}pre{white-space:pre-wrap;overflow-wrap:anywhere;padding:24px;background:#fff;border:1px solid #ddd}</style><h1>DevFlow 本地使用报告</h1><p>时间窗 ${html(since)} — ${html(until)} · ${rows.length} 次调用；未知数据保持 unknown，墙钟耗时包含等待。</p><pre>${html(JSON.stringify(report, null, 2))}</pre></html>`);
+  writeFileSync(htmlPath, `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Tenon 本地使用报告</title><style>body{font:16px/1.7 system-ui;max-width:1000px;margin:40px auto;padding:0 20px;color:#17212f;background:#fafafa}pre{white-space:pre-wrap;overflow-wrap:anywhere;padding:24px;background:#fff;border:1px solid #ddd}</style><h1>Tenon 本地使用报告</h1><p>时间窗 ${html(since)} — ${html(until)} · ${rows.length} 次调用；未知数据保持 unknown，墙钟耗时包含等待。</p><pre>${html(JSON.stringify(report, null, 2))}</pre></html>`);
   generateCandidates(root, rows, fb, report.window, jsonPath, hash(readFileSync(jsonPath, 'utf8')));
   return { report, jsonPath, htmlPath };
 }

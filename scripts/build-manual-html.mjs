@@ -13,7 +13,7 @@ const md = readFileSync(src, 'utf8');
 
 // 概览页和写作检查都交给随包附带的 answer-me-with-html；独立 AM_HOME，不碰用户自己的配置
 const AM = fileURLToPath(new URL('../vendor/answer-me-with-html/am.mjs', import.meta.url));
-const amHome = mkdtempSync(join(tmpdir(), 'devflow-am-'));
+const amHome = mkdtempSync(join(tmpdir(), 'tenon-am-'));
 const am = (...args) => {
   try {
     return { ok: true, text: execFileSync(process.execPath, [AM, ...args], { env: { ...process.env, AM_HOME: amHome }, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }) };
@@ -216,7 +216,7 @@ details.optional>div{padding-bottom:8px}
 </head>
 <body>
 <header>
-<div class="logo">DevFlow<span>DOCS</span></div>
+<div class="logo">Tenon<span>DOCS</span></div>
 <div class="spacer"></div>
 <input class="search" type="search" placeholder="筛选目录　按 / 聚焦" aria-label="筛选目录">
 <a class="btn" href="使用手册-概览.html">一页概览</a>

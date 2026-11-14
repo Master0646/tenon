@@ -1,4 +1,4 @@
-// 审查批注：审查台接收落盘、devflow wait 送达、等待标记、resume 提示、页面脚本
+// 审查批注：审查台接收落盘、tenon wait 送达、等待标记、resume 提示、页面脚本
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
@@ -36,7 +36,7 @@ async function start(dir: string) {
   return { server, post, page };
 }
 
-const fbDir = (dir: string) => join(dir, '.devflow/runtime/feedback', ID);
+const fbDir = (dir: string) => join(dir, '.tenon/runtime/feedback', ID);
 const unread = (dir: string) => (existsSync(fbDir(dir)) ? readdirSync(fbDir(dir)).filter((f) => f.endsWith('.json')).length : 0);
 
 test('AC1 合法批注落盘；空批注、超长、条数超限、令牌错误被拒且不落盘', async () => {
@@ -75,7 +75,7 @@ test('AC2 wait 运行中收到批注后退出码 0 并打印原文与意见；AC
     let out = '';
     child.stdout.on('data', (d) => { out += d; });
     const exited = new Promise<number>((done) => child.on('exit', (code) => done(code ?? -1)));
-    const marker = join(dir, '.devflow/runtime/waiting', `${ID}.json`);
+    const marker = join(dir, '.tenon/runtime/waiting', `${ID}.json`);
     for (let i = 0; i < 100 && !existsSync(marker); i++) await sleep(100);
     assert.match(await page(), /<span class="df-wait" data-on>Agent 正在等待/);
 
@@ -110,14 +110,14 @@ test('AC2 启动时已有未读批注立即返回', () => {
 test('AC3 等待进程已死、标记残留时页面显示没有 Agent 在等待；resume 显示未读条数', async () => {
   const dir = repo();
   const dead = spawnSync(process.execPath, ['-e', 'console.log(process.pid)'], { encoding: 'utf8' }).stdout.trim();
-  mkdirSync(join(dir, '.devflow/runtime/waiting'), { recursive: true });
-  writeFileSync(join(dir, '.devflow/runtime/waiting', `${ID}.json`), JSON.stringify({ pid: Number(dead) }));
+  mkdirSync(join(dir, '.tenon/runtime/waiting'), { recursive: true });
+  writeFileSync(join(dir, '.tenon/runtime/waiting', `${ID}.json`), JSON.stringify({ pid: Number(dead) }));
   const { server, page } = await start(dir);
   try { assert.match(await page(), /没有 Agent 在等待/); } finally { server.close(); }
 
   assert.doesNotMatch(cli(dir, 'resume', ID).stdout, /未读批注/);
   saveFeedback(dir, ID, { hash: HASH, items: ITEMS });
-  assert.match(cli(dir, 'resume', ID).stdout, /未读批注：2 条，运行 devflow wait fb-case 读取/);
+  assert.match(cli(dir, 'resume', ID).stdout, /未读批注：2 条，运行 tenon wait fb-case 读取/);
   assert.equal(JSON.parse(cli(dir, 'resume', ID, '--json').stdout).unread_feedback, 2);
 });
 

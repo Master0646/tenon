@@ -16,8 +16,8 @@ const TOKEN = 'tok-layout';
 function repo(): string {
   const dir = makeRepo();
   writeChange(dir, ID);
-  const base = `.devflow/changes/${ID}`;
-  write(dir, '.devflow/project.yaml', 'schema_version: 1\nverify:\n  - name: unit\n    run: echo ok\nexclude: []\nenforce: warn\n');
+  const base = `.tenon/changes/${ID}`;
+  write(dir, '.tenon/project.yaml', 'schema_version: 1\nverify:\n  - name: unit\n    run: echo ok\nexclude: []\nenforce: warn\n');
   write(dir, `${base}/change.yaml`, 'schema_version: 2\nmin_cli_version: 0.2.0\ntitle: 布局\naffected_paths: [backend/**]\nsummary: [要点甲, 要点乙]\ndecisions:\n  - question: 返回什么？\n    options: [返回 403, 返回空列表]\n    recommend: 返回 403\n  - question: 记日志吗？\n    options: [记, 不记]\n    recommend: 记\n');
   write(dir, `${base}/tasks.yaml`, 'schema_version: 2\ntasks:\n  - id: T1\n    title: 甲\n    acceptance:\n      - id: AC1\n        text: 看过甲\n        method: manual\n');
   commit(dir, 'change', true);

@@ -107,3 +107,20 @@
 - 浏览器自测修了一处：滚到底时目录高亮停在中间面板。
 - 未改：`templates/skills/devflow-propose/SKILL.md` 里「审查页首屏只显示 summary 和 decisions」的说法已过时（不在影响范围内）。
 - 全部改动未提交，等用户决定。
+
+## 第四批：改名为 Tenon（变更 `2026-11-14-tenon-rename`）
+
+- [x] 方案获批（拍板：只提供 `tenon` 命令，不保留 `devflow` 别名）；因 7e029b6 改到 `docs/**` 变成 rebase_required，已由用户重新批准
+- [x] T1 安装包与命令名：`package.json` 的 name、bin 改为 tenon
+- [x] T2 数据目录：`dfOf(root)` 取代常量 `DF`，新项目 `.tenon/`，只有 `.devflow/` 的旧项目沿用，两个都在时报错；hook、托管段落认旧标记原地升级；旧版生成的 `devflow-*` 技能与规则删除，被人改过的保留
+- [x] T3 模板、帮助、使用手册、README 改名；本仓库 Agent 文件用 `tenon update` 重新生成
+- [x] verify、证据、用户归档
+- [ ] 提交、推送：工作流守卫返回「无人值守：不提交、不推送」，等用户决定
+
+2026-11-14：代码、测试、文档完成，`npm test` 160 项通过，等 verify。
+
+- 本仓库继续用 `.devflow/`，审批记录不受影响。
+- 保留未改（历史记录）：`docs/tasks/` 旧任务、`体验反馈.md`、`验收记录-*.md`、`eval/results/`，以及跑冻结旧版本的 `eval/agent-workflow.ts`、`eval/protocol.yaml` 和它的测试。
+- 本仓库的 pre-commit 钩子还是旧的 devflow 钩子：全局装好 tenon 后运行一次 `tenon init` 更新。
+
+2026-11-14（续）：verify 通过（160 项测试，另跑 `scripts/smoke-install.sh` 打包安装冒烟通过），3 条自动证据都核对了日志原文，用户已归档。未提交、未推送，全局仍是 devflow 0.3.0。

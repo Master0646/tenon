@@ -9,7 +9,16 @@
       "Write(/.devflow/changes/**/events.jsonl)",
       "Bash(devflow evidence confirm *)",
       "Bash(devflow review)",
-      "Bash(devflow review *)"
+      "Bash(devflow review *)",
+      "Bash(tenon approve *)",
+      "Bash(tenon archive *)",
+      "Bash(tenon evidence confirm *)",
+      "Bash(tenon review)",
+      "Bash(tenon review *)",
+      "Edit(/.tenon/specs/**)",
+      "Write(/.tenon/specs/**)",
+      "Edit(/.tenon/changes/**/events.jsonl)",
+      "Write(/.tenon/changes/**/events.jsonl)"
     ]
   }
 }

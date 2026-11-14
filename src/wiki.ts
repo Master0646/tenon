@@ -1,10 +1,10 @@
-// devflow wiki lint：知识页校验与过期检测（§6.2）
+// tenon wiki lint：知识页校验与过期检测（§6.2）
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, matchesGlob, normalize } from 'node:path';
 import { parse } from 'yaml';
-import { DF, archiveTarget, git, listChanges, repoFiles, type Issue } from './core.ts';
+import { dfOf, archiveTarget, git, listChanges, repoFiles, type Issue } from './core.ts';
 
-const KDIR = `${DF}/knowledge`;
+const kdir = (root: string): string => `${dfOf(root)}/knowledge`;
 const SLUG = /^[a-z0-9][a-z0-9-]*$/;
 
 const EX_PAGE = `---
@@ -31,7 +31,7 @@ function splitFrontmatter(text: string): { fm: string; body: string; bodyLine: n
 /** project.yaml 的 exclude：不含 / 的模式匹配任意层级的文件名（同 .gitignore） */
 export function loadExcludes(root: string): string[] {
   try {
-    const p = parse(readFileSync(join(root, DF, 'project.yaml'), 'utf8'));
+    const p = parse(readFileSync(join(root, dfOf(root), 'project.yaml'), 'utf8'));
     return Array.isArray(p?.exclude) ? p.exclude.filter((x: unknown) => typeof x === 'string') : [];
   } catch {
     return [];
@@ -46,11 +46,11 @@ export function lintWiki(root: string): { issues: Issue[]; pages: Page[] } {
   const issues: Issue[] = [];
   const pages: Page[] = [];
   const excludes = loadExcludes(root);
-  const files = repoFiles(root, `${KDIR}/pages`).filter((f) => f !== '.gitkeep');
+  const files = repoFiles(root, `${kdir(root)}/pages`).filter((f) => f !== '.gitkeep');
   const slugs = new Set(files.filter((f) => f.endsWith('.md')).map((f) => f.slice(0, -3)));
 
   for (const f of files) {
-    const rel = `${KDIR}/pages/${f}`;
+    const rel = `${kdir(root)}/pages/${f}`;
     const err = (message: string, hint?: string, line?: number) =>
       issues.push({ level: 'error', file: line ? `${rel}:${line}` : rel, message, hint });
     const slug = f.replace(/\.md$/, '');
@@ -130,7 +130,7 @@ export function lintWiki(root: string): { issues: Issue[]; pages: Page[] } {
     const unlisted = new Set<string>();
     for (const m of parts.body.matchAll(/(?:[\w@.-]+\/)+[\w@.-]+\.\w+/g)) {
       const p = m[0];
-      if (!listedPaths.has(p) && !p.startsWith(`${DF}/`) && existsSync(join(root, p))) unlisted.add(p);
+      if (!listedPaths.has(p) && !p.startsWith(`${dfOf(root)}/`) && existsSync(join(root, p))) unlisted.add(p);
     }
     if (unlisted.size) {
       issues.push({ level: 'warn', file: rel, message: `正文引用了未列入 sources 的文件：${[...unlisted].join(', ')}`, hint: '把这些文件加进 sources，否则它们改动时本页不会被标为 stale' });
@@ -143,7 +143,7 @@ export function lintWiki(root: string): { issues: Issue[]; pages: Page[] } {
   }
 
   // index.md 必须恰好列出全部页面
-  const indexRel = `${KDIR}/index.md`;
+  const indexRel = `${kdir(root)}/index.md`;
   const indexText = (existsSync(join(root, indexRel)) ? readFileSync(join(root, indexRel), 'utf8') : '').replace(/<!--[\s\S]*?-->/g, '');
   const listed = new Set([...indexText.matchAll(/\]\(pages\/([^)\s]+)\.md\)/g)].map((m) => m[1]));
   for (const s of slugs) {
@@ -157,9 +157,9 @@ export function lintWiki(root: string): { issues: Issue[]; pages: Page[] } {
 
 /** 链接指向某个进行中变更归档后的位置，且该文件现在就在变更目录里：归档前写好的设计原因链接 */
 function pendingArchiveFile(root: string, target: string): boolean {
-  const m = /^\.devflow\/changes\/archive\/([^/]+)\/(.+)$/.exec(target);
+  const m = /^\.(?:tenon|devflow)\/changes\/archive\/([^/]+)\/(.+)$/.exec(target);
   if (!m) return false;
-  return listChanges(root).some((id) => archiveTarget(id) === `${DF}/changes/archive/${m[1]}` && existsSync(join(root, DF, 'changes', id, m[2])));
+  return listChanges(root).some((id) => archiveTarget(root, id) === `${dfOf(root)}/changes/archive/${m[1]}` && existsSync(join(root, dfOf(root), 'changes', id, m[2])));
 }
 
 /** 引用文件在 verified_commit 之后（含未提交的修改）有改动 → stale */

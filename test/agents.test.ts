@@ -9,13 +9,13 @@ const read = (dir: string, rel: string) => readFileSync(join(dir, rel), 'utf8');
 
 test('upsertBlock：追加、原位替换、保留段外内容', () => {
   const once = upsertBlock('# 我的说明\n', 'A');
-  assert.match(once, /^# 我的说明\n\n<!-- devflow:begin.*\nA\n<!-- devflow:end -->\n$/s);
+  assert.match(once, /^# 我的说明\n\n<!-- tenon:begin.*\nA\n<!-- tenon:end -->\n$/s);
   const twice = upsertBlock(`${once}\n尾部\n`, 'B');
   assert.match(twice, /# 我的说明/);
   assert.match(twice, /\nB\n/);
   assert.doesNotMatch(twice, /\nA\n/);
   assert.match(twice, /尾部/);
-  assert.equal(twice.match(/devflow:begin/g)?.length, 1);
+  assert.equal(twice.match(/tenon:begin/g)?.length, 1);
 });
 
 test('installAgents：两种 Agent 的技能、入口片段、禁止规则；重复运行幂等', () => {
@@ -26,18 +26,18 @@ test('installAgents：两种 Agent 的技能、入口片段、禁止规则；重
   installAgents(dir, ['claude', 'codex']);
 
   for (const p of ['.claude/skills', '.agents/skills']) {
-    for (const s of ['devflow-scan', 'devflow-ask']) {
+    for (const s of ['tenon-scan', 'tenon-ask']) {
       assert.match(read(dir, `${p}/${s}/SKILL.md`), new RegExp(`^---\\nname: ${s}\\ndescription: `));
     }
   }
   assert.match(read(dir, 'AGENTS.md'), /^# 已有内容/);
-  assert.equal(read(dir, 'AGENTS.md').match(/devflow:begin/g)?.length, 1);
+  assert.equal(read(dir, 'AGENTS.md').match(/tenon:begin/g)?.length, 1);
   assert.match(read(dir, 'CLAUDE.md'), /knowledge\/index\.md/);
 
   const s = JSON.parse(read(dir, '.claude/settings.json'));
   assert.deepEqual(s.permissions.allow, ['Bash(ls *)']);
   assert.deepEqual(s.permissions.deny, ['Bash(rm *)', ...CLAUDE_DENY]);
-  assert.match(read(dir, '.codex/rules/devflow.rules'), /forbidden/);
+  assert.match(read(dir, '.codex/rules/tenon.rules'), /forbidden/);
   assert.deepEqual(detectAgents(dir), ['claude', 'codex']);
 });
 

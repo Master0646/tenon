@@ -78,8 +78,8 @@ test('mergeSpec：名称冲突与不存在的需求', () => {
 test('validate 对当前规范做合并试算', () => {
   const dir = makeRepo();
   writeChange(dir, 'c1');
-  write(dir, '.devflow/changes/c1/specs/auth/spec.md', `## MODIFIED Requirements\n${req('登录')}\n`);
+  write(dir, '.tenon/changes/c1/specs/auth/spec.md', `## MODIFIED Requirements\n${req('登录')}\n`);
   assert.match(validateChange(dir, 'c1', true).map((i) => i.message).join(), /只能 ADDED/);
-  write(dir, '.devflow/specs/auth/spec.md', CURRENT);
+  write(dir, '.tenon/specs/auth/spec.md', CURRENT);
   assert.deepEqual(validateChange(dir, 'c1', true).filter((i) => i.level === 'error'), []);
 });

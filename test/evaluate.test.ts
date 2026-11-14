@@ -35,7 +35,7 @@ test('compare：协议或夹具不一致拒绝比较，单项回退不被总体�
 });
 
 test('workflow：每次在独立 Git 仓库运行并清理，校验退出码、JSON 状态和输出', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'devflow-eval-test-'));
+  const dir = mkdtempSync(join(tmpdir(), 'tenon-eval-test-'));
   try {
     const seen = join(dir, 'seen.txt');
     const cli = join(dir, 'fake.mjs');
@@ -58,7 +58,7 @@ test('workflow：每次在独立 Git 仓库运行并清理，校验退出码、J
 });
 
 test('workflow：夹具边界和报告字段校验，缺少运行环境保留 unknown', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'devflow-eval-test-'));
+  const dir = mkdtempSync(join(tmpdir(), 'tenon-eval-test-'));
   try {
     const suite = join(dir, 'suite.json');
     writeFileSync(suite, JSON.stringify([{ id: 'escape', critical: true, files: { '../escape': 'bad' }, steps: [{ args: ['status'], expect: { exit: 0 } }] }]));

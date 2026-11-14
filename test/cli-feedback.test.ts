@@ -24,7 +24,7 @@ const hasScript = spawnSync('sh', ['-c', 'command -v script']).status === 0 && [
 test('approve：未输入 y 时说明未批准与当前状态；输入 y 时给出下一步', { skip: !hasScript && '需要 script 命令' }, () => {
   const dir = makeRepo();
   writeChange(dir, ID);
-  const events = join(dir, `.devflow/changes/${ID}/events.jsonl`);
+  const events = join(dir, `.tenon/changes/${ID}/events.jsonl`);
   const before = existsSync(events) ? readFileSync(events, 'utf8') : '';
 
   const no = tty(dir, 'n', 'approve', ID);
@@ -34,7 +34,7 @@ test('approve：未输入 y 时说明未批准与当前状态；输入 y 时给�
 
   const yes = tty(dir, 'y', 'approve', ID);
   assert.match(yes.stdout, /已批准/);
-  assert.match(yes.stdout, /devflow-apply/);
+  assert.match(yes.stdout, /tenon-apply/);
   assert.equal(deriveStatus(dir, ID).status, 'approved');
 });
 
@@ -42,7 +42,7 @@ test('init：只装检测到的 Agent；都检测不到时全装并提示；--ag
   const claudeOnly = makeRepo();
   write(claudeOnly, 'CLAUDE.md', '# 说明\n');
   assert.equal(cli(claudeOnly, 'init').status, 0);
-  assert.ok(existsSync(join(claudeOnly, '.claude/skills/devflow-ask/SKILL.md')));
+  assert.ok(existsSync(join(claudeOnly, '.claude/skills/tenon-ask/SKILL.md')));
   assert.equal(existsSync(join(claudeOnly, '.agents')), false);
   assert.equal(existsSync(join(claudeOnly, 'AGENTS.md')), false);
 
@@ -50,13 +50,13 @@ test('init：只装检测到的 Agent；都检测不到时全装并提示；--ag
   const r = cli(none, 'init');
   assert.equal(r.status, 0);
   assert.match(r.stderr, /未检测到 Agent.*--agents/);
-  assert.ok(existsSync(join(none, '.claude/skills/devflow-ask/SKILL.md')));
-  assert.ok(existsSync(join(none, '.agents/skills/devflow-ask/SKILL.md')));
+  assert.ok(existsSync(join(none, '.claude/skills/tenon-ask/SKILL.md')));
+  assert.ok(existsSync(join(none, '.agents/skills/tenon-ask/SKILL.md')));
 
   const explicit = makeRepo();
   write(explicit, 'CLAUDE.md', '# 说明\n');
   assert.equal(cli(explicit, 'init', '--agents', 'codex').status, 0);
-  assert.ok(existsSync(join(explicit, '.agents/skills/devflow-ask/SKILL.md')));
+  assert.ok(existsSync(join(explicit, '.agents/skills/tenon-ask/SKILL.md')));
   assert.equal(existsSync(join(explicit, '.claude/skills')), false);
 });
 
@@ -64,8 +64,8 @@ test('审查页列出验证命令；未声明时写明', () => {
   const dir = makeRepo();
   writeChange(dir, ID);
   assert.match(buildDraft(dir, ID).draft, /未声明验证命令/);
-  const f = join(dir, '.devflow/project.yaml');
-  write(dir, '.devflow/project.yaml', readFileSync(f, 'utf8').replace(/^verify: \[\]$/m,
+  const f = join(dir, '.tenon/project.yaml');
+  write(dir, '.tenon/project.yaml', readFileSync(f, 'utf8').replace(/^verify: \[\]$/m,
     'verify:\n  - name: backend-test\n    run: mvn -q test\n    cwd: backend\n  - name: lint\n    run: npm run lint'));
   const { draft } = buildDraft(dir, ID);
   assert.match(draft, /\| backend-test \| `mvn -q test` \| backend \|/);
@@ -76,8 +76,8 @@ test('审查页列出验证命令；未声明时写明', () => {
 test('status --all 列出已归档变更；不带 --all 不变', () => {
   const dir = makeRepo();
   writeChange(dir, ID);
-  write(dir, '.devflow/changes/archive/2026-01-01-a/events.jsonl', `${JSON.stringify({ type: 'archived', at: '2026-01-01T08:30:00.000Z', actor: 't' })}\n`);
-  write(dir, '.devflow/changes/archive/2026-01-02-b/proposal.md', '# b\n');
+  write(dir, '.tenon/changes/archive/2026-01-01-a/events.jsonl', `${JSON.stringify({ type: 'archived', at: '2026-01-01T08:30:00.000Z', actor: 't' })}\n`);
+  write(dir, '.tenon/changes/archive/2026-01-02-b/proposal.md', '# b\n');
 
   const all = cli(dir, 'status', '--all').stdout.trim().split('\n');
   assert.equal(all.length, 3);
@@ -93,7 +93,7 @@ test('status --all 列出已归档变更；不带 --all 不变', () => {
 test('validate：报出图语法错误与带属性的代码块，定位到源文件行；合法图通过且 render 成功', () => {
   const dir = makeRepo();
   writeChange(dir, ID);
-  const base = `.devflow/changes/${ID}`;
+  const base = `.tenon/changes/${ID}`;
   write(dir, `${base}/design.md`, '# 设计\n\n```er\nUser\n  id PK\nUSER ||--o{ ORDER : places\n```\n');
   write(dir, `${base}/proposal.md`, '# 提案\n\n```ts title=x\nlet a;\n```\n');
   const r = cli(dir, 'validate', ID, '--json');
@@ -140,7 +140,7 @@ test('CLI usage records stable failure reasons and produces a reviewable candida
   const draft = cli(dir, 'improve', 'draft', candidate.id, 'improve-usage', '--json');
   assert.equal(draft.status, 0, draft.stderr);
   assert.equal(JSON.parse(draft.stdout).status, 'draft');
-  const base = join(dir, '.devflow/runtime/usage');
+  const base = join(dir, '.tenon/runtime/usage');
   const day = readdirSync(base).find((d) => /^\d{4}-\d{2}-\d{2}$/.test(d))!;
   const row = JSON.parse(readFileSync(join(base, day, readdirSync(join(base, day))[0]), 'utf8'));
   assert.equal(row.status_before, 'draft');
@@ -155,10 +155,10 @@ test('status 行尾标出轮到谁：待你批准、待你确认 N 条人工证�
   const { approve } = await import('../src/status.ts');
   const dir = makeRepo();
   writeChange(dir, ID);
-  write(dir, '.devflow/project.yaml', 'schema_version: 1\nverify:\n  - name: unit\n    run: echo ok\nenforce: warn\n');
-  write(dir, `.devflow/changes/${ID}/change.yaml`, 'schema_version: 2\nmin_cli_version: 0.2.0\ntitle: 新格式\naffected_paths: [backend/**]\nsummary: [要点]\n');
-  write(dir, `.devflow/changes/${ID}/tasks.yaml`, 'schema_version: 2\ntasks:\n  - id: T1\n    title: 人工验收\n    acceptance:\n      - id: AC1\n        text: 看过页面\n        method: manual\n      - id: AC2\n        text: 看过日志\n        method: manual\n');
-  write(dir, '.devflow/changes/archive/2026-01-01-a/events.jsonl', `${JSON.stringify({ type: 'archived', at: '2026-01-01T08:30:00.000Z', actor: 't' })}\n`);
+  write(dir, '.tenon/project.yaml', 'schema_version: 1\nverify:\n  - name: unit\n    run: echo ok\nenforce: warn\n');
+  write(dir, `.tenon/changes/${ID}/change.yaml`, 'schema_version: 2\nmin_cli_version: 0.2.0\ntitle: 新格式\naffected_paths: [backend/**]\nsummary: [要点]\n');
+  write(dir, `.tenon/changes/${ID}/tasks.yaml`, 'schema_version: 2\ntasks:\n  - id: T1\n    title: 人工验收\n    acceptance:\n      - id: AC1\n        text: 看过页面\n        method: manual\n      - id: AC2\n        text: 看过日志\n        method: manual\n');
+  write(dir, '.tenon/changes/archive/2026-01-01-a/events.jsonl', `${JSON.stringify({ type: 'archived', at: '2026-01-01T08:30:00.000Z', actor: 't' })}\n`);
   const todo = () => humanTodo(dir, ID, deriveStatus(dir, ID));
   const line = () => cli(dir, 'status', '--all').stdout.trim().split('\n');
 

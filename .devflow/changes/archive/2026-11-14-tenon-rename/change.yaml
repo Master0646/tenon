@@ -1,0 +1,28 @@
+schema_version: 2
+min_cli_version: 0.2.0
+title: 将 DevFlow 更名为 Tenon
+affected_paths:
+  - package.json
+  - pnpm-lock.yaml
+  - src/**
+  - templates/**
+  - scripts/**
+  - test/**
+  - eval/**
+  - docs/**
+  - examples/**
+  - README.md
+  - AGENTS.md
+  - CLAUDE.md
+  - .agents/skills/**
+  - .claude/**
+  - .codex/rules/**
+  - .gitignore
+summary:
+  - 产品、安装包、CLI 及 Agent 技能统一使用 Tenon 名称。
+  - 新项目使用 .tenon/，现有 .devflow/ 项目可直接用 tenon 继续工作，保留审批和归档。
+  - 验证后将改名推送至现有 origin 的工作分支。
+decisions:
+  - question: 是否继续提供 devflow 命令别名？
+    options: [只提供 tenon, 同时提供 devflow 兼容别名]
+    recommend: 只提供 tenon

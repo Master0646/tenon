@@ -22,7 +22,7 @@ export const append = (dir: string, rel: string, content: string): void => appen
 
 /** 已 init、已提交一次的仓库，含 backend/ 与 docs/ 两处代码 */
 export function makeRepo(): string {
-  const dir = realpathSync(mkdtempSync(join(tmpdir(), 'devflow-test-')));
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), 'tenon-test-')));
   g(dir, 'init', '-q');
   g(dir, 'config', 'user.name', 'tester');
   g(dir, 'config', 'user.email', 'tester@example.invalid');
@@ -52,7 +52,7 @@ export const DELTA_ADD = `## ADDED Requirements
 
 /** 写一个能通过 validate 的完整变更 */
 export function writeChange(dir: string, id: string): void {
-  const base = `.devflow/changes/${id}`;
+  const base = `.tenon/changes/${id}`;
   write(dir, `${base}/change.yaml`, 'schema_version: 1\ntitle: 新增角色权限\naffected_paths:\n  - backend/**\nsummary:\n  - 用户列表按角色控制访问\n');
   write(dir, `${base}/proposal.md`, '# 提案\n\n用户列表需要按角色控制访问。\n');
   write(dir, `${base}/tasks.yaml`, 'schema_version: 1\ntasks:\n  - id: T1\n    title: 定义角色\n  - id: T2\n    title: 接口加判断\n    depends_on: [T1]\n');

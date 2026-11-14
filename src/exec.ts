@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse } from 'yaml';
-import { DF, DevflowError, approvalCycle, changeSchema, doneTasks, listChanges, sha256, appendEvent, headCommit, requireChange, requireInit, worktreeHash, type DevflowEvent } from './core.ts';
+import { dfOf, DevflowError, approvalCycle, changeSchema, doneTasks, listChanges, sha256, appendEvent, headCommit, requireChange, requireInit, worktreeHash, type DevflowEvent } from './core.ts';
 import { evidenceIssues } from './evidence.ts';
 import { deriveStatus, type Status } from './status.ts';
 import { loadTasks, validateProject } from './validate.ts';
@@ -35,7 +35,7 @@ export function applyStart(root: string, id: string): DevflowEvent {
 export function taskDone(root: string, id: string, task: string | undefined): DevflowEvent {
   requireInit(root);
   requireChange(root, id);
-  if (!task) throw new DevflowError('缺少任务 ID', `用法：devflow task done ${id} <任务ID>`);
+  if (!task) throw new DevflowError('缺少任务 ID', `用法：tenon task done ${id} <任务ID>`);
   requireStatus(root, id, ['applying', 'needs_fix'], '标记任务完成');
   const tasks = loadTasks(root, id);
   const t = tasks.find((x) => x.id === task);
@@ -65,14 +65,14 @@ export interface VerifyResult {
 export function verify(root: string, id: string): VerifyResult {
   requireInit(root);
   requireChange(root, id);
-  if (validateProject(root).length) throw new DevflowError('project.yaml 校验不通过', '运行 devflow check 查看');
+  if (validateProject(root).length) throw new DevflowError('project.yaml 校验不通过', '运行 tenon check 查看');
   requireStatus(root, id, ['applying', 'needs_fix', 'ready_to_archive'], '验证');
-  const project = parse(readFileSync(join(root, DF, 'project.yaml'), 'utf8'));
+  const project = parse(readFileSync(join(root, dfOf(root), 'project.yaml'), 'utf8'));
   const commands: { name: string; run: string; cwd?: string }[] = project.verify ?? [];
 
   const run_id = randomUUID();
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const logDir = join(root, DF, 'runtime', 'verify', id, stamp);
+  const logDir = join(root, dfOf(root), 'runtime', 'verify', id, stamp);
   mkdirSync(logDir, { recursive: true });
 
   const before = worktreeHash(root);

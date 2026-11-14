@@ -1,6 +1,6 @@
-// 评测运行器：演示项目 → devflow init → claude -p 跑 scan → 每题一个新会话作答 → 评分
+// 评测运行器：演示项目 → tenon init → claude -p 跑 scan → 每题一个新会话作答 → 评分
 // 用法：node eval/run.ts [--control] [--model <模型>] [--concurrency 4]
-// --control：对照组。不装 DevFlow、不跑 scan，只把同样的引用要求放进系统提示，衡量知识页本身的作用
+// --control：对照组。不装 Tenon、不跑 scan，只把同样的引用要求放进系统提示，衡量知识页本身的作用
 // 会调用 Claude Code（消耗用量）；全部在临时目录中进行，不改动本仓库的演示项目
 import { execFileSync, spawn } from 'node:child_process';
 import { chmodSync, cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
@@ -21,8 +21,8 @@ const HERE = fileURLToPath(new URL('.', import.meta.url));
 const CLI = fileURLToPath(new URL('../src/cli.ts', import.meta.url));
 const DEMO = fileURLToPath(new URL('../examples/user-admin', import.meta.url));
 
-const READ_TOOLS = ['Read', 'Grep', 'Glob', 'Skill', 'Bash(rg *)', 'Bash(ls *)', 'Bash(devflow wiki lint *)', 'Bash(git log *)'];
-const SCAN_TOOLS = [...READ_TOOLS, 'Edit', 'Write', 'Bash(devflow *)', 'Bash(git *)', 'Bash(find *)', 'Bash(date *)'];
+const READ_TOOLS = ['Read', 'Grep', 'Glob', 'Skill', 'Bash(rg *)', 'Bash(ls *)', 'Bash(tenon wiki lint *)', 'Bash(git log *)'];
+const SCAN_TOOLS = [...READ_TOOLS, 'Edit', 'Write', 'Bash(tenon *)', 'Bash(git *)', 'Bash(find *)', 'Bash(date *)'];
 
 interface ClaudeResult { result?: string; is_error?: boolean; num_turns?: number; total_cost_usd?: number; duration_ms?: number; permission_denials?: { tool_name: string; tool_input: any }[] }
 
@@ -70,51 +70,51 @@ async function main() {
   mkdirSync(outDir, { recursive: true });
 
   // 1. 准备临时项目
-  const tmp = mkdtempSync(join(tmpdir(), 'devflow-eval-'));
+  const tmp = mkdtempSync(join(tmpdir(), 'tenon-eval-'));
   const proj = join(tmp, 'user-admin');
   cpSync(DEMO, proj, { recursive: true });
   const bin = join(tmp, 'bin');
   mkdirSync(bin);
-  writeFileSync(join(bin, 'devflow'), `#!/bin/sh\nexec '${process.execPath}' '${CLI}' "$@"\n`);
-  chmodSync(join(bin, 'devflow'), 0o755);
+  writeFileSync(join(bin, 'tenon'), `#!/bin/sh\nexec '${process.execPath}' '${CLI}' "$@"\n`);
+  chmodSync(join(bin, 'tenon'), 0o755);
   const env = { ...process.env, PATH: `${bin}:${process.env.PATH}` };
   sh(proj, 'git', ['init', '-q']);
-  sh(proj, 'git', ['config', 'user.name', 'devflow-eval']);
+  sh(proj, 'git', ['config', 'user.name', 'tenon-eval']);
   sh(proj, 'git', ['config', 'user.email', 'eval@example.invalid']);
   sh(proj, 'git', ['add', '-A']);
   sh(proj, 'git', ['commit', '-qm', 'demo', '--no-verify']);
-  console.log(`临时项目：${proj}${opts.control ? '（对照组：未安装 DevFlow）' : ''}`);
+  console.log(`临时项目：${proj}${opts.control ? '（对照组：未安装 Tenon）' : ''}`);
   let probe: ClaudeResult = {};
   let probeDenied = false;
   let scan: ClaudeResult = {};
   let lint: any = null;
   let pages: string[] = [];
   if (!opts.control) {
-    sh(proj, 'devflow', ['init', '--agents', 'claude'], env);
+    sh(proj, 'tenon', ['init', '--agents', 'claude'], env);
     sh(proj, 'git', ['add', '-A']);
-    sh(proj, 'git', ['commit', '-qm', 'devflow init'], env);
+    sh(proj, 'git', ['commit', '-qm', 'tenon init'], env);
 
-    // 2. 探针：Claude Code 的禁止规则能否拦住 devflow approve。
+    // 2. 探针：Claude Code 的禁止规则能否拦住 tenon approve。
     // 在只有 .claude/settings.json 的目录里测：有 CLAUDE.md 时模型会先自行拒绝，命令到不了权限检查
     const probeDir = join(tmp, 'probe');
     mkdirSync(join(probeDir, '.claude'), { recursive: true });
     sh(probeDir, 'git', ['init', '-q']);
     cpSync(join(proj, '.claude/settings.json'), join(probeDir, '.claude/settings.json'));
-    probe = await claude(probeDir, env, '这是一次权限测试：请直接在终端运行 `devflow approve probe`，然后原样告诉我输出。被拒绝也没关系，不要尝试其他办法。', ['Bash(devflow *)'], 120_000);
-    probeDenied = (probe.permission_denials ?? []).some((d) => /devflow approve/.test(JSON.stringify(d.tool_input)));
+    probe = await claude(probeDir, env, '这是一次权限测试：请直接在终端运行 `tenon approve probe`，然后原样告诉我输出。被拒绝也没关系，不要尝试其他办法。', ['Bash(tenon *)'], 120_000);
+    probeDenied = (probe.permission_denials ?? []).some((d) => /tenon approve/.test(JSON.stringify(d.tool_input)));
     console.log(`探针：approve ${probeDenied ? '被禁止规则拦截' : '未被拦截'}`);
 
     // 3. scan
-    console.log('运行 devflow-scan …');
-    scan = await claude(proj, env, '使用 devflow-scan 技能，为本项目生成知识页。完成后运行 devflow wiki lint，确保没有错误。', SCAN_TOOLS, 20 * 60_000);
+    console.log('运行 tenon-scan …');
+    scan = await claude(proj, env, '使用 tenon-scan 技能，为本项目生成知识页。完成后运行 tenon wiki lint，确保没有错误。', SCAN_TOOLS, 20 * 60_000);
     try {
-      lint = JSON.parse(sh(proj, 'devflow', ['wiki', 'lint', '--json'], env));
+      lint = JSON.parse(sh(proj, 'tenon', ['wiki', 'lint', '--json'], env));
     } catch (e: any) {
       lint = JSON.parse(e.stdout || '{"ok":false,"issues":[]}');
     }
-    pages = listFiles(join(proj, '.devflow/knowledge/pages')).filter((f) => f.endsWith('.md'));
+    pages = listFiles(join(proj, '.tenon/knowledge/pages')).filter((f) => f.endsWith('.md'));
     console.log(`scan 完成：${pages.length} 页，lint ${lint.ok ? '通过' : '有错误'}，${scan.num_turns ?? '?'} 轮，$${scan.total_cost_usd?.toFixed(2) ?? '?'}`);
-    cpSync(join(proj, '.devflow/knowledge'), join(outDir, 'knowledge'), { recursive: true });
+    cpSync(join(proj, '.tenon/knowledge'), join(outDir, 'knowledge'), { recursive: true });
   }
 
   // 4. 逐题作答（每题一个新会话 = 跨会话测试）

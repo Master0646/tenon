@@ -1,11 +1,11 @@
-// devflow init / devflow new：只创建缺失的文件，不覆盖已有内容
+// tenon init / tenon new：只创建缺失的文件，不覆盖已有内容
 import { appendFileSync, chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CHANGE_ID, DF, DevflowError, changeDir, codeRoots, git, requireInit } from './core.ts';
+import { dfOf, CHANGE_ID, DevflowError, changeDir, codeRoots, git, requireInit } from './core.ts';
 
 const PROJECT_YAML = `schema_version: 1
-# 只有这里声明的命令会被 devflow verify 执行。本文件由人维护，计入每次批准的哈希。
+# 只有这里声明的命令会被 tenon verify 执行。本文件由人维护，计入每次批准的哈希。
 verify: []
 #  - name: backend-test
 #    run: mvn -q test
@@ -30,8 +30,8 @@ const SKELETON: Record<string, string> = {
   'knowledge/pages/.gitkeep': '',
 };
 
-export const HOOK_MARK = '# devflow-hook';
-const IGNORE_LINE = `${DF}/runtime/`;
+export const HOOK_MARK = '# tenon-hook';
+export const OLD_HOOK_MARK = '# devflow-hook';
 // 开发时运行 src/*.ts，安装后运行 dist/*.js：hook 指向与当前文件同扩展名的 cli
 export const CLI = fileURLToPath(new URL(import.meta.url.endsWith('.ts') ? './cli.ts' : './cli.js', import.meta.url));
 const shq = (s: string): string => `'${s.replaceAll("'", `'\\''`)}'`;
@@ -53,7 +53,8 @@ function installHook(repo: string, line: string): { hook: HookState; hookPath: s
   const hookPath = hookFile(repo);
   let hook: HookState = 'installed';
   if (existsSync(hookPath)) {
-    if (!readFileSync(hookPath, 'utf8').includes(HOOK_MARK)) return { hook: 'foreign', hookPath };
+    // 改名前装的钩子带旧标记：同样视为自己装的，原地更新
+    if (![HOOK_MARK, OLD_HOOK_MARK].some((m) => readFileSync(hookPath, 'utf8').includes(m))) return { hook: 'foreign', hookPath };
     hook = 'updated';
   }
   mkdirSync(dirname(hookPath), { recursive: true });
@@ -65,19 +66,20 @@ function installHook(repo: string, line: string): { hook: HookState; hookPath: s
 export function init(root: string): InitResult {
   const created: string[] = [];
   for (const [rel, content] of Object.entries(SKELETON)) {
-    const f = join(root, DF, rel);
+    const f = join(root, dfOf(root), rel);
     if (existsSync(f)) continue;
     mkdirSync(dirname(f), { recursive: true });
     writeFileSync(f, content);
-    created.push(`${DF}/${rel}`);
+    created.push(`${dfOf(root)}/${rel}`);
   }
-  mkdirSync(join(root, DF, 'runtime'), { recursive: true });
+  mkdirSync(join(root, dfOf(root), 'runtime'), { recursive: true });
 
+  const ignoreLine = `${dfOf(root)}/runtime/`;
   const gi = join(root, '.gitignore');
   const giText = existsSync(gi) ? readFileSync(gi, 'utf8') : '';
-  if (!giText.split('\n').some((l) => l.trim() === IGNORE_LINE)) {
-    appendFileSync(gi, `${giText && !giText.endsWith('\n') ? '\n' : ''}${IGNORE_LINE}\n`);
-    created.push('.gitignore（追加 .devflow/runtime/）');
+  if (!giText.split('\n').some((l) => l.trim() === ignoreLine)) {
+    appendFileSync(gi, `${giText && !giText.endsWith('\n') ? '\n' : ''}${ignoreLine}\n`);
+    created.push(`.gitignore（追加 ${ignoreLine}）`);
   }
 
   const base = `${shq(process.execPath)} ${shq(CLI)} check --staged`;
@@ -116,7 +118,7 @@ tasks: []
 export function newChange(root: string, id: string | undefined, schema = 2): string[] {
   requireInit(root);
   if (!id || !CHANGE_ID.test(id) || id === 'archive') {
-    throw new DevflowError(`变更 ID 无效：${id ?? '（缺失）'}`, '用小写字母、数字和连字符，例如 devflow new 2026-11-06-role-access');
+    throw new DevflowError(`变更 ID 无效：${id ?? '（缺失）'}`, '用小写字母、数字和连字符，例如 tenon new 2026-11-06-role-access');
   }
   if (![1, 2].includes(schema)) throw new DevflowError('schema 必须为 1 或 2');
   const dir = changeDir(root, id);
@@ -125,5 +127,5 @@ export function newChange(root: string, id: string | undefined, schema = 2): str
     mkdirSync(dirname(join(dir, rel)), { recursive: true });
     writeFileSync(join(dir, rel), schema === 2 && ['change.yaml', 'tasks.yaml'].includes(rel) ? content.replace('schema_version: 1', `schema_version: 2${rel === 'change.yaml' ? '\nmin_cli_version: 0.2.0' : ''}`) : content);
   }
-  return Object.keys(CHANGE_FILES).map((f) => `${DF}/changes/${id}/${f}`);
+  return Object.keys(CHANGE_FILES).map((f) => `${dfOf(root)}/changes/${id}/${f}`);
 }

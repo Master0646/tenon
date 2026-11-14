@@ -17,9 +17,9 @@ const TOKEN = 'tok-wb';
 function repo(): string {
   const dir = makeRepo();
   writeChange(dir, ID);
-  const base = `.devflow/changes/${ID}`;
+  const base = `.tenon/changes/${ID}`;
   // 验证命令看 fail.flag：有这个文件就失败，用来造出待修复
-  write(dir, '.devflow/project.yaml', 'schema_version: 1\nverify:\n  - name: unit\n    run: test ! -f fail.flag\nexclude: []\nenforce: warn\n');
+  write(dir, '.tenon/project.yaml', 'schema_version: 1\nverify:\n  - name: unit\n    run: test ! -f fail.flag\nexclude: []\nenforce: warn\n');
   write(dir, `${base}/change.yaml`, 'schema_version: 2\nmin_cli_version: 0.2.0\ntitle: 节点\naffected_paths: [backend/**]\nsummary: [要点]\ndecisions: []\n');
   write(dir, `${base}/tasks.yaml`, 'schema_version: 2\ntasks:\n  - id: T1\n    title: 甲\n    acceptance:\n      - id: AC1\n        text: 看过甲\n        method: manual\n  - id: T2\n    title: 乙\n    acceptance:\n      - id: AC2\n        text: 看过乙\n        method: manual\n');
   commit(dir, 'change', true);
@@ -32,7 +32,7 @@ const manual = (dir: string, task: string, acceptance: string) =>
 
 test('AC1 九个工作节点：写方案中、待你批准、待开工、实现中、补证据中、待你确认、修复中、待重新验证、归档准备中、待你归档', () => {
   const dir = repo();
-  const base = `.devflow/changes/${ID}`;
+  const base = `.tenon/changes/${ID}`;
   write(dir, `${base}/tasks.yaml`, 'schema_version: 2\ntasks: oops\n');
   assert.deepEqual(node(dir), { label: '写方案中', human: false });
   write(dir, `${base}/tasks.yaml`, 'schema_version: 2\ntasks:\n  - id: T1\n    title: 甲\n    acceptance:\n      - id: AC1\n        text: 看过甲\n        method: manual\n  - id: T2\n    title: 乙\n    acceptance:\n      - id: AC2\n        text: 看过乙\n        method: manual\n');
@@ -64,7 +64,7 @@ test('AC1 九个工作节点：写方案中、待你批准、待开工、实现�
   const st = deriveStatus(dir, ID);
   assert.deepEqual(node(dir, { ...st, status: 'applying', stage: 'code-changed' }), { label: '待重新验证', human: false });
   // 知识页检查有错误：归档会被拦，先由 Agent 更新知识页
-  write(dir, '.devflow/knowledge/pages/bad.md', '没有 frontmatter\n');
+  write(dir, '.tenon/knowledge/pages/bad.md', '没有 frontmatter\n');
   assert.deepEqual(node(dir, st), { label: '归档准备中', human: false });
 });
 
@@ -81,7 +81,7 @@ async function start(dir: string) {
 function withArchive(): string {
   const dir = repo();
   for (const old of ['2026-01-02-older', '2026-03-04-newer']) {
-    const base = `.devflow/changes/archive/${old}`;
+    const base = `.tenon/changes/archive/${old}`;
     write(dir, `${base}/change.yaml`, `schema_version: 2\nmin_cli_version: 0.2.0\ntitle: 旧变更 ${old}\naffected_paths: [backend/**]\nsummary: [旧要点 ${old}]\ndecisions:\n  - question: 用哪种？\n    options: [甲, 乙]\n    recommend: 甲\n`);
     write(dir, `${base}/proposal.md`, '# 提案\n\n- 旧提案 <b>原文</b>\n');
     write(dir, `${base}/design.md`, '# 设计\n\n## 一节\n\n旧设计。\n');
@@ -146,12 +146,12 @@ test('AC3 不再定时整页刷新；state 的 v 在追加事件、改被审文�
     assert.deepEqual(await state(`/c/${ID}/state`), c0);
 
     // 等待标记出现：v 不变，waiting 变真
-    write(dir, `.devflow/runtime/waiting/${ID}.json`, JSON.stringify({ pid: process.pid }));
+    write(dir, `.tenon/runtime/waiting/${ID}.json`, JSON.stringify({ pid: process.pid }));
     const c1 = await state(`/c/${ID}/state`);
     assert.equal(c1.v, c0.v);
     assert.equal(c1.waiting, true);
 
-    write(dir, `.devflow/changes/${ID}/proposal.md`, '# 提案\n\n改了一句。\n');
+    write(dir, `.tenon/changes/${ID}/proposal.md`, '# 提案\n\n改了一句。\n');
     const c2 = await state(`/c/${ID}/state`);
     assert.notEqual(c2.v, c0.v);
     assert.equal(c2.v, (await state(`/c/${ID}/state`)).v);

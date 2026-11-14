@@ -32,15 +32,15 @@ export function writeReport(dir: string): Summary & { avgTurns: number; avgCost:
     return `| ${s.id} | ${q.q} | ${cell} | ${s.cited.length} | ${s.unresolved.join(', ') || '—'} | ${turns[i]} | $${costs[i].toFixed(3)} |`;
   });
   const lintErrors = meta.lint?.issues?.filter((x: any) => x.level === 'error').length ?? 0;
-  const devflowLines = [
-    `- 禁止规则探针：\`devflow approve\` ${meta.probe?.denied ? '被拦截' : '**未被拦截**'}`,
+  const tenonLines = [
+    `- 禁止规则探针：\`tenon approve\` ${meta.probe?.denied ? '被拦截' : '**未被拦截**'}`,
     `- scan：${meta.pages?.length ?? '?'} 个知识页，wiki lint ${meta.lint?.ok ? '通过' : `**有 ${lintErrors} 个错误**`}，${meta.scan?.num_turns ?? '?'} 轮，$${meta.scan?.total_cost_usd?.toFixed(2) ?? '?'}`,
   ];
   writeFileSync(join(dir, 'report.md'), `# 评测结果 ${basename(dir)}
 
-- 组别：${meta.control ? '**对照组**：未安装 DevFlow，引用要求放在系统提示中' : 'DevFlow 组：init + scan 后作答'}
+- 组别：${meta.control ? '**对照组**：未安装 Tenon，引用要求放在系统提示中' : 'Tenon 组：init + scan 后作答'}
 - 模型：${meta.model ?? 'claude 默认'}；只加载项目级设置（--setting-sources project,local）
-${meta.control ? '' : devflowLines.join('\n') + '\n'}- 总花费：${meta.cost !== undefined ? `$${meta.cost.toFixed(2)}` : '见 answers.json'}
+${meta.control ? '' : tenonLines.join('\n') + '\n'}- 总花费：${meta.cost !== undefined ? `$${meta.cost.toFixed(2)}` : '见 answers.json'}
 
 | 指标 | 值 |
 | --- | --- |

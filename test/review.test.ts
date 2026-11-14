@@ -19,8 +19,8 @@ const TOKEN = 'secret-token';
 function v2Repo(): string {
   const dir = makeRepo();
   writeChange(dir, ID);
-  const base = `.devflow/changes/${ID}`;
-  write(dir, '.devflow/project.yaml', 'schema_version: 1\nverify:\n  - name: unit\n    run: echo ok\nexclude: []\nenforce: warn\n');
+  const base = `.tenon/changes/${ID}`;
+  write(dir, '.tenon/project.yaml', 'schema_version: 1\nverify:\n  - name: unit\n    run: echo ok\nexclude: []\nenforce: warn\n');
   write(dir, `${base}/change.yaml`, 'schema_version: 2\nmin_cli_version: 0.2.0\ntitle: 新格式\naffected_paths: [backend/**]\nsummary: [要点]\ndecisions:\n  - question: 返回什么？\n    options: [返回 403, 返回空列表]\n    recommend: 返回 403\n');
   write(dir, `${base}/tasks.yaml`, 'schema_version: 2\ntasks:\n  - id: T1\n    title: 人工验收\n    acceptance:\n      - id: AC1\n        text: 已检查管理员页面\n        method: manual\n      - id: AC2\n        text: 已检查普通用户页面\n        method: manual\n');
   commit(dir, 'change', true);
@@ -62,7 +62,7 @@ test('审查台批准：页面哈希过期被拒；未选项按序号校验；�
   const { server, post } = await start(dir);
   try {
     const stale = buildDraft(dir, ID).hash;
-    append(dir, `.devflow/changes/${ID}/proposal.md`, '打开页面后又改了。\n');
+    append(dir, `.tenon/changes/${ID}/proposal.md`, '打开页面后又改了。\n');
     const rejected = await post('approve', { hash: stale, answers: [0] });
     assert.equal(rejected.status, 400);
     assert.match(rejected.json.error, /页面已过期/);
@@ -108,12 +108,12 @@ test('审查台：批量确认人工证据后任务可完成，再一键归档',
     const ready = await (await fetch(`${origin}/${TOKEN}/c/${ID}`)).text();
     assert.match(ready, /data-df="archive"/);
     assert.doesNotMatch(ready, /confirm\('/); // 不依赖浏览器原生确认框
-    assert.match((await post('archive', {})).json.message, /已归档到 \.devflow\/changes\/archive\//);
-    assert.ok(!existsSync(join(dir, `.devflow/changes/${ID}`)));
+    assert.match((await post('archive', {})).json.message, /已归档到 \.tenon\/changes\/archive\//);
+    assert.ok(!existsSync(join(dir, `.tenon/changes/${ID}`)));
   } finally { server.close(); }
 });
 
-test('devflow wait：没有人工操作时超时退出码 1；批准后退出码 0 并给出下一步', async () => {
+test('tenon wait：没有人工操作时超时退出码 1；批准后退出码 0 并给出下一步', async () => {
   const { spawn } = await import('node:child_process');
   const { setTimeout: sleep } = await import('node:timers/promises');
   const { approve } = await import('../src/status.ts');
@@ -129,5 +129,5 @@ test('devflow wait：没有人工操作时超时退出码 1；批准后退出码
   await sleep(1500);
   approve(dir, ID);
   assert.equal(await new Promise((done) => child.on('exit', done)), 0);
-  assert.match(out, /approved[\s\S]*devflow resume/);
+  assert.match(out, /approved[\s\S]*tenon resume/);
 });

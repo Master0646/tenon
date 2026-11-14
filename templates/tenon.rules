@@ -1,0 +1,15 @@
+# 由 tenon 生成；tenon update 会覆盖本文件。
+# approve / archive / review 只能由人在自己的终端中运行。
+prefix_rule(
+    pattern = ["tenon", ["approve", "archive", "review"]],
+    decision = "forbidden",
+    justification = "tenon approve / archive / review 只能由人在自己的终端中运行",
+    match = ["tenon approve demo", "tenon archive demo", "tenon review"],
+    not_match = ["tenon status", "tenon wiki lint"],
+)
+
+prefix_rule(
+    pattern = ["tenon", "evidence", "confirm"],
+    decision = "forbidden",
+    justification = "人工证据只能由人在自己的终端确认",
+)

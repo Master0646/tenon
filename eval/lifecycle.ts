@@ -16,12 +16,12 @@ const PROPOSAL = fileURLToPath(new URL('./results/2026-11-06-04-35-propose/2026-
 const ID = '2026-11-06-admin-only-disable';
 const OUT = fileURLToPath(new URL(`./results/${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')}-lifecycle/`, import.meta.url));
 
-const tmp = mkdtempSync(join(tmpdir(), 'devflow-lifecycle-'));
+const tmp = mkdtempSync(join(tmpdir(), 'tenon-lifecycle-'));
 const proj = join(tmp, 'user-admin');
 cpSync(DEMO, proj, { recursive: true });
 mkdirSync(join(tmp, 'bin'));
-writeFileSync(join(tmp, 'bin/devflow'), `#!/bin/sh\nexec '${process.execPath}' '${CLI}' "$@"\n`);
-chmodSync(join(tmp, 'bin/devflow'), 0o755);
+writeFileSync(join(tmp, 'bin/tenon'), `#!/bin/sh\nexec '${process.execPath}' '${CLI}' "$@"\n`);
+chmodSync(join(tmp, 'bin/tenon'), 0o755);
 const env = { ...process.env, PATH: `${join(tmp, 'bin')}:${process.env.PATH}` };
 const sh = (cmd: string, ...a: string[]) => execFileSync(cmd, a, { cwd: proj, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
 const df = (...a: string[]) => spawnSync(process.execPath, [CLI, ...a], { cwd: proj, env, encoding: 'utf8' });
@@ -51,28 +51,28 @@ function claude(step: string, prompt: string, tools: string[], minutes: number) 
   return res;
 }
 const READ = ['Read', 'Grep', 'Glob', 'Skill', 'Bash(rg *)', 'Bash(ls *)', 'Bash(git status *)', 'Bash(git diff *)', 'Bash(git log *)', 'Bash(git rev-parse *)', 'Bash(date *)'];
-const WRITE = [...READ, 'Edit', 'Write', 'Bash(devflow *)'];
+const WRITE = [...READ, 'Edit', 'Write', 'Bash(tenon *)'];
 
-// 0. 项目准备：git、devflow init、验证命令
+// 0. 项目准备：git、tenon init、验证命令
 sh('git', 'init', '-q');
-sh('git', 'config', 'user.name', 'devflow-eval');
+sh('git', 'config', 'user.name', 'tenon-eval');
 sh('git', 'config', 'user.email', 'eval@example.invalid');
 sh('git', 'add', '-A');
 sh('git', 'commit', '-qm', 'demo', '--no-verify');
-sh('devflow', 'init', '--agents', 'claude');
-const pf = join(proj, '.devflow/project.yaml');
+sh('tenon', 'init', '--agents', 'claude');
+const pf = join(proj, '.tenon/project.yaml');
 writeFileSync(pf, readFileSync(pf, 'utf8').replace(/^verify: \[\]$/m, 'verify:\n  - name: backend-test\n    run: mvn -q -B test\n    cwd: backend'));
 sh('git', 'add', '-A');
-sh('git', 'commit', '-qm', 'devflow init');
+sh('git', 'commit', '-qm', 'tenon init');
 console.log(`临时项目：${proj}`);
 
 // 1. scan
-claude('scan', '使用 devflow-scan 技能，为本项目生成知识页。完成后运行 devflow wiki lint，确保没有错误。', WRITE, 20);
+claude('scan', '使用 tenon-scan 技能，为本项目生成知识页。完成后运行 tenon wiki lint，确保没有错误。', WRITE, 20);
 sh('git', 'add', '-A');
 sh('git', 'commit', '-qm', 'knowledge');
 
 // 2. 方案：采用 M2 中 Agent 写的方案，按人的审查意见修改后批准
-cpSync(PROPOSAL, join(proj, '.devflow/changes', ID), { recursive: true });
+cpSync(PROPOSAL, join(proj, '.tenon/changes', ID), { recursive: true });
 // 保留原始验收标准；依赖或运行环境不足必须记为 unknown，不替换成静态条件。
 log.review = ['冻结原始验收；错误配置需在方案审查中发现，不能由运行器悄悄修正'];
 log.acceptancePolicy = 'original-contract-or-unknown';
@@ -84,7 +84,7 @@ sh('git', 'commit', '-qm', `proposal ${ID}`);
 console.log(`[approve] 状态：${status().status}`);
 
 // 3. 实现与验证
-claude('apply', `使用 devflow-apply 技能实现变更 ${ID}，直到 devflow verify 通过。`, [...WRITE, 'Bash(mvn *)'], 45);
+claude('apply', `使用 tenon-apply 技能实现变更 ${ID}，直到 tenon verify 通过。`, [...WRITE, 'Bash(mvn *)'], 45);
 log.afterApply = status();
 console.log(`[apply] 状态：${log.afterApply && (log.afterApply as any).status}`);
 
@@ -92,7 +92,7 @@ console.log(`[apply] 状态：${log.afterApply && (log.afterApply as any).status
 if ((log.afterApply as any)?.status === 'ready_to_archive') {
   sh('git', 'add', '-A');
   sh('git', 'commit', '-qm', `implement ${ID}`);
-  claude('archive-prep', `使用 devflow-archive 技能为变更 ${ID} 做归档准备。代码已由我提交。`, WRITE, 20);
+  claude('archive-prep', `使用 tenon-archive 技能为变更 ${ID} 做归档准备。代码已由我提交。`, WRITE, 20);
   log.wikiLint = JSON.parse(df('wiki', 'lint', '--json').stdout || '{}');
   log.archive = asHuman('archive', ID);
   log.check = JSON.parse(df('check', '--json').stdout || '{}');
@@ -103,11 +103,11 @@ if ((log.afterApply as any)?.status === 'ready_to_archive') {
   claude('recall', '禁用用户为什么要求操作者是 ADMIN？是哪次变更引入的、实现在哪里？给出处。', READ, 10);
 }
 
-const archived = join(proj, '.devflow/changes/archive', ID);
+const archived = join(proj, '.tenon/changes/archive', ID);
 const summary = {
   cost,
   finalStatus: existsSync(archived) ? 'archived' : status()?.status,
-  specCreated: existsSync(join(proj, '.devflow/specs/user-management/spec.md')),
+  specCreated: existsSync(join(proj, '.tenon/specs/user-management/spec.md')),
   checkOk: (log.check as any)?.ok,
   wikiLintOk: (log.wikiLint as any)?.ok,
   testsAdded: sh('git', 'log', '--name-only', '--format=', '--', 'backend/src/test').split('\n').filter(Boolean).length,
@@ -115,6 +115,6 @@ const summary = {
 mkdirSync(OUT, { recursive: true });
 writeFileSync(join(OUT, 'log.json'), JSON.stringify({ summary, ...log }, null, 2));
 writeFileSync(join(OUT, 'git-log.txt'), sh('git', 'log', '--stat', '--format=== %s'));
-if (existsSync(join(proj, '.devflow'))) cpSync(join(proj, '.devflow'), join(OUT, 'devflow'), { recursive: true, filter: (s) => !s.includes('/runtime') });
+if (existsSync(join(proj, '.tenon'))) cpSync(join(proj, '.tenon'), join(OUT, 'tenon'), { recursive: true, filter: (s) => !s.includes('/runtime') });
 console.log(JSON.stringify(summary, null, 2));
 console.log(`结果：${OUT}\n临时项目：${proj}`);

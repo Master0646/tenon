@@ -14,7 +14,7 @@ const status = (dir: string, id = ID) => deriveStatus(dir, id).status;
 
 /** 把 verify 命令写进 project.yaml（须在批准前：project.yaml 计入批准哈希） */
 function setVerify(dir: string, cmds: { name: string; run: string }[]) {
-  const f = join(dir, '.devflow/project.yaml');
+  const f = join(dir, '.tenon/project.yaml');
   const body = cmds.map((c) => `  - name: ${c.name}\n    run: ${JSON.stringify(c.run)}`).join('\n');
   writeFileSync(f, readFileSync(f, 'utf8').replace(/^verify: \[\]$/m, `verify:\n${body}`));
 }
@@ -98,7 +98,7 @@ test('verify：命令无法运行、没有声明命令、验证中改动工作�
 test('verify：批准后改 project.yaml（例如改弱验证命令）会使批准失效，verify 被拒', () => {
   const dir = makeRepo();
   ready(dir, [{ name: 'test', run: 'exit 1' }]);
-  const f = join(dir, '.devflow/project.yaml');
+  const f = join(dir, '.tenon/project.yaml');
   writeFileSync(f, readFileSync(f, 'utf8').replace('exit 1', 'true'));
   assert.equal(status(dir), 'draft');
   assert.throws(() => verify(dir, ID), /draft，不能验证/);
@@ -120,11 +120,11 @@ test('archive：合并新能力规范、更新 specs.lock、移动到 archive，
   const dir = makeRepo();
   readyToArchive(dir);
   const r = archive(dir, ID);
-  assert.equal(r.target, archiveTarget(ID));
-  assert.deepEqual(r.specs, ['.devflow/specs/auth/spec.md']);
-  const spec = readFileSync(join(dir, '.devflow/specs/auth/spec.md'), 'utf8');
+  assert.equal(r.target, archiveTarget(dir, ID));
+  assert.deepEqual(r.specs, ['.tenon/specs/auth/spec.md']);
+  const spec = readFileSync(join(dir, '.tenon/specs/auth/spec.md'), 'utf8');
   assert.match(spec, /^# auth\n[\s\S]*### Requirement: 用户列表需要 ADMIN/);
-  assert.equal(existsSync(join(dir, '.devflow/changes', ID)), false);
+  assert.equal(existsSync(join(dir, '.tenon/changes', ID)), false);
   const archived = join(dir, r.target);
   assert.ok(existsSync(join(archived, 'proposal.md')));
   assert.match(readFileSync(join(archived, 'events.jsonl'), 'utf8'), /"type":"archived","at":"[^"]+","actor":"tester"/);
@@ -136,11 +136,11 @@ test('归档前写好的设计原因链接：lint 认为有效，归档后链接
   const dir = makeRepo();
   readyToArchive(dir);
   const head = g(dir, 'rev-parse', '--short', 'HEAD').trim();
-  const link = `../../changes/archive/${archiveTarget(ID).split('/').pop()}/proposal.md`;
-  write(dir, '.devflow/knowledge/pages/auth.md', `---\nschema_version: 1\ntitle: 认证\nverified_commit: "${head}"\nsources:\n  - path: docs/readme.md\n---\n# 认证\n\n见 [原因](${link})，以及 [错的](../../changes/archive/nope/design.md)\n`);
-  write(dir, '.devflow/knowledge/index.md', '- [认证](pages/auth.md)\n');
+  const link = `../../changes/archive/${archiveTarget(dir, ID).split('/').pop()}/proposal.md`;
+  write(dir, '.tenon/knowledge/pages/auth.md', `---\nschema_version: 1\ntitle: 认证\nverified_commit: "${head}"\nsources:\n  - path: docs/readme.md\n---\n# 认证\n\n见 [原因](${link})，以及 [错的](../../changes/archive/nope/design.md)\n`);
+  write(dir, '.tenon/knowledge/index.md', '- [认证](pages/auth.md)\n');
   assert.deepEqual(lintWiki(dir).issues.map((i) => i.message), ['链接 ../../changes/archive/nope/design.md 指向的文件不存在']);
-  write(dir, '.devflow/knowledge/pages/auth.md', readFileSync(join(dir, '.devflow/knowledge/pages/auth.md'), 'utf8').replace('，以及 [错的](../../changes/archive/nope/design.md)', ''));
+  write(dir, '.tenon/knowledge/pages/auth.md', readFileSync(join(dir, '.tenon/knowledge/pages/auth.md'), 'utf8').replace('，以及 [错的](../../changes/archive/nope/design.md)', ''));
   archive(dir, ID);
   assert.deepEqual(lintWiki(dir).issues, []);
 });
@@ -152,7 +152,7 @@ test('archive：未验证、验证失败、知识页有错误时拒绝', () => {
   taskDone(dir, ID, 'T1');
   taskDone(dir, ID, 'T2');
   verify(dir, ID);
-  write(dir, '.devflow/knowledge/pages/x.md', '没有 frontmatter\n');
+  write(dir, '.tenon/knowledge/pages/x.md', '没有 frontmatter\n');
   assert.throws(() => archive(dir, ID), /知识页有 \d+ 个错误/);
   assert.equal(pendingTx(dir, ID), false);
 });
@@ -162,7 +162,7 @@ test('archive：两个变更改同一能力，后归档者因 spec_base 不一�
   readyToArchive(dir);
   // 第二个变更在第一个归档前批准，基线是"auth 规范不存在"
   writeChange(dir, 'other');
-  write(dir, '.devflow/changes/other/specs/auth/spec.md', DELTA_ADD.replace('用户列表需要 ADMIN', '详情需要 ADMIN'));
+  write(dir, '.tenon/changes/other/specs/auth/spec.md', DELTA_ADD.replace('用户列表需要 ADMIN', '详情需要 ADMIN'));
   approve(dir, 'other');
   applyStart(dir, 'other');
   taskDone(dir, 'other', 'T1');
@@ -186,14 +186,14 @@ test('archive 中断后重跑：从事务日志前滚，不重复写事件，结
     if (crashAt !== 'staged') move(tx.writes[0]);
     if (crashAt === 'eventWritten') {
       for (const w of tx.writes.slice(1)) move(w);
-      writeFileSync(join(dir, '.devflow/changes', ID, 'events.jsonl'),
-        readFileSync(join(dir, '.devflow/changes', ID, 'events.jsonl'), 'utf8') + JSON.stringify({ type: 'archived', at: 'x', actor: 'tester' }) + '\n');
+      writeFileSync(join(dir, '.tenon/changes', ID, 'events.jsonl'),
+        readFileSync(join(dir, '.tenon/changes', ID, 'events.jsonl'), 'utf8') + JSON.stringify({ type: 'archived', at: 'x', actor: 'tester' }) + '\n');
     }
     assert.equal(pendingTx(dir, ID), true, crashAt);
-    const r = archive(dir, ID); // 等同于再次运行 devflow archive
+    const r = archive(dir, ID); // 等同于再次运行 tenon archive
     const events = readFileSync(join(dir, r.target, 'events.jsonl'), 'utf8');
     assert.equal(events.match(/"type":"archived"/g)?.length, 1, crashAt);
-    assert.ok(existsSync(join(dir, '.devflow/specs/auth/spec.md')), crashAt);
+    assert.ok(existsSync(join(dir, '.tenon/specs/auth/spec.md')), crashAt);
     assert.deepEqual(check(dir, { staged: false }).filter((i) => i.level === 'error'), [], crashAt);
   }
 });
@@ -202,10 +202,10 @@ test('commitArchive 可重复执行：事务完成后再调用不会出错也不
   const dir = makeRepo();
   readyToArchive(dir);
   stageArchive(dir, ID);
-  const tx = JSON.parse(readFileSync(join(dir, `.devflow/runtime/tx/${ID}/tx.json`), 'utf8'));
+  const tx = JSON.parse(readFileSync(join(dir, `.tenon/runtime/tx/${ID}/tx.json`), 'utf8'));
   commitArchive(dir, ID);
   // 模拟"删除事务目录之前"崩溃：恢复 tx.json 再跑一次
-  write(dir, `.devflow/runtime/tx/${ID}/tx.json`, JSON.stringify(tx));
+  write(dir, `.tenon/runtime/tx/${ID}/tx.json`, JSON.stringify(tx));
   commitArchive(dir, ID);
   assert.equal(readFileSync(join(dir, tx.move.to, 'events.jsonl'), 'utf8').match(/"type":"archived"/g)?.length, 1);
 });
@@ -226,8 +226,8 @@ test('v2 CLI: verify → evidence → completion, resume selects gaps; code edit
   const { cli } = await import('./fixture.ts');
   const dir = makeRepo();
   writeChange(dir, ID);
-  write(dir, `.devflow/changes/${ID}/change.yaml`, 'schema_version: 2\nmin_cli_version: 0.2.0\ntitle: Evidence\naffected_paths: [backend/**]\n');
-  write(dir, `.devflow/changes/${ID}/tasks.yaml`, 'schema_version: 2\ntasks:\n  - id: T1\n    title: Access\n    acceptance:\n      - id: AC1\n        text: Reject ordinary user\n        method: automated\n        check: tests\n');
+  write(dir, `.tenon/changes/${ID}/change.yaml`, 'schema_version: 2\nmin_cli_version: 0.2.0\ntitle: Evidence\naffected_paths: [backend/**]\n');
+  write(dir, `.tenon/changes/${ID}/tasks.yaml`, 'schema_version: 2\ntasks:\n  - id: T1\n    title: Access\n    acceptance:\n      - id: AC1\n        text: Reject ordinary user\n        method: automated\n        check: tests\n');
   write(dir, 'backend/access.test.ts', 'assert.equal(status, 403);\n');
   setVerify(dir, [{ name: 'tests', run: 'true' }]);
   approve(dir, ID);
@@ -275,7 +275,7 @@ test('code_roots：代码哈希只算声明的仓库；兄弟仓库改动使验�
   g(code, 'init', '-q');
   write(code, 'src/app.js', 'v1\n');
   const rel = `../${code.split('/').pop()}`;
-  write(dir, '.devflow/project.yaml', `schema_version: 1\nverify: []\ncode_roots: ["${rel}"]\nenforce: warn\n`);
+  write(dir, '.tenon/project.yaml', `schema_version: 1\nverify: []\ncode_roots: ["${rel}"]\nenforce: warn\n`);
   assert.deepEqual(validateProject(dir), []);
 
   const before = worktreeHash(dir);
@@ -285,7 +285,7 @@ test('code_roots：代码哈希只算声明的仓库；兄弟仓库改动使验�
   write(code, 'src/app.js', 'v2\n');
   assert.notEqual(worktreeHash(dir), before);
 
-  write(dir, '.devflow/project.yaml', 'schema_version: 1\nverify: []\ncode_roots: ["../no-such-repo", "backend"]\nenforce: warn\n');
+  write(dir, '.tenon/project.yaml', 'schema_version: 1\nverify: []\ncode_roots: ["../no-such-repo", "backend"]\nenforce: warn\n');
   const messages = validateProject(dir).map((i) => i.message).join('|');
   assert.match(messages, /no-such-repo 不是 Git 仓库的根目录/);
   assert.match(messages, /backend 不是 Git 仓库的根目录/); // 仓库的子目录不算
@@ -295,7 +295,7 @@ test('code_roots：代码哈希只算声明的仓库；兄弟仓库改动使验�
 test('verify：检查成功但没有输出时标记 quiet，CLI 给出提醒', () => {
   const dir = makeRepo();
   writeChange(dir, ID);
-  write(dir, '.devflow/project.yaml', 'schema_version: 1\nverify:\n  - name: silent\n    run: "true"\n  - name: loud\n    run: echo 3 tests passed\nenforce: warn\n');
+  write(dir, '.tenon/project.yaml', 'schema_version: 1\nverify:\n  - name: silent\n    run: "true"\n  - name: loud\n    run: echo 3 tests passed\nenforce: warn\n');
   approve(dir, ID);
   applyStart(dir, ID);
   const r = cli(dir, 'verify', ID);

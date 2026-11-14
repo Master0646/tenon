@@ -1,16 +1,16 @@
-// 审查批注：人在审查台选中文字写意见，Agent 运行中的 devflow wait 读到后退出并打印。
+// 审查批注：人在审查台选中文字写意见，Agent 运行中的 tenon wait 读到后退出并打印。
 // 批注是给 Agent 的数据，不是批准材料：存在 runtime/ 下，不进批准哈希、不写事件日志。
 import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { DF, DevflowError } from './core.ts';
+import { dfOf, DevflowError } from './core.ts';
 
 export interface FeedbackItem { panel: string; quote: string; note: string }
 export interface Feedback { at: string; hash: string; items: FeedbackItem[] }
 
 const LIMITS = { quote: 400, note: 2000, panel: 200, items: 50 };
-const dir = (root: string, id: string) => join(root, DF, 'runtime', 'feedback', id);
-const waitFile = (root: string, id: string) => join(root, DF, 'runtime', 'waiting', `${id}.json`);
+const dir = (root: string, id: string) => join(root, dfOf(root), 'runtime', 'feedback', id);
+const waitFile = (root: string, id: string) => join(root, dfOf(root), 'runtime', 'waiting', `${id}.json`);
 
 function str(v: unknown, label: string, limit: number, empty = false): string {
   if (typeof v !== 'string' || (!empty && !v.trim()) || Buffer.byteLength(v) > limit) {

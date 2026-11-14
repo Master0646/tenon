@@ -9,7 +9,15 @@ import { tmpdir } from 'node:os';
 import { parse } from 'yaml';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 
-export const DF = '.devflow';
+// 数据目录：新项目用 .tenon/，改名前初始化的项目沿用 .devflow/。两个都在时拒绝，免得写进错的那个
+export const DF_NEW = '.tenon';
+export const DF_OLD = '.devflow';
+export function dfOf(root: string): string {
+  const fresh = existsSync(join(root, DF_NEW));
+  const old = existsSync(join(root, DF_OLD));
+  if (fresh && old) throw new DevflowError('项目里同时有 .tenon/ 和 .devflow/，无法确定用哪个', '保留一个：旧项目删掉空的 .tenon/，或把 .devflow/ 改名为 .tenon/（不要两个都留）');
+  return old ? DF_OLD : DF_NEW;
+}
 
 export class DevflowError extends Error {
   hint?: string;
@@ -49,8 +57,8 @@ export function headCommit(root: string): string {
 }
 
 export function requireInit(root: string): void {
-  if (!existsSync(join(root, DF, 'project.yaml'))) {
-    throw new DevflowError('项目尚未初始化 DevFlow', '运行 devflow init');
+  if (!existsSync(join(root, dfOf(root), 'project.yaml'))) {
+    throw new DevflowError('项目尚未初始化 Tenon', '运行 tenon init');
   }
 }
 
@@ -89,24 +97,24 @@ export function hashFiles(root: string, files: string[]): string {
 
 export const CHANGE_ID = /^[a-z0-9][a-z0-9-]*$/;
 
-export const changeRel = (id: string): string => `${DF}/changes/${id}`;
-export const changeDir = (root: string, id: string): string => join(root, changeRel(id));
+export const changeRel = (root: string, id: string): string => `${dfOf(root)}/changes/${id}`;
+export const changeDir = (root: string, id: string): string => join(root, changeRel(root, id));
 
 export function requireChange(root: string, id: string | undefined): string {
   if (!id) throw new DevflowError('缺少变更 ID', '用法：devflow <命令> <change-id>');
   if (!CHANGE_ID.test(id) || !existsSync(changeDir(root, id))) {
-    throw new DevflowError(`变更不存在：${id}`, '运行 devflow status 查看现有变更');
+    throw new DevflowError(`变更不存在：${id}`, '运行 tenon status 查看现有变更');
   }
   return id;
 }
 
 /** 变更归档后的目录（相对仓库根）：id 已以日期开头时不再加日期 */
-export const archiveTarget = (id: string, date = new Date()): string =>
-  `${DF}/changes/archive/${/^\d{4}-\d{2}-\d{2}-/.test(id) ? id : `${date.toISOString().slice(0, 10)}-${id}`}`;
+export const archiveTarget = (root: string, id: string, date = new Date()): string =>
+  `${dfOf(root)}/changes/archive/${/^\d{4}-\d{2}-\d{2}-/.test(id) ? id : `${date.toISOString().slice(0, 10)}-${id}`}`;
 
 /** 进行中的变更（不含 archive） */
 export function listChanges(root: string): string[] {
-  const dir = join(root, DF, 'changes');
+  const dir = join(root, dfOf(root), 'changes');
   if (!existsSync(dir)) return [];
   return readdirSync(dir, { withFileTypes: true })
     .filter((d) => d.isDirectory() && d.name !== 'archive')
@@ -117,20 +125,20 @@ export function listChanges(root: string): string[] {
 /** 被审文件：变更目录下除事件日志外的全部文件，加上 project.yaml（防止批准后改弱验证命令） */
 export function reviewedFiles(root: string, id: string): string[] {
   return [
-    ...repoFiles(root, changeRel(id)).filter((f) => f !== 'events.jsonl' && !(changeSchema(root, id) === 2 && f === 'execution.md')).map((f) => `${changeRel(id)}/${f}`),
-    `${DF}/project.yaml`,
+    ...repoFiles(root, changeRel(root, id)).filter((f) => f !== 'events.jsonl' && !(changeSchema(root, id) === 2 && f === 'execution.md')).map((f) => `${changeRel(root, id)}/${f}`),
+    `${dfOf(root)}/project.yaml`,
   ];
 }
 
 /** 变更要修改的能力：specs/<cap>/spec.md */
 export function specCaps(root: string, id: string): string[] {
-  return repoFiles(root, `${changeRel(id)}/specs`)
+  return repoFiles(root, `${changeRel(root, id)}/specs`)
     .filter((f) => /^[^/]+\/spec\.md$/.test(f))
     .map((f) => f.split('/')[0]);
 }
 
 export function currentSpecHash(root: string, cap: string): string | null {
-  const f = join(root, DF, 'specs', cap, 'spec.md');
+  const f = join(root, dfOf(root), 'specs', cap, 'spec.md');
   return existsSync(f) ? sha256(readFileSync(f)) : null;
 }
 
@@ -182,7 +190,7 @@ function eventError(ev: any): string | null {
   }
 }
 
-const EVENT_HINT = '事件日志只能由 devflow 命令追加，不要手改；用 git restore 恢复该文件';
+const EVENT_HINT = '事件日志只能由 tenon 命令追加，不要手改；用 git restore 恢复该文件';
 
 export function parseEvents(text: string, label: string): DevflowEvent[] {
   const out: DevflowEvent[] = [];
@@ -205,7 +213,7 @@ const eventsFile = (root: string, id: string): string => join(changeDir(root, id
 
 export function readEvents(root: string, id: string): DevflowEvent[] {
   const f = eventsFile(root, id);
-  return existsSync(f) ? parseEvents(readFileSync(f, 'utf8'), `${changeRel(id)}/events.jsonl`) : [];
+  return existsSync(f) ? parseEvents(readFileSync(f, 'utf8'), `${changeRel(root, id)}/events.jsonl`) : [];
 }
 
 export function appendEvent(root: string, id: string, ev: DevflowEvent): void {
@@ -226,7 +234,7 @@ export function changedPaths(root: string, base: string, globs: string[]): strin
 /** project.yaml 的 code_roots：代码所在的 Git 仓库（相对本仓库根，可以是兄弟目录）。未声明时为 null */
 export function codeRoots(root: string): string[] | null {
   let p: any;
-  try { p = parse(readFileSync(join(root, DF, 'project.yaml'), 'utf8')); } catch { return null; }
+  try { p = parse(readFileSync(join(root, dfOf(root), 'project.yaml'), 'utf8')); } catch { return null; }
   const list = p?.code_roots;
   return Array.isArray(list) && list.length && list.every((r: unknown) => typeof r === 'string' && r.trim()) ? list : null;
 }
@@ -251,7 +259,7 @@ export function splitPaths(root: string, globs: string[]): Map<string, string[]>
 /** project.yaml 的 stale_hours：已批准或已开工的变更多久没有新记录算停滞。默认 24 */
 export function staleLimit(root: string): number {
   try {
-    const n = parse(readFileSync(join(root, DF, 'project.yaml'), 'utf8'))?.stale_hours;
+    const n = parse(readFileSync(join(root, dfOf(root), 'project.yaml'), 'utf8'))?.stale_hours;
     return typeof n === 'number' && n > 0 ? n : 24;
   } catch { return 24; }
 }
@@ -267,25 +275,25 @@ export function worktreeHash(root: string): string {
   for (const rel of [...roots].sort()) {
     let tree: string;
     try { tree = treeHash(resolve(root, rel)); }
-    catch { throw new DevflowError(`code_roots 中的 ${rel} 不是可用的 Git 仓库`, `检查 ${DF}/project.yaml；路径相对本仓库根目录`); }
+    catch { throw new DevflowError(`code_roots 中的 ${rel} 不是可用的 Git 仓库`, `检查 ${dfOf(root)}/project.yaml；路径相对本仓库根目录`); }
     h.update(rel + '\0' + tree + '\0');
   }
   return 'git-trees:' + h.digest('hex');
 }
 
 /**
- * 一个仓库的工作树内容哈希（排除 .devflow/，遵守 .gitignore）。
+ * 一个仓库的工作树内容哈希（排除数据目录，遵守 .gitignore）。
  * 用临时索引 + write-tree 得到 git 树哈希：不受文件是否暂存、是否已提交影响。
  */
 function treeHash(root: string): string {
-  const tmp = mkdtempSync(join(tmpdir(), 'devflow-idx-'));
+  const tmp = mkdtempSync(join(tmpdir(), 'tenon-idx-'));
   const index = join(tmp, 'index');
   const real = resolve(root, git(root, ['rev-parse', '--git-path', 'index']).trim());
   if (existsSync(real)) copyFileSync(real, index); // 复用 stat 缓存，避免大仓库全量重算
   const env = { ...process.env, GIT_INDEX_FILE: index };
   try {
     git(root, ['add', '-A', '--', '.'], env);
-    git(root, ['rm', '-r', '--cached', '-q', '--ignore-unmatch', '--', DF], env);
+    git(root, ['rm', '-r', '--cached', '-q', '--ignore-unmatch', '--', dfOf(root)], env);
     return git(root, ['write-tree'], env).trim();
   } finally {
     rmSync(dirname(index), { recursive: true, force: true });
@@ -318,7 +326,7 @@ export function approvalCycle(root: string, id: string) {
 }
 
 export function withWorktreeLock<T>(root: string, action: () => T): T {
-  const path = resolve(root, git(root, ['rev-parse', '--git-path', 'devflow.lock']).trim());
+  const path = resolve(root, git(root, ['rev-parse', '--git-path', 'tenon.lock']).trim());
   let fd: number;
   try { fd = openSync(path, 'wx'); }
   catch (e) {

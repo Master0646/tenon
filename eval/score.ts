@@ -25,8 +25,8 @@ export interface Score {
 const FILE_RE = /(?:[\w@.-]+\/)*[\w@-][\w@.-]*\.(?:java|xml|ya?ml|sql|vue|js|ts|json|properties)\b/g;
 // 回答以"未知"开头，或明确说明代码中没有找到 / 没有使用
 const UNKNOWN_RE = /未知|(?:没有|未)(?:找到|发现|使用|引入|实现|配置)|不存在|并未(?:使用|实现)|没有(?:相关|任何)/;
-// 不计入评分的路径：DevFlow 与 Agent 自己的文件
-const IGNORED = /^(?:\.devflow|\.claude|\.agents|\.codex)\//;
+// 不计入评分的路径：Tenon 与 Agent 自己的文件
+const IGNORED = /^(?:\.tenon|\.claude|\.agents|\.codex)\//;
 
 export function loadQuestions(text: string): Question[] {
   const doc = parse(text);

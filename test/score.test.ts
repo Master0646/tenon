@@ -14,10 +14,10 @@ const FILES = [
   'backend/pom.xml',
 ];
 
-test('extractCitations：完整路径、带行号、只写文件名、忽略 DevFlow 自身文件、记录找不到的', () => {
+test('extractCitations：完整路径、带行号、只写文件名、忽略 Tenon 自身文件、记录找不到的', () => {
   const r = extractCitations(
     '见 backend/src/main/java/com/example/admin/user/UserController.java:25，以及 `UserService.java#list`、' +
-    './frontend/src/api/user.js，参考 .devflow/knowledge/pages/user.md 和 CLAUDE.md；另见 RedisConfig.java。' +
+    './frontend/src/api/user.js，参考 .tenon/knowledge/pages/user.md 和 CLAUDE.md；另见 RedisConfig.java。' +
     "路由里写的是 import('../views/UserList.vue')。",
     FILES,
   );

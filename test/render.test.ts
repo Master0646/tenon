@@ -41,7 +41,7 @@ test('buildDraft：任务依赖图、规范分色、被审文件清单', () => {
   assert.match(draft, /````callout ok 新增需求（1）/);
   assert.match(draft, /能力 auth（新能力）/);
   assert.ok(draft.includes(hash));
-  assert.match(draft, /\.devflow\/project\.yaml/);
+  assert.match(draft, /\.tenon\/project\.yaml/);
 });
 
 test('M2 交付：审查页哈希 = 批准哈希；修改后页面哈希变化、状态回到 draft、重新批准恢复', () => {
@@ -55,7 +55,7 @@ test('M2 交付：审查页哈希 = 批准哈希；修改后页面哈希变化�
   assert.equal(approve(dir, ID).hash, r1.hash);
   assert.equal(deriveStatus(dir, ID).status, 'approved');
 
-  append(dir, `.devflow/changes/${ID}/proposal.md`, '审查意见：补充影响范围。\n');
+  append(dir, `.tenon/changes/${ID}/proposal.md`, '审查意见：补充影响范围。\n');
   assert.equal(deriveStatus(dir, ID).status, 'draft');
   const r2 = render(dir, ID);
   assert.notEqual(r2.hash, r1.hash);
@@ -67,14 +67,14 @@ test('M2 交付：审查页哈希 = 批准哈希；修改后页面哈希变化�
 test('render 拒绝校验不通过或含不安全写法的变更；CLI 输出', () => {
   const dir = makeRepo();
   writeChange(dir, ID);
-  write(dir, `.devflow/changes/${ID}/design.md`, '# 设计\n\n```html\n<iframe src=x>\n```\n');
+  write(dir, `.tenon/changes/${ID}/design.md`, '# 设计\n\n```html\n<iframe src=x>\n```\n');
   assert.throws(() => render(dir, ID), (e: any) => /不允许的写法/.test(e.message) && /design\.md:3/.test(e.hint));
-  write(dir, `.devflow/changes/${ID}/design.md`, '# 设计\n');
-  write(dir, `.devflow/changes/${ID}/tasks.yaml`, 'schema_version: 1\ntasks: []\n');
+  write(dir, `.tenon/changes/${ID}/design.md`, '# 设计\n');
+  write(dir, `.tenon/changes/${ID}/tasks.yaml`, 'schema_version: 1\ntasks: []\n');
   assert.throws(() => render(dir, ID), /校验有/);
 
   writeChange(dir, ID);
   const r = cli(dir, 'render', ID, '--json');
   assert.equal(r.status, 0, r.stderr);
-  assert.match(JSON.parse(r.stdout).file, /\.devflow\/runtime\/rendered\/role-access\.html$/);
+  assert.match(JSON.parse(r.stdout).file, /\.tenon\/runtime\/rendered\/role-access\.html$/);
 });

@@ -1,4 +1,4 @@
-// devflow review：本地审查台。由人在终端启动，之后在浏览器里批准、确认人工证据、归档。
+// tenon review：本地审查台。由人在终端启动，之后在浏览器里批准、确认人工证据、归档。
 // 只监听 127.0.0.1；所有地址都带启动时生成的随机令牌，令牌只打印在人的终端里。
 // 与 requireHuman 一样，这不是防篡改，只防 Agent 越级。
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
@@ -8,7 +8,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse } from 'yaml';
-import { CHANGE_ID, DF, DevflowError, hashFiles, listChanges, readEvents, requireChange, requireInit, reviewedFiles, withWorktreeLock, type EvidenceRecord } from './core.ts';
+import { dfOf, CHANGE_ID, DevflowError, hashFiles, listChanges, readEvents, requireChange, requireInit, reviewedFiles, withWorktreeLock, type EvidenceRecord } from './core.ts';
 import { confirmEvidence, evidenceMatrix } from './evidence.ts';
 import { isWaiting, listFeedback, saveFeedback } from './feedback.ts';
 import { renderArchived, renderHtml } from './render.ts';
@@ -97,7 +97,7 @@ ${STATUS_CSS}
 .num{color:var(--lin-ink-2);font-variant-numeric:tabular-nums;white-space:nowrap}
 .empty{padding:48px 24px;text-align:center;color:var(--lin-ink-3)}
 pre{white-space:pre-wrap;font:13px/1.5 var(--lin-mono);color:var(--lin-ink-2);background:var(--lin-s1);border:1px solid var(--lin-line);border-radius:12px;padding:16px 24px}
-</style></head><body><header class="nav"><span class="mark"></span>DevFlow 审查台</header><main>${body}</main></body></html>`;
+</style></head><body><header class="nav"><span class="mark"></span>Tenon 审查台</header><main>${body}</main></body></html>`;
 
 const fingerprint = (data: unknown): string => createHash('sha256').update(JSON.stringify(data)).digest('hex').slice(0, 16);
 
@@ -116,7 +116,7 @@ function indexRows(root: string) {
 function archivedRows(root: string) {
   return listArchived(root).map((a) => {
     let title = '';
-    try { title = String(parse(readFileSync(join(root, DF, 'changes', 'archive', a.id, 'change.yaml'), 'utf8'))?.title ?? ''); } catch { /* 读不到标题只显示 id */ }
+    try { title = String(parse(readFileSync(join(root, dfOf(root), 'changes', 'archive', a.id, 'change.yaml'), 'utf8'))?.title ?? ''); } catch { /* 读不到标题只显示 id */ }
     return { ...a, title };
   }).sort((a, b) => (b.archived_at ?? '').localeCompare(a.archived_at ?? ''));
 }
@@ -146,7 +146,7 @@ function index(root: string, token: string): string {
     ? `<details class="arch"><summary>已归档（${archived.length}）</summary><div class="panel"><table><thead><tr><th>变更</th><th>归档时间</th></tr></thead><tbody>${archived.map((a) => `<tr>
 <td><a class="id" href="/${token}/a/${esc(a.id)}">${esc(a.id)}</a><br><span class="muted">${esc(a.title)}</span></td><td class="num">${ago(a.archived_at ?? undefined)}</td></tr>`).join('')}</tbody></table></div></details>`
     : '';
-  return SHELL('DevFlow 审查台', `<h1>变更</h1><p class="lead">需要你操作的变更排在前面。有新进展时页面上方会提示刷新。</p><div class="panel" data-v="${indexVersion(root, rows)}">${body}</div>${arch}
+  return SHELL('Tenon 审查台', `<h1>变更</h1><p class="lead">需要你操作的变更排在前面。有新进展时页面上方会提示刷新。</p><div class="panel" data-v="${indexVersion(root, rows)}">${body}</div>${arch}
 <button type="button" class="df-new" hidden>有新进展，点此刷新</button>
 <script>
 (() => {
@@ -166,7 +166,7 @@ function index(root: string, token: string): string {
 /** 已归档变更的只读页：只有返回链接，没有操作栏、批注和状态轮询 */
 const ARCHIVED_BAR = (token: string) => `${PAGE_STYLE('archived')}<style>.df-ro{${TOKENS};position:fixed;left:0;right:0;bottom:0;z-index:50;display:flex;gap:12px;align-items:center;min-height:48px;padding:8px 24px;background:var(--lin-s1);color:var(--lin-ink-3);border-top:1px solid var(--lin-line);font:400 14px/1.4 var(--lin-font)}.df-ro a{color:var(--lin-ink-3);text-decoration:none}.df-ro a:hover{color:var(--lin-ink)}body{padding-bottom:64px}</style><div class="df-ro"><a href="/${token}/">← 全部变更</a><span>已归档，只读</span></div>`;
 
-// 只在审查台注入：把 answer-me 纸张主题的变量换成 Linear 深色；离线审查页（devflow render）不受影响。
+// 只在审查台注入：把 answer-me 纸张主题的变量换成 Linear 深色；离线审查页（tenon render）不受影响。
 // 用户要求保留：面板字母徽标、右侧大纲、差异与状态的红绿色、图表原有强调色。
 const PAGE_STYLE = (status: Status) => `<style>
 html[data-theme][data-mode]{color-scheme:dark;${TOKENS};--font-sans:var(--lin-font);--font-serif:var(--lin-font);--head-font:var(--lin-font);--font-mono:var(--lin-mono);--radius:8px;--bg:var(--lin-canvas);--paper:var(--lin-s1);--fill:var(--lin-s2);--ink:var(--lin-ink);--ink-2:var(--lin-ink-2);--ink-3:var(--lin-ink-3);--line:var(--lin-line-2);--line-2:var(--lin-line);--accent:var(--lin-primary-hover);--accent-bg:rgb(94 106 210/.16);--ok:#8cc79a;--ok-bg:#1c3122;--err:#f0928a;--err-bg:#3a1d1a;--warn:#e3b866;--warn-bg:#352a13;--head-bg:var(--lin-ink);--head-fg:var(--lin-canvas)}
@@ -278,7 +278,7 @@ const BAR_SCRIPT = `<script>
       const j = await r.json();
       if (!j.ok) return fail(j.error + (j.hint ? '（' + j.hint + '）' : ''));
       done ? done() : reload();
-    } catch { fail('审查台没有响应：devflow review 还在运行吗？'); }
+    } catch { fail('审查台没有响应：tenon review 还在运行吗？'); }
   };
   // 不定时整页刷新：后台查状态，变了只提示，人点了才刷新
   const tip = bar.querySelector('.df-new');
@@ -293,7 +293,7 @@ const BAR_SCRIPT = `<script>
       const j = await (await fetch(base + '/state')).json();
       if (wait && j.waiting !== wait.hasAttribute('data-on')) {
         if (j.waiting) wait.dataset.on = ''; else delete wait.dataset.on;
-        wait.textContent = j.waiting ? 'Agent 正在等待' : '没有 Agent 在等待：批注会在它下次运行 devflow wait 时送达';
+        wait.textContent = j.waiting ? 'Agent 正在等待' : '没有 Agent 在等待：批注会在它下次运行 tenon wait 时送达';
       }
       if (j.v !== bar.dataset.v) { tip.hidden = false; clearInterval(timer); }
     } catch { /* 审查台停了：不提示 */ }
@@ -315,7 +315,7 @@ const BAR_SCRIPT = `<script>
     // 不用浏览器原生确认框：内嵌浏览器会屏蔽它，点了没有反应。改为同一个按钮点两次
     if (a === 'archive') {
       if (b.dataset.armed) post('archive', {}, () => { location.href = bar.dataset.home; });
-      else { b.dataset.armed = '1'; b.textContent = '再点一次确认归档'; msg.textContent = '归档会把规范增量合并进 .devflow/specs/，并把变更目录移到 archive'; }
+      else { b.dataset.armed = '1'; b.textContent = '再点一次确认归档'; msg.textContent = '归档会把规范增量合并进数据目录的 specs/，并把变更目录移到 archive'; }
     }
   });
 })();
@@ -471,8 +471,8 @@ const FEEDBACK_SCRIPT = `<script>
         delete msg.dataset.tone;
         msg.textContent = j.message;
         if (j.waiting) wait.dataset.on = ''; else delete wait.dataset.on;
-        wait.textContent = j.waiting ? 'Agent 正在等待' : '没有 Agent 在等待：批注会在它下次运行 devflow wait 时送达';
-      } catch { err(list, '审查台没有响应：devflow review 还在运行吗？'); }
+        wait.textContent = j.waiting ? 'Agent 正在等待' : '没有 Agent 在等待：批注会在它下次运行 tenon wait 时送达';
+      } catch { err(list, '审查台没有响应：tenon review 还在运行吗？'); }
       finally { b.disabled = false; }
     }
   });
@@ -500,10 +500,10 @@ function actionBar(root: string, id: string, token: string, hash: string): strin
 <dl>${row('步骤', e.procedure)}${row('预期', e.expected)}${row('实际', e.observed)}</dl></label>`).join('')}
 <menu><button type="button" data-df="cancel">取消</button><button type="button" data-df="confirm">确认所选</button></menu></dialog>`;
   const waiting = isWaiting(root, id);
-  const feedback = `<button type="button" data-fb="list" hidden>发送批注</button><span class="df-wait"${waiting ? ' data-on' : ''}>${waiting ? 'Agent 正在等待' : '没有 Agent 在等待：批注会在它下次运行 devflow wait 时送达'}</span>`;
+  const feedback = `<button type="button" data-fb="list" hidden>发送批注</button><span class="df-wait"${waiting ? ' data-on' : ''}>${waiting ? 'Agent 正在等待' : '没有 Agent 在等待：批注会在它下次运行 tenon wait 时送达'}</span>`;
   const fbDialogs = `<button type="button" class="df-pin" data-fb="pin" hidden>批注</button>
 <dialog class="df-dlg df-note"><h3>批注</h3><blockquote></blockquote><textarea maxlength="2000" placeholder="写下你的意见，Agent 会按它修改方案或回答"></textarea><p class="df-err" role="alert"></p><menu><button type="button" data-fb="note-cancel">取消</button><button type="button" data-fb="note-save">保存</button></menu></dialog>
-<dialog class="df-dlg df-fbl"><h3>待发送的批注</h3><p>发送后直接交给正在等待的 Agent；没有 Agent 在等待时，留到它下次运行 devflow wait。</p><ol></ol><p class="df-err" role="alert"></p><menu><button type="button" data-fb="list-close">关闭</button><button type="button" data-fb="send">发送</button></menu></dialog>`;
+<dialog class="df-dlg df-fbl"><h3>待发送的批注</h3><p>发送后直接交给正在等待的 Agent；没有 Agent 在等待时，留到它下次运行 tenon wait。</p><ol></ol><p class="df-err" role="alert"></p><menu><button type="button" data-fb="list-close">关闭</button><button type="button" data-fb="send">发送</button></menu></dialog>`;
   return `${PAGE_STYLE(st.status)}${BAR_STYLE}<div class="df-bar" data-home="/${token}/" data-hash="${esc(hash)}" data-v="${changeVersion(root, id)}"><a href="/${token}/">← 全部变更</a><span class="df-state st-${st.status}">${statusLabel(st.status)}</span><span class="df-reason">${esc(st.reason)}</span>${action}${feedback}<button type="button" class="df-new" hidden>有新进展，点此刷新</button><span class="df-msg" role="status"></span></div><nav class="df-toc" aria-label="目录"></nav>${dialog}${fbDialogs}${TOC_SCRIPT}${BAR_SCRIPT}${FEEDBACK_SCRIPT}`;
 }
 
@@ -605,7 +605,7 @@ export function reviewServer(root: string, token: string, version: string): Serv
         // 批注不是批准材料：不持工作树锁、不写事件日志
         const n = saveFeedback(root, id, await readJson(req));
         const waiting = isWaiting(root, id);
-        return send(res, 200, 'application/json', JSON.stringify({ ok: true, waiting, message: `已发送 ${n} 条批注${waiting ? '，Agent 会马上收到' : '；Agent 下次运行 devflow wait 时收到'}` }));
+        return send(res, 200, 'application/json', JSON.stringify({ ok: true, waiting, message: `已发送 ${n} 条批注${waiting ? '，Agent 会马上收到' : '；Agent 下次运行 tenon wait 时收到'}` }));
       }
       if (post && parts.length === 3) {
         requireChange(root, id);
@@ -615,7 +615,7 @@ export function reviewServer(root: string, token: string, version: string): Serv
     } catch (e) {
       if (!(e instanceof DevflowError)) {
         console.error(e);
-        return send(res, 500, post ? 'application/json' : 'text/plain', post ? JSON.stringify({ ok: false, error: '内部错误，详见运行 devflow review 的终端' }) : '内部错误，详见运行 devflow review 的终端');
+        return send(res, 500, post ? 'application/json' : 'text/plain', post ? JSON.stringify({ ok: false, error: '内部错误，详见运行 tenon review 的终端' }) : '内部错误，详见运行 tenon review 的终端');
       }
       if (post) return send(res, 400, 'application/json', JSON.stringify({ ok: false, error: e.message, hint: e.hint }));
       return send(res, 400, 'text/html', SHELL('无法显示', `<p><a href="/${token}/">← 全部变更</a></p><h1>${esc(e.message)}</h1><pre>${esc(e.hint ?? '')}</pre>`));

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// devflow 命令行入口。所有命令支持 --json；出错时退出码为 1
+// tenon 命令行入口。所有命令支持 --json；出错时退出码为 1
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
@@ -20,16 +20,16 @@ import { fileURLToPath } from 'node:url';
 import { recordEvidence, confirmEvidence, evidenceMatrix } from './evidence.ts';
 import { startUsage, finishUsage, configureUsage, pruneUsage, addFeedback, usageReport, exportUsage, getCandidate, listCandidates, resolveCandidate } from './usage.ts';
 import { runWorkflowSuite, compareReports, readReport } from './evaluate.ts';
-import { resolve } from 'node:path';
-import { DevflowError, approvalCycle, changeDir, doneTasks, readEvents, withWorktreeLock, listChanges, repoRoot, requireChange, requireInit, reviewedFiles, type Issue } from './core.ts';
+import { join, resolve } from 'node:path';
+import { DevflowError, approvalCycle, changeDir, dfOf, doneTasks, readEvents, withWorktreeLock, listChanges, repoRoot, requireChange, requireInit, reviewedFiles, type Issue } from './core.ts';
 import { init, newChange } from './init.ts';
 import { approve, decisionAnswers, deriveStatus, humanTodo, listArchived, prepareApproval, staleHours, staleText } from './status.ts';
 import { loadTasks, validateChange, validateProject } from './validate.ts';
 
 const VERSION: string = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
 
-const HELP = `devflow ${VERSION}
-用法：devflow <命令> [参数] [--json]
+const HELP = `tenon ${VERSION}
+用法：tenon <命令> [参数] [--json]
 
   resume <id>         显示当前进度、证据缺口与下一步
   evidence add <id> --file <json>   记录验收证据
@@ -45,7 +45,7 @@ const HELP = `devflow ${VERSION}
   eval compare <baseline> <candidate>  比较固定协议报告
   doctor               检查环境、hook、Agent 文件与验证命令，并给出修复命令
   --version            显示版本号
-  init [--agents a,b]  在当前 Git 项目创建 .devflow/、安装 pre-commit hook，
+  init [--agents a,b]  在当前 Git 项目创建 .tenon/（旧项目沿用 .devflow/）、安装 pre-commit hook，
                        并为 Agent 生成技能与入口片段（默认：检测到的 Agent；
                        一个都没检测到时 claude,codex）
   update [--agents]    重新生成 Agent 文件（默认：已安装过的 Agent）
@@ -53,7 +53,7 @@ const HELP = `devflow ${VERSION}
   wiki lint            校验知识页的引用、链接与是否过期
   validate <id>        校验变更文件是否齐全、格式正确
   status [id] [--all]  显示变更的派生状态；--all 同时列出已归档的变更
-  render <id> [-o f]   从被审文件生成离线审查页（默认 .devflow/runtime/rendered/<id>.html）
+  render <id> [-o f]   从被审文件生成离线审查页（默认 <数据目录>/runtime/rendered/<id>.html）
   review [id]          启动本地审查台（只能由人在交互终端中运行）：在浏览器里批准、
                        确认人工证据、归档；保持终端打开，Ctrl+C 结束
   wait <id> [--timeout 秒]  等人批准、确认证据、归档或发来批注后退出（Agent 在后台运行；默认 1800 秒）
@@ -146,14 +146,14 @@ async function dispatch(): Promise<number> {
       const state = deriveStatus(root, id);
       const evidence = evidenceMatrix(root, id);
       const missing = evidence.filter((e) => e.status !== 'valid');
-      let next = state.status === 'draft' || state.status === 'rebase_required' ? `devflow render ${id}` : state.status === 'approved' ? `devflow apply ${id} --start` : state.status === 'ready_to_archive' ? `devflow archive ${id}` : `devflow verify ${id}`;
+      let next = state.status === 'draft' || state.status === 'rebase_required' ? `tenon render ${id}` : state.status === 'approved' ? `tenon apply ${id} --start` : state.status === 'ready_to_archive' ? `tenon archive ${id}` : `tenon verify ${id}`;
       if (state.reason.includes('快照')) next = '从 Git 恢复批准快照后重新运行 resume';
-      else if (['applying', 'needs_fix'].includes(state.status) && missing[0]?.status === 'unconfirmed') next = `devflow evidence confirm ${id} ${missing[0].evidence_id}`;
-      else if (['applying', 'needs_fix'].includes(state.status) && missing.length && !/重新验证|尚未验证|fail|unknown/.test(state.reason)) next = `devflow evidence add ${id} --file <${missing[0].acceptance}-evidence.json>`;
+      else if (['applying', 'needs_fix'].includes(state.status) && missing[0]?.status === 'unconfirmed') next = `tenon evidence confirm ${id} ${missing[0].evidence_id}`;
+      else if (['applying', 'needs_fix'].includes(state.status) && missing.length && !/重新验证|尚未验证|fail|unknown/.test(state.reason)) next = `tenon evidence add ${id} --file <${missing[0].acceptance}-evidence.json>`;
       else if (state.status === 'applying' && !missing.length && state.reason.includes('任务')) {
         const done = doneTasks(root, id);
         const task = loadTasks(root, id).find((t) => !done.has(t.id) && (t.depends_on ?? []).every((d) => done.has(d)));
-        if (task) next = `devflow task done ${id} ${task.id}`;
+        if (task) next = `tenon task done ${id} ${task.id}`;
       }
       const decisions = decisionAnswers(root, id);
       const unread = unreadCount(root, id);
@@ -163,7 +163,7 @@ async function dispatch(): Promise<number> {
         console.log(`${id}: ${state.status} — ${state.reason}`);
         for (const d of decisions) console.log(`拍板：${d.question} → ${d.answer}${d.by === 'human' ? '' : '（用户未作答，按推荐项）'}`);
         for (const e of missing) console.log(`${e.acceptance}: ${e.status} ${e.reason ?? ''}`);
-        if (unread) console.log(`未读批注：${unread} 条，运行 devflow wait ${id} 读取`);
+        if (unread) console.log(`未读批注：${unread} 条，运行 tenon wait ${id} 读取`);
         console.log(`下一步：${next}`);
       }
       return 0;
@@ -191,7 +191,7 @@ async function dispatch(): Promise<number> {
         const candidate = getCandidate(root, positionals[2] ?? '');
         const id = positionals[3];
         newChange(root, id);
-        writeFileSync(resolve(root, `.devflow/changes/${id}/proposal.md`), `# 优化候选\n\n## 为什么\n\n候选信息仅供核查，不代表因果结论。\n\n\`\`\`json\n${JSON.stringify(candidate, null, 2)}\n\`\`\`\n\n## 改什么\n\n待核实假设与验收标准后补齐。\n`);
+        writeFileSync(join(changeDir(root, id), 'proposal.md'), `# 优化候选\n\n## 为什么\n\n候选信息仅供核查，不代表因果结论。\n\n\`\`\`json\n${JSON.stringify(candidate, null, 2)}\n\`\`\`\n\n## 改什么\n\n待核实假设与验收标准后补齐。\n`);
         console.log(JSON.stringify({ id, candidate, status: 'draft' }, null, 2));
       } else if (arg === 'resolve' && opts.report) console.log(JSON.stringify(resolveCandidate(root, positionals[2] ?? '', resolve(opts.report)), null, 2));
       else console.log(JSON.stringify(listCandidates(root), null, 2));
@@ -213,7 +213,7 @@ async function dispatch(): Promise<number> {
       else {
         for (const f of r.created) console.log(`+ ${f}`);
         if (r.hook === 'foreign') {
-          console.warn(`! ${r.hookPath} 已有其他 hook，未覆盖。请在其中加一行：devflow check --staged`);
+          console.warn(`! ${r.hookPath} 已有其他 hook，未覆盖。请在其中加一行：tenon check --staged`);
         } else console.log(`✓ pre-commit hook 已${r.hook === 'installed' ? '安装' : '更新'}：${r.hookPath}`);
         for (const c of r.codeHooks) {
           if (c.hook === 'missing') console.warn(`! ${c.repo} 不是 Git 仓库，没有安装 hook；检查 project.yaml 的 code_roots`);
@@ -228,7 +228,7 @@ async function dispatch(): Promise<number> {
     case 'update': {
       requireInit(root);
       const agents = opts.agents ? parseAgents(opts.agents) : detectAgents(root);
-      if (!agents.length) throw new DevflowError('没有找到已安装的 Agent 文件', '用 devflow update --agents claude,codex 指定');
+      if (!agents.length) throw new DevflowError('没有找到已安装的 Agent 文件', '用 tenon update --agents claude,codex 指定');
       const a = installAgents(root, agents);
       if (opts.json) console.log(JSON.stringify(a, null, 2));
       else printAgents(a);
@@ -236,10 +236,10 @@ async function dispatch(): Promise<number> {
     }
     case 'wiki': {
       requireInit(root);
-      if (arg !== 'lint') throw new DevflowError(`未知子命令：wiki ${arg ?? ''}`, '用法：devflow wiki lint');
+      if (arg !== 'lint') throw new DevflowError(`未知子命令：wiki ${arg ?? ''}`, '用法：tenon wiki lint');
       const { issues, pages } = lintWiki(root);
       // 只在 wiki lint 与 doctor 提醒；check 也用 lintWiki，不能每次提交都提醒
-      if (!pages.length) issues.push({ level: 'warn', file: '.devflow/knowledge/pages/', message: '知识页为空', hint: '用 devflow-scan 技能生成知识页；小项目可以跳过' });
+      if (!pages.length) issues.push({ level: 'warn', file: `${dfOf(root)}/knowledge/pages/`, message: '知识页为空', hint: '用 tenon-scan 技能生成知识页；小项目可以跳过' });
       return report(issues, `✓ ${pages.length} 个知识页校验通过`);
     }
     case 'new': {
@@ -247,7 +247,7 @@ async function dispatch(): Promise<number> {
       if (opts.json) console.log(JSON.stringify({ files }, null, 2));
       else {
         for (const f of files) console.log(`+ ${f}`);
-        console.log(`填写完成后运行 devflow validate ${arg}`);
+        console.log(`填写完成后运行 tenon validate ${arg}`);
       }
       return 0;
     }
@@ -261,7 +261,7 @@ async function dispatch(): Promise<number> {
       const list = (arg ? [requireChange(root, arg)] : listChanges(root)).map((id) => { const st = deriveStatus(root, id); return { ...st, todo: humanTodo(root, id, st), stale_hours: staleHours(root, id, st) }; });
       const archived = opts.all && !arg ? listArchived(root) : [];
       if (opts.json) console.log(JSON.stringify([...list, ...archived], null, 2));
-      else if (!list.length && !archived.length) console.log('没有进行中的变更。用 devflow new <id> 新建');
+      else if (!list.length && !archived.length) console.log('没有进行中的变更。用 tenon new <id> 新建');
       else {
         // 行尾标出轮到谁：人的待办，或 Agent 进行中（已归档的变更没有这一段）
         for (const s of list) console.log(`${s.id}  ${s.status}  任务 ${s.tasks.done}/${s.tasks.total}  ${s.reason}  ← ${s.todo ?? 'Agent 进行中'}${s.stale_hours === null ? '' : ` · ${staleText(s.stale_hours)}`}`);
@@ -301,7 +301,7 @@ async function dispatch(): Promise<number> {
           const fb = takeFeedback(root, id);
           if (fb.length) {
             console.log(formatFeedback(fb));
-            console.log(`处理完后再次运行 devflow wait ${id}`);
+            console.log(`处理完后再次运行 tenon wait ${id}`);
             return 0;
           }
           if (Date.now() >= deadline) {
@@ -318,7 +318,7 @@ async function dispatch(): Promise<number> {
       else {
         const st = deriveStatus(root, id);
         console.log(`${id}: ${st.status} — ${st.reason}`);
-        console.log(`下一步：devflow resume ${id}`);
+        console.log(`下一步：tenon resume ${id}`);
       }
       return 0;
     }
@@ -333,9 +333,9 @@ async function dispatch(): Promise<number> {
       for (const f of reviewedFiles(root, id)) console.log(`  ${f}`);
       if (opts.hash !== undefined) {
         // 复制审查页上的命令就是确认：前缀一致即批准，不再问 y
-        if (!/^[0-9a-f]{12,64}$/.test(opts.hash)) throw new DevflowError('--hash 至少需要 12 位十六进制', '从审查页复制完整的 devflow approve 命令');
+        if (!/^[0-9a-f]{12,64}$/.test(opts.hash)) throw new DevflowError('--hash 至少需要 12 位十六进制', '从审查页复制完整的 tenon approve 命令');
         if (!ev.hash.startsWith(`sha256:${opts.hash}`)) {
-          throw new DevflowError('--hash 与当前内容哈希不一致，未批准', `可能是审查后被审文件又被修改，或命令没有复制完整；重新运行 devflow render ${id}，从新页面复制命令`);
+          throw new DevflowError('--hash 与当前内容哈希不一致，未批准', `可能是审查后被审文件又被修改，或命令没有复制完整；重新运行 tenon render ${id}，从新页面复制命令`);
         }
       } else if (!(await confirm('确认批准？输入 y 确认：', ''))) {
         const st = deriveStatus(root, id);
@@ -344,18 +344,18 @@ async function dispatch(): Promise<number> {
       }
       approve(root, id, ev.hash);
       console.log(`✓ 已批准 ${id}`);
-      console.log(`下一步：在 Agent 里说"用 devflow-apply 实现变更 ${id}"`);
+      console.log(`下一步：在 Agent 里说"用 tenon-apply 实现变更 ${id}"`);
       return 0;
     }
     case 'apply': {
-      if (!opts.start) throw new DevflowError('用法：devflow apply <id> --start', '记录开工；开工前状态必须为 approved');
+      if (!opts.start) throw new DevflowError('用法：tenon apply <id> --start', '记录开工；开工前状态必须为 approved');
       const ev = applyStart(root, arg!);
       if (opts.json) console.log(JSON.stringify(ev, null, 2));
       else console.log(`✓ ${arg} 已开工（基于 ${ev.type === 'apply-started' ? ev.head.slice(0, 7) : ''}）`);
       return 0;
     }
     case 'task': {
-      if (arg !== 'done') throw new DevflowError(`未知子命令：task ${arg ?? ''}`, '用法：devflow task done <id> <任务ID>');
+      if (arg !== 'done') throw new DevflowError(`未知子命令：task ${arg ?? ''}`, '用法：tenon task done <id> <任务ID>');
       const [, , id, task] = positionals;
       taskDone(root, id, task);
       const st = deriveStatus(root, id);
@@ -379,7 +379,7 @@ async function dispatch(): Promise<number> {
     case 'archive': {
       requireHuman('archive');
       requireInit(root);
-      if (!arg) throw new DevflowError('缺少变更 ID', '用法：devflow archive <id>');
+      if (!arg) throw new DevflowError('缺少变更 ID', '用法：tenon archive <id>');
       if (pendingTx(root, arg)) {
         console.log(`发现 ${arg} 未完成的归档事务，继续执行剩余步骤`);
       } else {
@@ -405,13 +405,13 @@ async function dispatch(): Promise<number> {
       else {
         console.log(`✓ ${r.file}`);
         console.log(`  内容哈希：${r.hash}`);
-        console.log(`  审查后由人批准：在审查台（devflow review）里点「批准此版本」，或在自己的终端运行 devflow approve ${id}`);
-        console.log(`  等待批准：devflow wait ${id}`);
+        console.log(`  审查后由人批准：在审查台（tenon review）里点「批准此版本」，或在自己的终端运行 tenon approve ${id}`);
+        console.log(`  等待批准：tenon wait ${id}`);
       }
       return 0;
     }
     case 'check':
-      return report(opts.project ? checkCodeRepo(resolve(opts.project), root) : check(root, { staged: !!opts.staged }), '✓ devflow check 通过');
+      return report(opts.project ? checkCodeRepo(resolve(opts.project), root) : check(root, { staged: !!opts.staged }), '✓ tenon check 通过');
     default:
       throw new DevflowError(`未知命令：${cmd}`, HELP);
   }

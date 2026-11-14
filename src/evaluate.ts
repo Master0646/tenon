@@ -91,12 +91,12 @@ export function runWorkflow(cases: WorkflowCase[], options: { cli?: string; vers
   if (!Number.isInteger(repetitions) || repetitions < 1 || repetitions > 100) throw new DevflowError('评测 repetitions 必须在 1..100');
   const samples: EvalSample[] = [];
   for (const c of cases) for (let repeat = 0; repeat < repetitions; repeat++) {
-    const root = realpathSync(mkdtempSync(join(tmpdir(), 'devflow-eval-')));
+    const root = realpathSync(mkdtempSync(join(tmpdir(), 'tenon-eval-')));
     const started = performance.now();
     let outcome: EvalSample['outcome'] = 'pass';
     let detail = '全部固定断言满足';
     try {
-      for (const args of [['init', '-q'], ['config', 'user.name', 'devflow-eval'], ['config', 'user.email', 'eval@example.invalid'], ['config', 'commit.gpgsign', 'false']]) {
+      for (const args of [['init', '-q'], ['config', 'user.name', 'tenon-eval'], ['config', 'user.email', 'eval@example.invalid'], ['config', 'commit.gpgsign', 'false']]) {
         const r = spawnSync('git', args, { cwd: root, encoding: 'utf8', timeout: 10_000 });
         if (r.error || r.status !== 0) throw new Error('临时 Git 仓库无法初始化');
       }
@@ -200,24 +200,24 @@ const WORKFLOW_IDS = ['missing-evidence', 'stale-code', 'old-approval', 'artifac
 export function runWorkflowSuite(version = 'unknown'): EvalReport {
   const samples: EvalSample[] = [];
   for (const fault of WORKFLOW_IDS) {
-    const root = realpathSync(mkdtempSync(join(tmpdir(), 'devflow-fault-')));
+    const root = realpathSync(mkdtempSync(join(tmpdir(), 'tenon-fault-')));
     const started = performance.now();
     let outcome: EvalSample['outcome'] = 'pass', detail = '故障断言满足';
     const id = 'fixture';
     const write = (path: string, content: string) => { mkdirSync(dirname(join(root, path)), { recursive: true }); writeFileSync(join(root, path), content); };
     try {
       git(root, ['init', '-q']);
-      git(root, ['config', 'user.name', 'devflow-eval']); git(root, ['config', 'user.email', 'eval@example.invalid']);
+      git(root, ['config', 'user.name', 'tenon-eval']); git(root, ['config', 'user.email', 'eval@example.invalid']);
       git(root, ['config', 'commit.gpgsign', 'false']);
       init(root);
       write('test.txt', 'expected assertion');
-      write('.devflow/project.yaml', 'schema_version: 1\nverify:\n  - name: unit\n    run: "true"\nexclude: []\nenforce: warn\n');
+      write('.tenon/project.yaml', 'schema_version: 1\nverify:\n  - name: unit\n    run: "true"\nexclude: []\nenforce: warn\n');
       git(root, ['add', '-A']); git(root, ['-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'fixture']);
-      write(`.devflow/changes/${id}/change.yaml`, 'schema_version: 2\nmin_cli_version: 0.2.0\ntitle: Evidence fixture\naffected_paths: [test.txt]\n');
-      write(`.devflow/changes/${id}/proposal.md`, '# Proposal\n\nVerify permission behavior.\n');
+      write(`.tenon/changes/${id}/change.yaml`, 'schema_version: 2\nmin_cli_version: 0.2.0\ntitle: Evidence fixture\naffected_paths: [test.txt]\n');
+      write(`.tenon/changes/${id}/proposal.md`, '# Proposal\n\nVerify permission behavior.\n');
       const manual = fault === 'manual-unconfirmed';
-      write(`.devflow/changes/${id}/tasks.yaml`, `schema_version: 2\ntasks:\n  - id: T1\n    title: Evidence fixture\n    acceptance:\n      - id: AC1\n        text: Permission behavior verified\n        method: ${manual ? 'manual' : 'automated'}\n${manual ? '' : '        check: unit\n'}`);
-      if (fault === 'spec-conflict') write(`.devflow/changes/${id}/specs/auth/spec.md`, '## ADDED Requirements\n\n### Requirement: Permission\nSystem SHALL reject.\n\n#### Scenario: Rejected\n- WHEN unauthorized\n- THEN rejected\n');
+      write(`.tenon/changes/${id}/tasks.yaml`, `schema_version: 2\ntasks:\n  - id: T1\n    title: Evidence fixture\n    acceptance:\n      - id: AC1\n        text: Permission behavior verified\n        method: ${manual ? 'manual' : 'automated'}\n${manual ? '' : '        check: unit\n'}`);
+      if (fault === 'spec-conflict') write(`.tenon/changes/${id}/specs/auth/spec.md`, '## ADDED Requirements\n\n### Requirement: Permission\nSystem SHALL reject.\n\n#### Scenario: Rejected\n- WHEN unauthorized\n- THEN rejected\n');
       approve(root, id); applyStart(root, id);
       if (fault === 'missing-evidence') {
         assert.throws(() => taskDone(root, id, 'T1'), /证据/);
@@ -226,7 +226,7 @@ export function runWorkflowSuite(version = 'unknown'): EvalReport {
         withWorktreeLock(root, () => assert.throws(() => withWorktreeLock(root, () => {}), /持锁/));
         withWorktreeLock(root, () => assert.equal(deriveStatus(root, id).status, 'applying'));
       } else if (fault === 'usage-write-failed') {
-        write('.devflow/runtime/usage', 'not a directory');
+        write('.tenon/runtime/usage', 'not a directory');
         assert.equal(startUsage(root, { tool_version: version, command: 'status' }), undefined);
         assert.equal(deriveStatus(root, id).status, 'applying');
       } else if (fault === 'resume-summary') {
@@ -235,7 +235,7 @@ export function runWorkflowSuite(version = 'unknown'): EvalReport {
         assert.match(r.stdout, /AC1/);
         assert.match(r.stdout, /next|下一|command/i);
       } else if (fault === 'spec-conflict') {
-        write('.devflow/specs/auth/spec.md', '# auth\n\n## Requirements\n');
+        write('.tenon/specs/auth/spec.md', '# auth\n\n## Requirements\n');
         assert.equal(deriveStatus(root, id).status, 'rebase_required');
       } else if (manual) {
         recordEvidence(root, id, { task: 'T1', acceptance: 'AC1', kind: 'manual', summary: 'Observed', procedure: 'Invoke API', expected: 'Denied', observed: 'Denied' });
@@ -251,7 +251,7 @@ export function runWorkflowSuite(version = 'unknown'): EvalReport {
           assert.equal(evidenceMatrix(root, id)[0].status, 'stale'); assert.notEqual(deriveStatus(root, id).status, 'ready_to_archive');
         } else if (fault === 'old-approval') {
           // 重新批准时验收条件变了：旧证据不得沿用（条件和代码都没变时才沿用）
-          write(`.devflow/changes/${id}/tasks.yaml`, 'schema_version: 2\ntasks:\n  - id: T1\n    title: Evidence fixture\n    acceptance:\n      - id: AC1\n        text: Changed requirement\n        method: automated\n        check: unit\n');
+          write(`.tenon/changes/${id}/tasks.yaml`, 'schema_version: 2\ntasks:\n  - id: T1\n    title: Evidence fixture\n    acceptance:\n      - id: AC1\n        text: Changed requirement\n        method: automated\n        check: unit\n');
           approve(root, id); applyStart(root, id);
           assert.equal(deriveStatus(root, id).tasks.done, 0); assert.equal(evidenceMatrix(root, id)[0].status, 'stale');
         } else if (fault.startsWith('artifact-')) {
@@ -263,7 +263,7 @@ export function runWorkflowSuite(version = 'unknown'): EvalReport {
           mkdirSync(dirname(join(root, first.to)), { recursive: true }); renameSync(join(root, first.from), join(root, first.to));
           const result = commitArchive(root, id);
           assert.equal(existsSync(join(root, result.target, 'events.jsonl')), true);
-          assert.equal(existsSync(join(root, '.devflow/runtime/tx', id)), false);
+          assert.equal(existsSync(join(root, '.tenon/runtime/tx', id)), false);
         }
       }
     } catch (e) {

@@ -4,7 +4,7 @@ import { copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSy
 import { basename, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { parse } from 'yaml';
 import {
-  DF, DevflowError, appendEvent, approvalCycle, git, hashFiles, requireChange, requireInit,
+  dfOf, DevflowError, appendEvent, approvalCycle, git, hashFiles, requireChange, requireInit,
   readEvents, reviewedFiles, rootOf, sha256, worktreeHash, type DevflowEvent,
 } from './core.ts';
 import { loadTasks } from './validate.ts';
@@ -59,7 +59,7 @@ function safeFile(root: string, path: unknown): string {
 
 /** 在本变更的验证日志里找内容哈希与运行记录一致的那份；日志目录以验证开始时刻命名，与事件时间对不上，所以按哈希找 */
 function findLog(root: string, id: string, check: string, hash: string): string | undefined {
-  const dir = join(root, DF, 'runtime', 'verify', id);
+  const dir = join(root, dfOf(root), 'runtime', 'verify', id);
   if (!existsSync(dir)) return undefined;
   for (const stamp of readdirSync(dir)) {
     const f = join(dir, stamp, `${check}.log`);
@@ -83,7 +83,7 @@ function conditionHash(root: string, c: Condition): string {
   let command: unknown = null;
   if (c.check) {
     try {
-      const v = parse(readFileSync(join(root, DF, 'project.yaml'), 'utf8'))?.verify?.find((x: any) => x?.name === c.check);
+      const v = parse(readFileSync(join(root, dfOf(root), 'project.yaml'), 'utf8'))?.verify?.find((x: any) => x?.name === c.check);
       command = v ? [v.run, v.cwd ?? null] : null;
     } catch { /* 格式错误由 validate 报告 */ }
   }
@@ -93,7 +93,7 @@ function conditionHash(root: string, c: Condition): string {
 function active(root: string, id: string) {
   requireInit(root);
   requireChange(root, id);
-  const meta = parse(readFileSync(join(root, DF, 'changes', id, 'change.yaml'), 'utf8'));
+  const meta = parse(readFileSync(join(root, dfOf(root), 'changes', id, 'change.yaml'), 'utf8'));
   if (meta.schema_version !== 2) throw new DevflowError('验收证据命令仅适用于 schema_version: 2 变更');
   const cycle = approvalCycle(root, id);
   if (!cycle.approved || cycle.approved.hash !== hashFiles(root, reviewedFiles(root, id))) {
@@ -138,7 +138,7 @@ export function recordEvidence(root: string, id: string, input: unknown): Record
       if (quote.includes('\n')) throw new DevflowError('log_quote 只能是一行');
       const logHash = run.checks.find((c) => c.name === event.check)?.log_hash;
       const log = logHash ? findLog(root, id, event.check, logHash) : undefined;
-      if (log === undefined) throw new DevflowError(`找不到验证运行 ${event.verify_run} 的 ${event.check} 日志，或日志已被改动`, '重新运行 devflow verify');
+      if (log === undefined) throw new DevflowError(`找不到验证运行 ${event.verify_run} 的 ${event.check} 日志，或日志已被改动`, '重新运行 tenon verify');
       if (!log.includes(quote)) throw new DevflowError(`log_quote 不在 ${event.check} 的日志中`, '从日志里原样复制一行');
       event.log_quote = quote;
       event.quote_checked = true;
@@ -152,7 +152,7 @@ export function recordEvidence(root: string, id: string, input: unknown): Record
   if (!Array.isArray(artifacts) || artifacts.length > 10) throw new DevflowError('artifacts 必须是最多 10 个仓库内文件路径的数组');
   // 先验证所有输入，再复制；输入文件的文本永远不会被作为命令执行。
   const files = artifacts.map((file) => safeFile(root, file));
-  const dir = join(root, DF, 'evidence', id, event.evidence_id);
+  const dir = join(root, dfOf(root), 'evidence', id, event.evidence_id);
   let created = false;
   try {
     let parent = resolve(root);
@@ -162,7 +162,7 @@ export function recordEvidence(root: string, id: string, input: unknown): Record
     }
     if (files.length) { mkdirSync(dir, { recursive: true }); created = true; }
     files.forEach((file, i) => {
-      const path = `${DF}/evidence/${id}/${event.evidence_id}/${i}-${basename(file)}`;
+      const path = `${dfOf(root)}/evidence/${id}/${event.evidence_id}/${i}-${basename(file)}`;
       copyFileSync(file, join(root, path));
       event.artifacts.push({ path, hash: sha256(readFileSync(join(root, path))) });
     });
@@ -195,7 +195,7 @@ export function confirmEvidence(root: string, id: string, evidenceId: string): D
 function artifactProblem(root: string, event: Recorded): string | undefined {
   for (const artifact of event.artifacts) {
     try {
-      if (!artifact.path.startsWith(`${DF}/evidence/`) || sha256(readFileSync(safeFile(root, artifact.path))) !== artifact.hash) return `附件内容不一致：${artifact.path}`;
+      if (!artifact.path.startsWith(`${dfOf(root)}/evidence/`) || sha256(readFileSync(safeFile(root, artifact.path))) !== artifact.hash) return `附件内容不一致：${artifact.path}`;
     } catch { return `附件不存在或无效：${artifact.path}`; }
   }
 }

@@ -14,7 +14,7 @@ import { addEvent, at, cli, commit, g, makeRepo, write } from './fixture.ts';
 
 const ID = 'gap-case';
 
-/** devflow 仓库 + 兄弟代码仓库（已有一次提交），code_roots 指向它 */
+/** Tenon 项目仓库 + 兄弟代码仓库（已有一次提交），code_roots 指向它 */
 function twoRepos(extra = '') {
   const dir = makeRepo();
   const code = `${dir}-code`;
@@ -27,12 +27,12 @@ function twoRepos(extra = '') {
   write(code, 'test/app.test.js', 'assert.ok(true)\n');
   commit(code, 'init', true);
   const rel = `../${code.split('/').pop()}`;
-  write(dir, '.devflow/project.yaml', `schema_version: 1\nverify:\n  - name: tests\n    run: "true"\ncode_roots: ["${rel}"]\nexclude: [".env*"]\nenforce: warn\n${extra}`);
+  write(dir, '.tenon/project.yaml', `schema_version: 1\nverify:\n  - name: tests\n    run: "true"\ncode_roots: ["${rel}"]\nexclude: [".env*"]\nenforce: warn\n${extra}`);
   return { dir, code, rel };
 }
 
 function change(dir: string, paths: string[], tasks = 'schema_version: 1\ntasks:\n  - id: T1\n    title: 改代码\n') {
-  const base = `.devflow/changes/${ID}`;
+  const base = `.tenon/changes/${ID}`;
   write(dir, `${base}/change.yaml`, `schema_version: ${tasks.startsWith('schema_version: 2') ? '2\nmin_cli_version: 0.2.0' : '1'}\ntitle: 跨仓库\naffected_paths: ${JSON.stringify(paths)}\nsummary: [跨仓库改动]\n`);
   write(dir, `${base}/proposal.md`, '# 提案\n\n改代码仓库。\n');
   write(dir, `${base}/tasks.yaml`, tasks);
@@ -78,7 +78,7 @@ function withRun(log = 'ok 1 - 普通用户被拒绝\n# pass 1\n') {
   change(r.dir, [`${r.rel}/src/**`], TASKS2);
   approve(r.dir, ID);
   addEvent(r.dir, ID, { type: 'apply-started', at: at(), head: headCommit(r.dir), approval_id: approvalCycle(r.dir, ID).approval_id });
-  const logFile = join(r.dir, '.devflow/runtime/verify', ID, '20261113T000000Z', 'tests.log');
+  const logFile = join(r.dir, '.tenon/runtime/verify', ID, '20261113T000000Z', 'tests.log');
   mkdirSync(join(logFile, '..'), { recursive: true });
   writeFileSync(logFile, log);
   addEvent(r.dir, ID, { type: 'verified', at: at(), run_id: 'run-1', approval_id: approvalCycle(r.dir, ID).approval_id, diff_hash: worktreeHash(r.dir), result: 'pass', checks: [{ name: 'tests', exit: 0, log_hash: sha256(Buffer.from(log)) }] });
@@ -160,7 +160,7 @@ test('AC4 已开工且最后事件早于阈值时 status 行尾带停滞标记�
   assert.match(cli(startedAgo(3, 'stale_hours: 2\n'), 'status').stdout, /停滞 3 小时/);
   assert.doesNotMatch(cli(startedAgo(30, 'stale_hours: 48\n'), 'status').stdout, /停滞/);
   for (const bad of ['0', '-1', '"x"']) {
-    write(dir, '.devflow/project.yaml', `schema_version: 1\nverify: []\nstale_hours: ${bad}\n`);
+    write(dir, '.tenon/project.yaml', `schema_version: 1\nverify: []\nstale_hours: ${bad}\n`);
     assert.match(validateProject(dir).map((i) => i.message).join('|'), /stale_hours/);
   }
 });
@@ -177,7 +177,7 @@ test('AC7 init 给代码仓库装带标记的钩子，已有其他钩子时不�
   const { dir, code, rel } = twoRepos();
   const r = init(dir);
   assert.equal(r.codeHooks[0].hook, 'installed');
-  assert.match(readFileSync(hookFile(code), 'utf8'), /# devflow-hook[\s\S]*--project/);
+  assert.match(readFileSync(hookFile(code), 'utf8'), /# tenon-hook[\s\S]*--project/);
   assert.equal(init(dir).codeHooks[0].hook, 'updated');
   writeFileSync(hookFile(code), '#!/bin/sh\necho mine\n');
   assert.equal(init(dir).codeHooks[0].hook, 'foreign');
@@ -198,8 +198,8 @@ test('AC7 代码仓库暂存未开工变更的文件：strict 拒绝提交、war
   assert.equal(warn.status, 0, warn.stderr);
   assert.match(warn.stderr, new RegExp(`变更 ${ID} 的影响路径`));
 
-  const project = readFileSync(join(dir, '.devflow/project.yaml'), 'utf8');
-  write(dir, '.devflow/project.yaml', project.replace('enforce: warn', 'enforce: strict'));
+  const project = readFileSync(join(dir, '.tenon/project.yaml'), 'utf8');
+  write(dir, '.tenon/project.yaml', project.replace('enforce: warn', 'enforce: strict'));
   assert.throws(() => g(code, 'commit', '-qm', 'blocked'));
   assert.ok(existsSync(join(code, 'src/app.js')));
 

@@ -45,13 +45,13 @@ test('formatRequirement：需求名、约束、场景表；AND 并入 THEN；无
 test('审查页：规范按场景表、任务逐条列出验收条件、带哈希的批准命令；render 成功', () => {
   const dir = makeRepo();
   writeChange(dir, ID);
-  write(dir, `.devflow/changes/${ID}/tasks.yaml`, 'schema_version: 1\ntasks:\n  - id: T1\n    title: 定义角色\n    acceptance:\n      - 甲\n      - 乙\n      - 丙\n  - id: T2\n    title: 接口加判断\n    depends_on: [T1]\n');
+  write(dir, `.tenon/changes/${ID}/tasks.yaml`, 'schema_version: 1\ntasks:\n  - id: T1\n    title: 定义角色\n    acceptance:\n      - 甲\n      - 乙\n      - 丙\n  - id: T2\n    title: 接口加判断\n    depends_on: [T1]\n');
   const { draft, hash } = buildDraft(dir, ID);
   assert.match(draft, /\| 普通用户访问 \| USER 角色请求 \/api\/users \| 返回 403 \|/);
   assert.match(draft, /\*\*T1 定义角色\*\*\n\n- 甲\n- 乙\n- 丙/);
   assert.match(draft, /\*\*T2 接口加判断\*\*　依赖：T1\n\n（未写验收条件）/);
   assert.match(draft, /\[T1 定义角色\] -> \[T2 接口加判断\]/);
-  assert.ok(draft.includes(`devflow approve ${ID} --hash ${hash.slice(7, 19)}`));
+  assert.ok(draft.includes(`tenon approve ${ID} --hash ${hash.slice(7, 19)}`));
   assert.ok(existsSync(render(dir, ID).file));
 });
 
@@ -59,7 +59,7 @@ test('approve --hash：一致时不问 y 直接批准；不一致、太短时拒
   const dir = makeRepo();
   writeChange(dir, ID);
   const prefix = buildDraft(dir, ID).hash.slice(7, 19);
-  const events = join(dir, `.devflow/changes/${ID}/events.jsonl`);
+  const events = join(dir, `.tenon/changes/${ID}/events.jsonl`);
   const ev = () => (existsSync(events) ? readFileSync(events, 'utf8') : '');
 
   assert.match(cli(dir, 'approve', ID, '--hash', prefix).stderr, /交互终端/);
@@ -67,15 +67,15 @@ test('approve --hash：一致时不问 y 直接批准；不一致、太短时拒
   const typo = tty(dir, null, 'approve', ID, '--hash', '0'.repeat(12)).stdout;
   assert.match(typo, /不一致[\s\S]*被修改[\s\S]*复制/);
   assert.equal(ev(), '');
-  append(dir, `.devflow/changes/${ID}/proposal.md`, '审查后又改了。\n');
+  append(dir, `.tenon/changes/${ID}/proposal.md`, '审查后又改了。\n');
   const stale = tty(dir, null, 'approve', ID, '--hash', prefix);
-  assert.match(stale.stdout, /不一致[\s\S]*devflow render/);
+  assert.match(stale.stdout, /不一致[\s\S]*tenon render/);
   assert.equal(ev(), '');
 
   const fresh = buildDraft(dir, ID).hash.slice(7, 19);
   const ok = tty(dir, null, 'approve', ID, '--hash', fresh);
   assert.doesNotMatch(ok.stdout, /输入 y/);
-  assert.match(ok.stdout, /已批准[\s\S]*devflow-apply/);
+  assert.match(ok.stdout, /已批准[\s\S]*tenon-apply/);
   assert.equal(deriveStatus(dir, ID).status, 'approved');
 });
 
@@ -89,7 +89,7 @@ test('长段落：超过 3 句 warn 定位首行；列表、表格、代码块�
 
   const dir = makeRepo();
   writeChange(dir, ID);
-  write(dir, `.devflow/changes/${ID}/design.md`, `# 设计\n\n${long}\n`);
+  write(dir, `.tenon/changes/${ID}/design.md`, `# 设计\n\n${long}\n`);
   const r = cli(dir, 'validate', ID);
   assert.equal(r.status, 0);
   assert.match(r.stderr, /design\.md:3: 段落有 5 句/);
@@ -98,7 +98,7 @@ test('长段落：超过 3 句 warn 定位首行；列表、表格、代码块�
 test('首屏：待拍板事项写成 ask 块、方案要点成列表；summary 缺失只提醒，decisions 格式错误报错', () => {
   const dir = makeRepo();
   writeChange(dir, ID);
-  const yaml = (extra: string) => write(dir, `.devflow/changes/${ID}/change.yaml`, `schema_version: 1\ntitle: 新增角色权限\naffected_paths:\n  - backend/**\n${extra}`);
+  const yaml = (extra: string) => write(dir, `.tenon/changes/${ID}/change.yaml`, `schema_version: 1\ntitle: 新增角色权限\naffected_paths:\n  - backend/**\n${extra}`);
   yaml('');
   assert.match(cli(dir, 'validate', ID).stderr, /change\.yaml: 没有 summary/);
 
@@ -125,12 +125,12 @@ test('重新批准：批准差异只列改动的行，没改的面板标注与�
   const { approve } = await import('../src/status.ts');
   const dir = makeRepo();
   writeChange(dir, ID);
-  write(dir, `.devflow/changes/${ID}/change.yaml`, 'schema_version: 2\nmin_cli_version: 0.2.0\ntitle: 新格式\naffected_paths: [backend/**]\nsummary: [要点]\n');
-  write(dir, `.devflow/changes/${ID}/tasks.yaml`, 'schema_version: 2\ntasks:\n  - id: T1\n    title: 人工验收\n    acceptance:\n      - id: AC1\n        text: 已检查管理员页面\n        method: manual\n');
-  write(dir, `.devflow/changes/${ID}/design.md`, '# 设计\n\n## 接口\n\n- 第一行\n- 第二行\n- 第三行\n- 第四行\n- 第五行\n- 第六行\n');
+  write(dir, `.tenon/changes/${ID}/change.yaml`, 'schema_version: 2\nmin_cli_version: 0.2.0\ntitle: 新格式\naffected_paths: [backend/**]\nsummary: [要点]\n');
+  write(dir, `.tenon/changes/${ID}/tasks.yaml`, 'schema_version: 2\ntasks:\n  - id: T1\n    title: 人工验收\n    acceptance:\n      - id: AC1\n        text: 已检查管理员页面\n        method: manual\n');
+  write(dir, `.tenon/changes/${ID}/design.md`, '# 设计\n\n## 接口\n\n- 第一行\n- 第二行\n- 第三行\n- 第四行\n- 第五行\n- 第六行\n');
   assert.doesNotMatch(buildDraft(dir, ID).draft, /批准差异/); // 首次审查没有差异面板
   approve(dir, ID);
-  write(dir, `.devflow/changes/${ID}/design.md`, '# 设计\n\n## 接口\n\n- 第一行\n- 第二行\n- 第三行\n- 第四行\n- 第五行\n- 第六行改过\n');
+  write(dir, `.tenon/changes/${ID}/design.md`, '# 设计\n\n## 接口\n\n- 第一行\n- 第二行\n- 第三行\n- 第四行\n- 第五行\n- 第六行改过\n');
   const { draft } = buildDraft(dir, ID);
   assert.match(draft, /## 批准差异（1 个文件，相对上次批准）/);
   assert.match(draft, /```diff\n@@[^\n]*\n[\s\S]*-- 第六行\n\+- 第六行改过\n```/);

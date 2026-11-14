@@ -4,7 +4,7 @@ import { dirname, join, resolve } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { evidenceIssues, evidenceMatrix } from './evidence.ts';
 import {
-  DF, DevflowError, appendEvent, parseEvents, changedPaths, currentSpecHash, git, hashFiles, headCommit, readEvents,
+  dfOf, DevflowError, appendEvent, parseEvents, changedPaths, currentSpecHash, git, hashFiles, headCommit, readEvents,
   requireChange, requireInit, reviewedFiles, specCaps, worktreeHash, changeSchema, approvalCycle, doneTasks, sha256, codeRoots, splitPaths, staleLimit, type DevflowEvent,
 } from './core.ts';
 import { loadChangeMeta, loadTasks, validateChange } from './validate.ts';
@@ -14,7 +14,7 @@ export interface ArchivedChange { id: string; status: 'archived'; archived_at: s
 
 /** changes/archive/ 下的已归档变更；归档时间取事件日志最后一条 archived 事件 */
 export function listArchived(root: string): ArchivedChange[] {
-  const dir = join(root, DF, 'changes', 'archive');
+  const dir = join(root, dfOf(root), 'changes', 'archive');
   if (!existsSync(dir)) return [];
   return readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).sort().map((id) => {
     let at: string | null = null;
@@ -134,7 +134,7 @@ export function prepareApproval(root: string, id: string): Of<'approved'> {
   requireInit(root);
   requireChange(root, id);
   const errors = validateChange(root, id, true).filter((i) => i.level === 'error');
-  if (errors.length) throw new DevflowError(`变更校验有 ${errors.length} 个错误，不能批准`, `运行 devflow validate ${id} 查看`);
+  if (errors.length) throw new DevflowError(`变更校验有 ${errors.length} 个错误，不能批准`, `运行 tenon validate ${id} 查看`);
   const st = deriveStatus(root, id);
   if (st.status !== 'draft' && st.status !== 'rebase_required') {
     throw new DevflowError(`当前状态为 ${st.status}，不需要批准`, st.reason);
@@ -162,7 +162,7 @@ export function approve(root: string, id: string, expectHash?: string, decisions
   const ev = prepareApproval(root, id);
   if (decisions?.length) ev.decisions = decisions;
   if (expectHash && ev.hash !== expectHash) {
-    throw new DevflowError('确认期间被审文件发生了变化，已取消批准', `重新运行 devflow approve ${id}`);
+    throw new DevflowError('确认期间被审文件发生了变化，已取消批准', `重新运行 tenon approve ${id}`);
   }
   if (changeSchema(root, id) === 2) {
     const approvalId = randomUUID();
@@ -198,7 +198,7 @@ export function decisionAnswers(root: string, id: string): { question: string; a
 }
 
 interface SnapshotFile { path: string; content: string }
-const snapshotFile = (root: string, id: string, approvalId: string) => join(root, DF, 'reviews', id, approvalId, 'snapshot.json');
+const snapshotFile = (root: string, id: string, approvalId: string) => join(root, dfOf(root), 'reviews', id, approvalId, 'snapshot.json');
 
 function readSnapshot(root: string, id: string): SnapshotFile[] | null {
   const approved = approvalCycle(root, id).approved;

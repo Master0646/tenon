@@ -2,7 +2,7 @@
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parse } from 'yaml';
-import { DF, changeRel, git, repoFiles, rootOf, type Issue } from './core.ts';
+import { dfOf, changeRel, git, repoFiles, rootOf, type Issue } from './core.ts';
 import { mergeSpec, parseDelta } from './spec.ts';
 
 const EX_PROJECT = `schema_version: 1
@@ -63,7 +63,7 @@ function loadYaml(root: string, rel: string, issues: Issue[], hint: string): unk
 
 export function validateProject(root: string): Issue[] {
   const issues: Issue[] = [];
-  const file = `${DF}/project.yaml`;
+  const file = `${dfOf(root)}/project.yaml`;
   const err = (message: string) => issues.push({ level: 'error', file, message, hint: `示例：\n${EX_PROJECT}` });
   const p = loadYaml(root, file, issues, `示例：\n${EX_PROJECT}`);
   if (p === undefined) {
@@ -100,7 +100,7 @@ export function validateProject(root: string): Issue[] {
 /** 读取 project.yaml 的 enforce；文件无效时按 warn 处理（错误另由 validateProject 报告） */
 export function enforceLevel(root: string): 'warn' | 'strict' {
   try {
-    return parse(readFileSync(join(root, DF, 'project.yaml'), 'utf8'))?.enforce === 'strict' ? 'strict' : 'warn';
+    return parse(readFileSync(join(root, dfOf(root), 'project.yaml'), 'utf8'))?.enforce === 'strict' ? 'strict' : 'warn';
   } catch {
     return 'warn';
   }
@@ -133,7 +133,7 @@ export interface TaskDef { id: string; title: string; depends_on?: string[]; acc
 /** change.yaml 合法时返回内容，否则返回 null */
 export function loadChangeMeta(root: string, id: string): ChangeMeta | null {
   const issues: Issue[] = [];
-  const m = loadYaml(root, `${changeRel(id)}/change.yaml`, issues, '');
+  const m = loadYaml(root, `${changeRel(root, id)}/change.yaml`, issues, '');
   if (!isObj(m) || !isStr(m.title) || !isStrList(m.affected_paths)) return null;
   // 格式不对的 summary / decisions 由 validate 报错；这里按"没有"处理，调用方不必再判断
   return {
@@ -145,7 +145,7 @@ export function loadChangeMeta(root: string, id: string): ChangeMeta | null {
 
 export function loadTasks(root: string, id: string): TaskDef[] {
   const issues: Issue[] = [];
-  const t = loadYaml(root, `${changeRel(id)}/tasks.yaml`, issues, '');
+  const t = loadYaml(root, `${changeRel(root, id)}/tasks.yaml`, issues, '');
   return isObj(t) && Array.isArray(t.tasks) ? t.tasks.filter((x: any) => isObj(x) && isStr(x.id)) : [];
 }
 
@@ -155,7 +155,7 @@ export function loadTasks(root: string, id: string): TaskDef[] {
  */
 export function validateChange(root: string, id: string, complete: boolean): Issue[] {
   const issues: Issue[] = [];
-  const base = changeRel(id);
+  const base = changeRel(root, id);
   const err = (file: string, message: string, hint?: string) => issues.push({ level: 'error', file: `${base}/${file}`, message, hint });
 
   // change.yaml
@@ -175,8 +175,8 @@ export function validateChange(root: string, id: string, complete: boolean): Iss
       for (const p of m.affected_paths as string[]) {
         // 代码仓库里的路径：以某个 code_roots 项开头，去掉前缀后按仓库内路径检查
         const inner = rootOf(root, p)?.rest ?? p;
-        if (!inner.trim() || inner.startsWith('/') || inner.split('/').includes('..') || inner === DF || inner.startsWith(`${DF}/`)) {
-          err('change.yaml', `affected_paths 路径无效：${JSON.stringify(p)}（须为本仓库或 code_roots 声明的仓库内的相对路径，且不在 ${DF}/ 下）`, hc);
+        if (!inner.trim() || inner.startsWith('/') || inner.split('/').includes('..') || inner === dfOf(root) || inner.startsWith(`${dfOf(root)}/`)) {
+          err('change.yaml', `affected_paths 路径无效：${JSON.stringify(p)}（须为本仓库或 code_roots 声明的仓库内的相对路径，且不在 ${dfOf(root)}/ 下）`, hc);
         }
       }
     }
@@ -199,7 +199,7 @@ export function validateChange(root: string, id: string, complete: boolean): Iss
     if (complete && !t.tasks.length) err('tasks.yaml', 'tasks 不能为空', ht);
     if (isObj(m) && t.schema_version !== m.schema_version) err('tasks.yaml', 'tasks 与 change 的 schema_version 必须一致');
     const acceptanceIds = new Set<string>();
-    const project = loadYaml(root, `${DF}/project.yaml`, issues, '检查 verify 配置');
+    const project = loadYaml(root, `${dfOf(root)}/project.yaml`, issues, '检查 verify 配置');
     const checks = isObj(project) && Array.isArray(project.verify) ? project.verify.map((v: any) => v.name) : [];
     const ids = new Set<string>();
     t.tasks.forEach((x: any, i: number) => {
@@ -218,7 +218,7 @@ export function validateChange(root: string, id: string, complete: boolean): Iss
           if (a.method === 'automated' && !checks.includes(a.check)) err('tasks.yaml', `${a.id}.check 不在 project.verify 中`);
         }
       }
-      if ('status' in x || 'done' in x) err('tasks.yaml', `${x.id} 不能包含进度字段：进度由 devflow task done 记录在事件日志`);
+      if ('status' in x || 'done' in x) err('tasks.yaml', `${x.id} 不能包含进度字段：进度由 tenon task done 记录在事件日志`);
     });
     const deps = new Map<string, string[]>();
     for (const x of t.tasks) if (isObj(x) && isStr(x.id)) deps.set(x.id, isStrList(x.depends_on) ? x.depends_on : []);
@@ -255,9 +255,9 @@ export function validateChange(root: string, id: string, complete: boolean): Iss
     for (const e of errors) issues.push({ level: 'error', file: `${base}/specs/${f}:${e.line}`, message: e.message, hint: hd });
     if (!errors.length) {
       const cap = f.split('/')[0];
-      const cur = join(root, DF, 'specs', cap, 'spec.md');
+      const cur = join(root, dfOf(root), 'specs', cap, 'spec.md');
       const merged = mergeSpec(cap, existsSync(cur) ? readFileSync(cur, 'utf8') : null, delta);
-      for (const m of merged.errors) err(`specs/${f}`, m, `当前规范：${DF}/specs/${cap}/spec.md`);
+      for (const m of merged.errors) err(`specs/${f}`, m, `当前规范：${dfOf(root)}/specs/${cap}/spec.md`);
     }
   }
   if (complete && !specFiles.length) {
