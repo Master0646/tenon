@@ -4,7 +4,7 @@ verify:
   - name: unit-tests
     run: pnpm -s test
   - name: typecheck
-    run: pnpm -s typecheck
+    run: 'pnpm -s typecheck && echo "typecheck: 0 errors"'
 #  - name: backend-test
 #    run: mvn -q test
 #    cwd: backend

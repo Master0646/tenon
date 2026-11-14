@@ -1,7 +1,0 @@
-schema_version: 2
-min_cli_version: 0.2.0
-title: 第二轮真实 Agent 评测覆盖 v2 证据边界
-affected_paths:
-  - eval/v2-agent-*
-  - eval/results/v2-agent-evaluation/**
-  - test/v2-agent-*.test.ts
