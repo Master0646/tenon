@@ -28,6 +28,31 @@ tenon --version
 
 > 从 DevFlow 升级：Tenon 只提供 `tenon` 命令。只有 `.devflow/` 的旧项目继续用它，批准和归档都有效；在项目里运行一次 `tenon init` 和 `tenon update`，hook 与 Agent 技能会换成 tenon 版本。详见使用手册「从 DevFlow 升级」。
 
+## 让 Agent 帮你安装并配置
+
+在要启用 Tenon 的项目里打开 Claude Code 或 Codex，把下面整段发给它。把 `<tenon 源码目录>` 换成本仓库的绝对路径。
+
+```text
+请在当前项目里安装并配置 Tenon。tenon 源码在 <tenon 源码目录>。按顺序做，每步把命令输出给我看：
+
+1. 检查环境：node --version 必须 ≥ 22；git 可用；当前目录是 Git 仓库且至少有一次提交（没有就停下告诉我，不要替我提交）。
+2. 安装 tenon：先运行 tenon --version。没有输出或版本低于源码目录 package.json 的 version 时，在源码目录运行 npm install && npm pack，再运行 npm install -g <源码目录>/tenon-<版本>.tgz，然后再次确认 tenon --version。全局安装被沙箱或权限拦住时，停下把要运行的命令告诉我，由我在自己的终端运行。
+3. 在项目根目录运行 tenon init。项目只用 Claude Code 就加 --agents claude，只用 Codex 就加 --agents codex，不确定就不加。已有别的 pre-commit hook 时 init 不会覆盖，把它提示要加的那一行告诉我。
+4. 代码不在本仓库、而在旁边的兄弟仓库时：问我有哪些仓库，在 .tenon/project.yaml 写 code_roots（路径相对本仓库根，每项是一个 Git 仓库的根），然后再运行一次 tenon init。
+5. 验证命令：读项目的构建配置（package.json、pom.xml、build.gradle、pyproject.toml、go.mod 等），列出你建议写进 .tenon/project.yaml 的 verify 条目（name、run、可选 cwd），说明每条依据。等我确认后再写入。这个文件由人维护，不要自己加我没确认的命令，也不要为了让验证通过而删减命令。
+6. 把验证命令生成的目录（dist/、target/、node_modules/ 等）补进 .gitignore，确认 .tenon/runtime/ 已被忽略。
+7. 运行 tenon doctor，逐条处理 ✗；! 只说明含义。"知识页为空"可以先不管。
+8. 汇报：生成了哪些文件、doctor 结果、还需要我做的事。不要提交。
+
+规则：tenon approve、tenon archive、tenon evidence confirm、tenon review 只能由人运行，不要执行，也不要访问审查台；不要手改 .tenon/specs/ 和任何 events.jsonl。
+```
+
+装好之后由你自己做三件事：
+
+1. 审一遍 Agent 写进 `.tenon/project.yaml` 的 `verify`。
+2. 用 Codex 时，重新打开 Codex，选择**信任**这个项目，再运行 `/hooks` 确认 `tenon guard` 钩子。不做这一步，Codex 的禁止规则和钩子都不生效。
+3. 提交：`git add -A && git commit -m "启用 Tenon"`，输出里应有 `✓ tenon check 通过`。
+
 ## 五分钟上手
 
 先完成上面的全局安装，确认 `tenon --version` 有输出。然后在一个已有提交的 Git 项目里：
@@ -48,13 +73,15 @@ tenon init
 8. **归档准备**：在 Agent 里说"用 tenon-archive 为变更 <id> 做归档准备"。它会更新知识页。
 9. **归档**：在审查台点「归档」，或在自己的终端运行 `tenon archive <id>`。规范增量合并进 `.tenon/specs/`，变更移到 `.tenon/changes/archive/`。
 
+以上说法按 Claude Code 写。用 Codex 时用 `$技能名` 调用，例如"`$tenon-propose` 提一个变更：……"；Codex 不能后台等待时，让它前台运行 `tenon wait <id> --timeout 300`。
+
 以后任何新会话，Agent 都能从 `.tenon/` 找回当时的需求、规范和设计原因。
 
 ## 人与 Agent 的分工
 
 | 谁 | 做什么 |
 | --- | --- |
-| 人 | 审查方案、`tenon approve`、提交代码、`tenon archive`、维护 `project.yaml` 中的验证命令 |
+| 人 | 审查方案、`tenon approve`、确认人工证据、提交代码、`tenon archive`、维护 `project.yaml` 中的验证命令 |
 | Agent | 读代码、写方案（propose）、实现与测试（apply）、更新知识页（archive 准备、scan）、带引用回答问题（ask） |
 | tenon | 校验、哈希批准、派生状态、运行验证命令、合并规范、渲染审查页、pre-commit 门禁 |
 
@@ -75,9 +102,14 @@ tenon init
 | `tenon apply <id> --start` | 记录开工 |
 | `tenon task done <id> <任务>` | 记录任务完成 |
 | `tenon verify <id>` | 运行 `project.yaml` 中的验证命令 |
+| `tenon resume <id>` | 显示当前进度、证据缺口与下一步（Agent 换会话后先看它） |
+| `tenon evidence add <id> --file <json>` | 记录验收证据 |
+| `tenon evidence confirm <id> <证据>` | 确认人工证据（只能由人在交互终端运行） |
 | `tenon archive <id>` | 合并规范并归档（只能由人在交互终端运行；中断后重跑即继续） |
 | `tenon wiki lint` | 校验知识页的引用、链接，并检查是否过期 |
 | `tenon check [--staged]` | 门禁检查（hook 与 CI 使用） |
+| `tenon guard` | 供 Codex 的 PreToolUse 钩子调用，拦截人专属命令和改 `specs/`、`events.jsonl` 的补丁 |
+| `tenon usage` / `improve` / `eval` | 本地使用记录、改进候选与评测，见下文 |
 
 所有命令支持 `--json`。
 
