@@ -1,0 +1,37 @@
+schema_version: 2
+min_cli_version: 0.2.0
+title: 补齐 Codex 适配：沙箱内可运行、防线与 Claude 对齐
+affected_paths:
+  - src/core.ts
+  - src/cli.ts
+  - src/agents.ts
+  - src/doctor.ts
+  - src/guard.ts
+  - templates/**
+  - test/**
+  - README.md
+  - docs/**
+  - AGENTS.md
+  - CLAUDE.md
+  - .agents/skills/**
+  - .claude/skills/**
+  - .codex/**
+summary:
+  - Codex 默认沙箱里 .git 只读，tenon status、resume 现在会崩溃；改后 Agent 侧命令不再写 .git，工作树哈希值不变。
+  - 工作树锁从 .git/ 移到数据目录的 runtime/ 下。
+  - 新增 tenon guard，并为 Codex 生成 .codex/hooks.json：拦截各种写法的人专属命令，以及改 specs/、events.jsonl 的补丁。
+  - 人专属命令检测到 Agent 环境变量时拒绝运行，即使是交互终端。
+  - 技能与入口说明改成两种 Agent 通用：给出前台等待的做法，去掉 Claude 专属的读文件要求。
+  - doctor 检查两种 Agent 的防线文件是否还在。
+  - 不做：Codex 评测脚本、Claude 侧改用钩子、让 tenon update 能在沙箱里运行。
+decisions:
+  - question: 人专属命令检测到 Agent 环境变量时是否拒绝？从 Agent 应用内置终端运行时可能被误拒。
+    options:
+      - 拒绝
+      - 不加这项检查
+    recommend: 拒绝
+  - question: Claude Code 一侧是否也装 tenon guard 钩子？
+    options:
+      - 只给 Codex 装（Claude 保持现有 deny 规则）
+      - 两边都装
+    recommend: 只给 Codex 装（Claude 保持现有 deny 规则）

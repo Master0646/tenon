@@ -155,5 +155,6 @@ tasks:
 ## 规则
 
 - 本技能不修改业务代码、不修改 `.tenon/specs/`、不运行 `tenon approve`。
+- 不能后台运行命令、或后台命令退出后不会被唤醒时：凡是说「在后台运行 `tenon wait <id>`」的地方，改为前台运行 `tenon wait <id> --timeout 300`；超时就结束本轮，请用户操作后回来说一声。
 - 每个任务的验收条件要能用测试或命令验证。
 - `affected_paths` 覆盖所有要改的代码，但不要用 `**` 覆盖整个仓库。代码在 `project.yaml` 的 `code_roots` 仓库里时，路径以该项开头，如 `../backend/src/main/**`。

@@ -7,6 +7,7 @@ import type { AddressInfo } from 'node:net';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { createInterface } from 'node:readline/promises';
 import { doctor } from './doctor.ts';
+import { guard } from './guard.ts';
 import { formatFeedback, markWaiting, takeFeedback, unreadCount } from './feedback.ts';
 import { parseArgs } from 'node:util';
 import { AGENTS, detectAgents, guessAgents, installAgents, parseAgents, type AgentResult } from './agents.ts';
@@ -65,6 +66,7 @@ const HELP = `tenon ${VERSION}
   archive <id>         合并规范增量并归档变更（只能由人在交互终端中运行；中断后重跑即继续）
   check [--staged]     门禁检查（pre-commit hook 与 CI 使用）
   check --staged --project <dir>  在 code_roots 的代码仓库里检查暂存改动（代码仓库的 hook 使用）
+  guard                供 Codex 的 PreToolUse 钩子调用：从标准输入读 JSON，拦截人专属命令和改 specs/、events.jsonl 的补丁
 `;
 
 const { values: opts, positionals } = parseArgs({
@@ -80,8 +82,10 @@ const [cmd, arg] = positionals;
 
 /** 人专属命令：Agent 的 shell 工具通常不是 TTY。这不是防篡改，只防 Agent 越级（见设计 §2.2） */
 function requireHuman(cmdName: string): void {
-  if (!process.stdin.isTTY || !process.stdout.isTTY) {
-    throw new DevflowError(`${cmdName} 只能由人在交互终端中运行`, '请在你自己的终端里执行该命令，不要让 Agent 代为执行');
+  // Codex 可以自己申请交互终端，所以再看 Agent 的 shell 里才有的环境变量
+  const agentEnv = ['CLAUDECODE', 'CODEX_SANDBOX', 'CODEX_THREAD_ID'].find((k) => process.env[k]);
+  if (agentEnv || !process.stdin.isTTY || !process.stdout.isTTY) {
+    throw new DevflowError(`${cmdName} 只能由人在交互终端中运行${agentEnv ? `（检测到 Agent 环境变量 ${agentEnv}）` : ''}`, '请在你自己的终端里执行该命令，不要让 Agent 代为执行');
   }
 }
 
@@ -137,6 +141,13 @@ async function dispatch(): Promise<number> {
       }
     }
     return findings.some((f) => f.level === 'error') ? 1 : 0;
+  }
+  if (cmd === 'guard') {
+    let stdin = '';
+    try { stdin = readFileSync(0, 'utf8'); } catch { /* 读不到输入：放行 */ }
+    const out = guard(stdin);
+    if (out) console.log(out);
+    return 0;
   }
   const root = repoRoot(process.cwd());
 
@@ -420,7 +431,7 @@ async function dispatch(): Promise<number> {
 async function main(): Promise<number> {
   let root: string;
   try { root = repoRoot(process.cwd()); } catch { return dispatch(); }
-  const internal = ['usage', 'improve', 'eval'].includes(cmd ?? '');
+  const internal = ['usage', 'improve', 'eval', 'guard'].includes(cmd ?? '');
   const changeId = cmd === 'task' || cmd === 'evidence' ? positionals[2] : arg;
   const state = () => { try { return changeId && /^[a-z0-9][a-z0-9-]*$/.test(changeId) ? deriveStatus(root, changeId) : undefined; } catch { return undefined; } };
   const before = state();

@@ -72,7 +72,7 @@ export function doctor(cwd: string, nodeVersion = process.versions.node): Findin
   if (projectErrors.length) add('error', 'project.yaml', projectErrors.map((i) => i.message).join('；'), 'tenon check 查看详情');
   else {
     const p = readFileSync(join(root, dfOf(root), 'project.yaml'), 'utf8');
-    if (/^verify:\s*\[\s*\]\s*$/m.test(p)) add('warn', 'project.yaml', '没有声明验证命令，tenon verify 的结果只会是 unknown', '在 ${dfOf(root)}/project.yaml 的 verify 中加入测试命令（由人维护）');
+    if (/^verify:\s*\[\s*\]\s*$/m.test(p)) add('warn', 'project.yaml', '没有声明验证命令，tenon verify 的结果只会是 unknown', `在 ${dfOf(root)}/project.yaml 的 verify 中加入测试命令（由人维护）`);
     else add('ok', 'project.yaml', '已声明验证命令');
   }
 

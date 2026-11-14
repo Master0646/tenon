@@ -32,6 +32,23 @@ export const CLAUDE_DENY = [
   ]),
 ];
 
+const CLAUDE_SETTINGS = '.claude/settings.json';
+const CODEX_RULES = '.codex/rules/tenon.rules';
+const CODEX_HOOKS = '.codex/hooks.json';
+// Codex 的 PreToolUse 钩子：rules 只管命令前缀，换个写法就漏，也不管文件编辑（apply_patch）
+// 命令不写绝对路径：hooks.json 会提交进仓库，给多台机器用
+export const CODEX_HOOK = { matcher: 'Bash|apply_patch', hooks: [{ type: 'command', command: 'tenon guard' }] };
+const hasGuard = (hooks: any): boolean => JSON.stringify(hooks?.hooks?.PreToolUse ?? '').includes(CODEX_HOOK.hooks[0].command);
+
+/** 读 JSON 对象：文件不存在给 {}，不是合法的 JSON 对象给 null */
+function readJsonObject(file: string): any {
+  if (!existsSync(file)) return {};
+  try {
+    const v = JSON.parse(readFileSync(file, 'utf8'));
+    return v && typeof v === 'object' && !Array.isArray(v) ? v : null;
+  } catch { return null; }
+}
+
 export function parseAgents(value: string | undefined): Agent[] {
   if (!value) return [...AGENTS];
   const list = value.split(',').map((s) => s.trim()).filter(Boolean);
@@ -81,6 +98,15 @@ export function agentDrift(root: string, agent: Agent): string[] {
   const entry = readFileSync(join(TPL, 'entry.md'), 'utf8');
   const text = existsSync(ef) ? readFileSync(ef, 'utf8') : '';
   if (upsertBlock(text, entry) !== text) drift.push(ENTRY_FILE[agent]);
+  // 防线文件：被删或被改时技能还在，但 Agent 越级不再被拦
+  if (agent === 'claude') {
+    const deny = readJsonObject(join(root, CLAUDE_SETTINGS))?.permissions?.deny;
+    if (!Array.isArray(deny) || CLAUDE_DENY.some((r) => !deny.includes(r))) drift.push(CLAUDE_SETTINGS);
+  } else {
+    const rules = join(root, CODEX_RULES);
+    if (!existsSync(rules) || readFileSync(rules, 'utf8') !== readFileSync(join(TPL, 'tenon.rules'), 'utf8')) drift.push(CODEX_RULES);
+    if (!hasGuard(readJsonObject(join(root, CODEX_HOOKS)))) drift.push(CODEX_HOOKS);
+  }
   return drift;
 }
 
@@ -117,37 +143,38 @@ export function installAgents(root: string, agents: Agent[]): AgentResult {
     written.push(ENTRY_FILE[a]);
   }
 
+  const writeJson = (rel: string, value: unknown) => {
+    mkdirSync(dirname(join(root, rel)), { recursive: true });
+    writeFileSync(join(root, rel), JSON.stringify(value, null, 2) + '\n');
+    written.push(rel);
+  };
+
   if (agents.includes('claude')) {
-    const rel = '.claude/settings.json';
-    const f = join(root, rel);
-    let settings: any = {};
-    let ok = true;
-    if (existsSync(f)) {
-      try {
-        settings = JSON.parse(readFileSync(f, 'utf8'));
-        if (!settings || typeof settings !== 'object' || Array.isArray(settings)) throw new Error();
-      } catch {
-        ok = false;
-        warnings.push(`${rel} 不是合法的 JSON 对象，未写入禁止规则。请手动在 permissions.deny 中加入：${CLAUDE_DENY.join(', ')}`);
-      }
-    }
-    if (ok) {
+    const settings = readJsonObject(join(root, CLAUDE_SETTINGS));
+    if (!settings) warnings.push(`${CLAUDE_SETTINGS} 不是合法的 JSON 对象，未写入禁止规则。请手动在 permissions.deny 中加入：${CLAUDE_DENY.join(', ')}`);
+    else {
       settings.permissions ??= {};
       const deny: unknown[] = Array.isArray(settings.permissions.deny) ? settings.permissions.deny : [];
       settings.permissions.deny = [...deny, ...CLAUDE_DENY.filter((r) => !deny.includes(r))];
-      mkdirSync(dirname(f), { recursive: true });
-      writeFileSync(f, JSON.stringify(settings, null, 2) + '\n');
-      written.push(rel);
+      writeJson(CLAUDE_SETTINGS, settings);
     }
   }
 
   if (agents.includes('codex')) {
-    const rel = '.codex/rules/tenon.rules';
     mkdirSync(join(root, '.codex/rules'), { recursive: true });
-    cpSync(join(TPL, 'tenon.rules'), join(root, rel));
+    cpSync(join(TPL, 'tenon.rules'), join(root, CODEX_RULES));
     written.push(...removeOldGenerated(root, '.codex/rules'));
-    written.push(rel);
-    warnings.push('Codex 只在项目 .codex/ 被信任时加载 rules；首次在本项目使用 Codex 时请选择信任');
+    written.push(CODEX_RULES);
+    const hooks = readJsonObject(join(root, CODEX_HOOKS));
+    if (!hooks) warnings.push(`${CODEX_HOOKS} 不是合法的 JSON 对象，未登记钩子。请手动在 hooks.PreToolUse 中加入：${JSON.stringify(CODEX_HOOK)}`);
+    else {
+      if (!hasGuard(hooks)) {
+        hooks.hooks ??= {};
+        hooks.hooks.PreToolUse = [...(Array.isArray(hooks.hooks.PreToolUse) ? hooks.hooks.PreToolUse : []), CODEX_HOOK];
+      }
+      writeJson(CODEX_HOOKS, hooks);
+    }
+    warnings.push('Codex 只在项目 .codex/ 被信任时加载 rules 和 hooks；首次在本项目使用 Codex 时请选择信任，并用 /hooks 确认 tenon guard 钩子');
   }
   return { written, warnings };
 }

@@ -39,6 +39,6 @@ description: 按已批准的 Tenon 变更实现代码：开工、按依赖顺序
 - 只改 `change.yaml` 中 `affected_paths` 覆盖的代码；确实需要改其他文件时，先告诉用户。
 - 不运行 `tenon approve`、`tenon archive`、`tenon evidence confirm`、`tenon review`，不访问审查台的地址；不提交、不推送，除非用户明确要求。
 - 没有实际运行过的检查，不要说"已验证"。
-- 读文件用 Agent 自带的读文件工具（如 Read），一次读一个文件；不要用 `for … cat`、`cat a b c` 之类的 shell 命令批量读，它们常被权限规则拒绝。
+- 不能后台运行命令、或后台命令退出后不会被唤醒时：凡是说「在后台运行 `tenon wait <id>`」的地方，改为前台运行 `tenon wait <id> --timeout 300`；超时就结束本轮，请用户操作后回来说一声。
 
 - 同工作树只开工一个新格式变更；需并行时用现有 worktree 能力隔离，不放宽代码验证哈希。

@@ -36,7 +36,7 @@ tenon --version
 tenon init
 ```
 
-它会创建 `.tenon/`，安装 pre-commit hook，并为检测到的 Agent 生成技能与说明：Claude Code（`.claude/skills/`、`CLAUDE.md`）、Codex（`.agents/skills/`、`AGENTS.md`、`.codex/rules/`）。一个都检测不到时两个都装；用 `--agents claude` 或 `--agents codex` 指定。然后：
+它会创建 `.tenon/`，安装 pre-commit hook，并为检测到的 Agent 生成技能与说明：Claude Code（`.claude/skills/`、`CLAUDE.md`）、Codex（`.agents/skills/`、`AGENTS.md`、`.codex/rules/`、`.codex/hooks.json`）。一个都检测不到时两个都装；用 `--agents claude` 或 `--agents codex` 指定。然后：
 
 1. **声明验证命令**（由人维护）：编辑 `.tenon/project.yaml` 的 `verify`，例如 `mvn -q test`、`npm test`。只有这里声明的命令会被 `tenon verify` 运行，验证结果决定变更能否归档。
 2. **自检**：`tenon doctor`。
@@ -94,8 +94,8 @@ tenon init
 ## 安全模型与已知限制
 
 - **防的是失误与越级，不防恶意篡改。** 有写权限的 Agent 理论上能改任何文件。
-- **人专属命令**：`approve`、`archive`、`evidence confirm`、`review` 要求交互终端（TTY）。Claude Code 的 shell 不是 TTY，此防线有效；Codex 可以让模型选择分配 TTY，此防线在 Codex 下**可被绕过**。
-- **禁止规则**：`init` 为 Claude Code 写入 deny 规则（已实测拦截 `tenon approve`），为 Codex 写入 `.codex/rules/tenon.rules`（只在项目被信任时加载，属实验性功能）。
+- **人专属命令**：`approve`、`archive`、`evidence confirm`、`review` 要求交互终端（TTY），检测到 Agent 的环境变量（`CLAUDECODE`、`CODEX_SANDBOX`、`CODEX_THREAD_ID`）时也拒绝。Claude Code 的 shell 不是 TTY；Codex 可以让模型申请 TTY，所以多了环境变量这一层。Agent 清掉变量仍可绕过，它只防越级。
+- **禁止规则**：`init` 为 Claude Code 写入 deny 规则（已实测拦截 `tenon approve`），为 Codex 写入 `.codex/rules/tenon.rules` 和 `.codex/hooks.json`。钩子调用 `tenon guard`，拦截各种写法的人专属命令，以及改 `specs/`、`events.jsonl` 的补丁。两者只在项目被信任时加载，钩子还要在 Codex 里用 `/hooks` 确认一次。
 - **审查台**只监听 `127.0.0.1`，所有地址都带启动时生成的随机令牌，令牌只打印在你的终端里；令牌不对或 Host 不是本机一律返回 404。批准时页面提交它显示的内容哈希，与当前内容不一致就拒绝。能读到你终端输出或浏览器历史的进程可以拿到令牌，所以它和 TTY 检查一样只防越级。
 - **最后一道防线**是 git：pre-commit 与 CI 中的 `tenon check` 会拒绝手改 `.tenon/specs/`、改写已提交的事件日志等行为；批准记录随 `events.jsonl` 进入代码审查。
 - `check --staged` 对规范、事件日志及受控快照/附件读取暂存区；方案格式和业务状态仍从工作树派生，部分暂存时应核对对应材料。

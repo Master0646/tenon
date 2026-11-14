@@ -1,0 +1,64 @@
+schema_version: 2
+tasks:
+  - id: T1
+    title: tenon 自身不再写 .git：临时对象目录算哈希，锁移到 runtime/
+    acceptance:
+      - id: AC1
+        text: .git 不可写时 status、resume、apply --start、task done 正常运行
+        method: automated
+        check: unit-tests
+      - id: AC2
+        text: 工作树哈希与改动前的算法结果相同，独立 worktree 仍不互锁
+        method: automated
+        check: unit-tests
+  - id: T2
+    title: 新增 tenon guard，并为 Codex 生成 .codex/hooks.json
+    acceptance:
+      - id: AC3
+        text: guard 拒绝四种写法的人专属命令和改 specs、events.jsonl 的补丁，放行正常命令、搜索命令和损坏输入
+        method: automated
+        check: unit-tests
+      - id: AC4
+        text: init 与 update 为 Codex 写入 hooks.json，保留已有钩子，重复运行不重复登记，文件损坏时不改动并给出提示
+        method: automated
+        check: unit-tests
+  - id: T3
+    title: 人专属命令检测到 Agent 环境变量时拒绝
+    acceptance:
+      - id: AC5
+        text: 环境里有 CLAUDECODE、CODEX_SANDBOX 或 CODEX_THREAD_ID 时，四条人专属命令被拒绝并说明原因
+        method: automated
+        check: unit-tests
+  - id: T4
+    title: 技能与入口说明改成两种 Agent 通用，并重新生成本仓库的 Agent 文件
+    acceptance:
+      - id: AC6
+        text: 提到后台运行 tenon wait 的技能和入口说明都给出前台等待的做法
+        method: automated
+        check: unit-tests
+      - id: AC7
+        text: tenon-apply 技能不再要求用 Read 工具读文件，本仓库的 Agent 文件与模板一致
+        method: automated
+        check: unit-tests
+  - id: T5
+    title: doctor 检查防线文件，更新 README 与使用手册
+    depends_on: [T2]
+    acceptance:
+      - id: AC8
+        text: 防线文件缺失或与当前版本不一致时 doctor 报告 warn 并提示 tenon update
+        method: automated
+        check: unit-tests
+      - id: AC9
+        text: README 与使用手册的 Agent 对比写明 Codex 钩子防线、需要信任项目并确认钩子
+        method: automated
+        check: unit-tests
+  - id: T6
+    title: 在真实 Codex 会话里验收
+    depends_on: [T1, T2, T3, T4, T5]
+    acceptance:
+      - id: AC10
+        text: 默认沙箱的 Codex 会话里，status、resume、apply --start、task done、前台 tenon wait 不需要提权就能运行
+        method: manual
+      - id: AC11
+        text: 信任项目并确认钩子后，Codex 运行 npx tenon approve 和改 specs 的补丁都被拦下
+        method: manual

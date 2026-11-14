@@ -8,7 +8,7 @@ import { check } from '../src/check.ts';
 import { doctor } from '../src/doctor.ts';
 import { buildDraft } from '../src/render.ts';
 import { deriveStatus } from '../src/status.ts';
-import { CLI, cli, makeRepo, write, writeChange } from './fixture.ts';
+import { CLI, HUMAN_ENV, cli, makeRepo, write, writeChange } from './fixture.ts';
 
 const ID = 'role-access';
 const shq = (s: string) => `'${s.replaceAll("'", `'\\''`)}'`;
@@ -17,7 +17,7 @@ const shq = (s: string) => `'${s.replaceAll("'", `'\\''`)}'`;
 function tty(dir: string, answer: string, ...args: string[]) {
   const cmd = [process.execPath, CLI, ...args].map(shq).join(' ');
   const pty = process.platform === 'darwin' ? `script -q /dev/null ${cmd}` : `script -qec ${shq(cmd)} /dev/null`;
-  return spawnSync('sh', ['-c', `(sleep 1; printf '%s\\n' ${shq(answer)}; sleep 1) | ${pty}`], { cwd: dir, encoding: 'utf8' });
+  return spawnSync('sh', ['-c', `(sleep 1; printf '%s\\n' ${shq(answer)}; sleep 1) | ${pty}`], { cwd: dir, encoding: 'utf8', env: HUMAN_ENV });
 }
 const hasScript = spawnSync('sh', ['-c', 'command -v script']).status === 0 && ['darwin', 'linux'].includes(process.platform);
 

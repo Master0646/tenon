@@ -62,6 +62,9 @@ export function writeChange(dir: string, id: string): void {
 export const at = (): string => new Date().toISOString();
 export const addEvent = (dir: string, id: string, ev: DevflowEvent): void => appendEvent(dir, id, ev);
 
+/** 模拟人的终端：去掉 Agent 的 shell 里才有的环境变量（测试本身可能就在 Agent 里跑） */
+export const HUMAN_ENV: NodeJS.ProcessEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !['CLAUDECODE', 'CODEX_SANDBOX', 'CODEX_THREAD_ID'].includes(k)));
+
 /** 以非 TTY 方式运行 CLI（stdin 为管道，模拟 Agent 的 shell 工具） */
 export function cli(dir: string, ...args: string[]) {
   return spawnSync(process.execPath, [CLI, ...args], { cwd: dir, encoding: 'utf8', input: '' });

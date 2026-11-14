@@ -3,11 +3,11 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import type { Dirent } from 'node:fs';
 import {
-  openSync, closeSync, writeFileSync, appendFileSync, copyFileSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync,
+  openSync, closeSync, writeFileSync, appendFileSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { parse } from 'yaml';
-import { dirname, join, relative, resolve, sep } from 'node:path';
+import { delimiter, dirname, join, relative, resolve, sep } from 'node:path';
 
 // 数据目录：新项目用 .tenon/，改名前初始化的项目沿用 .devflow/。两个都在时拒绝，免得写进错的那个
 export const DF_NEW = '.tenon';
@@ -290,7 +290,13 @@ function treeHash(root: string): string {
   const index = join(tmp, 'index');
   const real = resolve(root, git(root, ['rev-parse', '--git-path', 'index']).trim());
   if (existsSync(real)) copyFileSync(real, index); // 复用 stat 缓存，避免大仓库全量重算
-  const env = { ...process.env, GIT_INDEX_FILE: index };
+  // 新对象写进临时目录，原对象库只读引用：Codex 沙箱里 .git 不可写
+  mkdirSync(join(tmp, 'objects'));
+  const objects = resolve(root, git(root, ['rev-parse', '--git-path', 'objects']).trim());
+  const env = {
+    ...process.env, GIT_INDEX_FILE: index, GIT_OBJECT_DIRECTORY: join(tmp, 'objects'),
+    GIT_ALTERNATE_OBJECT_DIRECTORIES: [objects, process.env.GIT_ALTERNATE_OBJECT_DIRECTORIES].filter(Boolean).join(delimiter),
+  };
   try {
     git(root, ['add', '-A', '--', '.'], env);
     git(root, ['rm', '-r', '--cached', '-q', '--ignore-unmatch', '--', dfOf(root)], env);
@@ -326,11 +332,13 @@ export function approvalCycle(root: string, id: string) {
 }
 
 export function withWorktreeLock<T>(root: string, action: () => T): T {
-  const path = resolve(root, git(root, ['rev-parse', '--git-path', 'tenon.lock']).trim());
+  requireInit(root); // 未初始化的仓库里不要凭空建出数据目录
+  // 锁放在数据目录的 runtime/（已 gitignore，每个 worktree 一份），不放 .git：Codex 沙箱里 .git 不可写
+  const path = join(root, dfOf(root), 'runtime', 'tenon.lock');
   let fd: number;
-  try { fd = openSync(path, 'wx'); }
+  try { mkdirSync(dirname(path), { recursive: true }); fd = openSync(path, 'wx'); }
   catch (e) {
-    if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw new DevflowError('无法创建工作树锁，请检查 Git 目录写权限', path);
+    if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw new DevflowError('无法创建工作树锁，请检查数据目录写权限', path);
     throw new DevflowError('当前工作树有状态改变命令持锁', `检查 ${path} 的进程信息；仅在确认进程已退出后删除锁文件`);
   }
   const release = () => { closeSync(fd); rmSync(path, { force: true }); };

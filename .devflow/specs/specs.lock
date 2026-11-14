@@ -1,5 +1,5 @@
 {
-  "devflow-cli/spec.md": "sha256:260c06307e1547afe69c31ae8cb9a4353d8e5961a63ca430631da4ffcd016e74",
+  "devflow-cli/spec.md": "sha256:e7c15083876dce2dc4e4ece1692829b87b6bc1d83fe51acf4d8f232f164eeebe",
   "evidence-workflow/spec.md": "sha256:51d04386c571a7ac2fd5dc6089b9917635590765bf58917365b0ffaebebffb49",
   "review-workbench/spec.md": "sha256:a23976f1a8c4fa52748bb9a717a8d0e9bddf137cc1cd3077294e21f7dee1690c"
 }
