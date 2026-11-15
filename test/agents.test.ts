@@ -26,13 +26,14 @@ test('installAgents：两种 Agent 的技能、入口片段、禁止规则；重
   installAgents(dir, ['claude', 'codex']);
 
   for (const p of ['.claude/skills', '.agents/skills']) {
-    for (const s of ['tenon-scan', 'tenon-ask']) {
+    for (const s of ['tenon-scan', 'tenon-ask', 'tenon-intake']) {
       assert.match(read(dir, `${p}/${s}/SKILL.md`), new RegExp(`^---\\nname: ${s}\\ndescription: `));
     }
   }
   assert.match(read(dir, 'AGENTS.md'), /^# 已有内容/);
   assert.equal(read(dir, 'AGENTS.md').match(/tenon:begin/g)?.length, 1);
   assert.match(read(dir, 'CLAUDE.md'), /knowledge\/index\.md/);
+  for (const f of ['CLAUDE.md', 'AGENTS.md']) assert.match(read(dir, f), /`tenon-intake`/); // AC9 入口说明列出需求转换技能
 
   const s = JSON.parse(read(dir, '.claude/settings.json'));
   assert.deepEqual(s.permissions.allow, ['Bash(ls *)']);

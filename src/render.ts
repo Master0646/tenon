@@ -282,11 +282,15 @@ export function formatRequirement(text: string): string | null {
 
 export interface RenderResult { file: string; hash: string }
 
-/** 用随包的 am 渲染草稿；成功返回 null，失败返回 am 的输出 */
-function runAm(draft: string, out: string): string | null {
+/** 用随包的 am 渲染草稿；成功返回 null，失败返回 am 的输出。themes：要装进本次 AM_HOME 的自定义主题（名称 → 主题 JSON） */
+export function runAm(draft: string, out: string, themes: Record<string, unknown> = {}): string | null {
   // 用独立的 AM_HOME：不读写用户自己的 am 配置与页面目录
   const home = mkdtempSync(join(tmpdir(), 'tenon-am-'));
   try {
+    for (const [name, theme] of Object.entries(themes)) {
+      mkdirSync(join(home, 'themes'), { recursive: true });
+      writeFileSync(join(home, 'themes', `${name}.json`), JSON.stringify(theme));
+    }
     execFileSync(process.execPath, [AM, 'render', '-', '-o', out, '--no-open', '--style', 'off'], {
       input: draft, env: { ...process.env, AM_HOME: home }, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'],
     });

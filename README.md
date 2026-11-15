@@ -82,7 +82,7 @@ tenon init
 | 谁 | 做什么 |
 | --- | --- |
 | 人 | 审查方案、`tenon approve`、确认人工证据、提交代码、`tenon archive`、维护 `project.yaml` 中的验证命令 |
-| Agent | 读代码、写方案（propose）、实现与测试（apply）、更新知识页（archive 准备、scan）、带引用回答问题（ask） |
+| Agent | 把需求文档章节转成需求 md（intake）、读代码、写方案（propose）、实现与测试（apply）、更新知识页（archive 准备、scan）、带引用回答问题（ask） |
 | tenon | 校验、哈希批准、派生状态、运行验证命令、合并规范、渲染审查页、pre-commit 门禁 |
 
 ## 命令
@@ -107,6 +107,7 @@ tenon init
 | `tenon evidence confirm <id> <证据>` | 确认人工证据（只能由人在交互终端运行） |
 | `tenon archive <id>` | 合并规范并归档（只能由人在交互终端运行；中断后重跑即继续） |
 | `tenon wiki lint` | 校验知识页的引用、链接，并检查是否过期 |
+| `tenon req render <需求目录> [-o 文件]` | 把 `.tenon/requirements/<章节>/` 下的需求 md 渲染成仿 Stripe 文档样式的离线 html |
 | `tenon check [--staged]` | 门禁检查（hook 与 CI 使用） |
 | `tenon guard` | 供 Codex 的 PreToolUse 钩子调用，拦截人专属命令和改 `specs/`、`events.jsonl` 的补丁 |
 | `tenon usage` / `improve` / `eval` | 本地使用记录、改进候选与评测，见下文 |

@@ -2,7 +2,7 @@
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parse } from 'yaml';
-import { dfOf, changeRel, git, repoFiles, rootOf, type Issue } from './core.ts';
+import { dfOf, changeRel, git, repoFiles, requirementList, requirementProblem, requirementsRel, rootOf, type Issue } from './core.ts';
 import { mergeSpec, parseDelta } from './spec.ts';
 
 const EX_PROJECT = `schema_version: 1
@@ -22,7 +22,9 @@ summary:                 # 方案要点：最多 7 条，每条一句，显示�
 decisions:               # 需要人拍板的事项；没有就写 []
   - question: 普通用户访问时返回 403 还是空列表？
     options: [返回 403, 返回空列表]
-    recommend: 返回 403`;
+    recommend: 返回 403
+requirement:             # 可选：关联的需求 md，由 tenon-intake 生成，计入批准哈希
+  - .tenon/requirements/4.4.1-role-access/requirement.md`;
 
 export const MAX_SUMMARY = 7;
 
@@ -107,7 +109,7 @@ export function enforceLevel(root: string): 'warn' | 'strict' {
 }
 
 export interface Decision { question: string; options: string[]; recommend: string }
-export interface ChangeMeta { title: string; affected_paths: string[]; summary?: string[]; decisions?: Decision[] }
+export interface ChangeMeta { title: string; affected_paths: string[]; summary?: string[]; decisions?: Decision[]; requirement: string[] }
 
 // 选项会写进审查页的 ask 块：一行一个，`|` 是选项与备注的分隔符
 const oneLine = (v: unknown): v is string => isStr(v) && !/[\n|]/.test(v);
@@ -140,6 +142,7 @@ export function loadChangeMeta(root: string, id: string): ChangeMeta | null {
     title: m.title, affected_paths: m.affected_paths,
     summary: isStrList(m.summary) ? m.summary : [],
     decisions: m.decisions !== undefined && !decisionErrors(m.decisions).length ? m.decisions : [],
+    requirement: requirementList(m.requirement) ?? [],
   };
 }
 
@@ -186,6 +189,9 @@ export function validateChange(root: string, id: string, complete: boolean): Iss
     else if (complete && !m.summary?.length) warn('没有 summary：审查页首屏不会显示方案要点');
     else if ((m.summary?.length ?? 0) > MAX_SUMMARY) warn(`summary 有 ${m.summary.length} 条，审查页首屏建议不超过 ${MAX_SUMMARY} 条`);
     if (m.decisions !== undefined) for (const e of decisionErrors(m.decisions)) err('change.yaml', e, hc);
+    const reqs = requirementList(m.requirement);
+    if (!reqs) err('change.yaml', 'requirement 必须是字符串或字符串数组：关联的需求 md 路径', hc);
+    else for (const p of reqs) { const e = requirementProblem(root, p); if (e) err('change.yaml', e, `用 tenon-intake 技能生成需求文档，路径形如 ${requirementsRel(root)}/<章节>/requirement.md`); }
   }
 
   // tasks.yaml

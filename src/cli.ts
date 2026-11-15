@@ -13,6 +13,7 @@ import { parseArgs } from 'node:util';
 import { AGENTS, detectAgents, guessAgents, installAgents, parseAgents, type AgentResult } from './agents.ts';
 import { check, checkCodeRepo } from './check.ts';
 import { lintWiki } from './wiki.ts';
+import { renderRequirement } from './requirement.ts';
 import { render, reviewIssues } from './render.ts';
 import { reviewServer } from './review.ts';
 import { applyStart, taskDone, verify } from './exec.ts';
@@ -52,6 +53,8 @@ const HELP = `tenon ${VERSION}
   update [--agents]    重新生成 Agent 文件（默认：已安装过的 Agent）
   new <id>             生成变更目录骨架
   wiki lint            校验知识页的引用、链接与是否过期
+  req render <目录> [-o f]  把需求目录（<数据目录>/requirements/<章节>/）渲染成离线 html
+                       （默认 <数据目录>/runtime/rendered/requirements/<章节>.html）
   validate <id>        校验变更文件是否齐全、格式正确
   status [id] [--all]  显示变更的派生状态；--all 同时列出已归档的变更
   render <id> [-o f]   从被审文件生成离线审查页（默认 <数据目录>/runtime/rendered/<id>.html）
@@ -253,6 +256,14 @@ async function dispatch(): Promise<number> {
       if (!pages.length) issues.push({ level: 'warn', file: `${dfOf(root)}/knowledge/pages/`, message: '知识页为空', hint: '用 tenon-scan 技能生成知识页；小项目可以跳过' });
       return report(issues, `✓ ${pages.length} 个知识页校验通过`);
     }
+    case 'req': {
+      requireInit(root);
+      if (arg !== 'render') throw new DevflowError(`未知子命令：req ${arg ?? ''}`, '用法：tenon req render <数据目录>/requirements/<章节>');
+      const r = renderRequirement(root, positionals[2], opts.out ? resolve(opts.out) : undefined);
+      if (opts.json) console.log(JSON.stringify(r, null, 2));
+      else console.log(`✓ ${r.file}`);
+      return 0;
+    }
     case 'new': {
       const files = newChange(root, arg, opts.schema === undefined ? 2 : Number(opts.schema));
       if (opts.json) console.log(JSON.stringify({ files }, null, 2));
@@ -437,7 +448,7 @@ async function main(): Promise<number> {
   const before = state();
   let approval_id: string | undefined;
   try { if (before) approval_id = approvalCycle(root, changeId!).approval_id.replace(':', '-'); } catch { /* reporting cannot block commands */ }
-  const handle = internal ? undefined : startUsage(root, { tool_version: VERSION, command: cmd ?? 'help', subcommand: ['task', 'evidence', 'wiki'].includes(cmd ?? '') ? arg : undefined, change_id: before || cmd === 'new' ? changeId : undefined, approval_id, status_before: before?.status });
+  const handle = internal ? undefined : startUsage(root, { tool_version: VERSION, command: cmd ?? 'help', subcommand: ['task', 'evidence', 'wiki', 'req'].includes(cmd ?? '') ? arg : undefined, change_id: before || cmd === 'new' ? changeId : undefined, approval_id, status_before: before?.status });
   try {
     const mutate = ['apply', 'task', 'verify', 'approve', 'archive', 'evidence'].includes(cmd ?? '');
     // Interactive confirmation keeps the worktree lock until the command finishes.

@@ -122,12 +122,41 @@ export function listChanges(root: string): string[] {
     .sort();
 }
 
-/** 被审文件：变更目录下除事件日志外的全部文件，加上 project.yaml（防止批准后改弱验证命令） */
+/** 被审文件：变更目录下除事件日志外的全部文件，加上 project.yaml（防止批准后改弱验证命令）与关联的需求 md */
 export function reviewedFiles(root: string, id: string): string[] {
   return [
     ...repoFiles(root, changeRel(root, id)).filter((f) => f !== 'events.jsonl' && !(changeSchema(root, id) === 2 && f === 'execution.md')).map((f) => `${changeRel(root, id)}/${f}`),
     `${dfOf(root)}/project.yaml`,
+    ...changeRequirements(root, id),
   ];
+}
+
+// ---------- 需求文档 ----------
+
+/** 需求目录名：同变更 ID，另允许 . 以便写章节号 */
+export const REQUIREMENT_DIR = /^[a-z0-9][a-z0-9.-]*$/;
+export const requirementsRel = (root: string): string => `${dfOf(root)}/requirements`;
+
+/** change.yaml 的 requirement 原值规整成数组：不写为 []，写了单个字符串也接受，类型不对为 null */
+export function requirementList(raw: unknown): string[] | null {
+  if (raw === undefined || raw === null) return [];
+  const list = typeof raw === 'string' ? [raw] : raw;
+  return Array.isArray(list) && list.every((p) => typeof p === 'string') ? list : null;
+}
+
+/** 一条需求路径的问题；合法时为 null。合法：<数据目录>/requirements/ 下、.md、无 ..、文件存在 */
+export function requirementProblem(root: string, p: string): string | null {
+  if (p.split('/').includes('..') || !p.startsWith(`${requirementsRel(root)}/`) || !p.endsWith('.md')) {
+    return `requirement 路径无效：${JSON.stringify(p)}（须为 ${requirementsRel(root)}/ 下的 .md 文件，不能含 ..）`;
+  }
+  return existsSync(join(root, p)) ? null : `requirement 文件不存在：${p}`;
+}
+
+/** 变更关联的合法需求 md（相对仓库根）；非法项由 validate 报错，这里跳过 */
+export function changeRequirements(root: string, id: string): string[] {
+  let m: any;
+  try { m = parse(readFileSync(join(changeDir(root, id), 'change.yaml'), 'utf8')); } catch { return []; }
+  return [...new Set(requirementList(m?.requirement) ?? [])].filter((p) => !requirementProblem(root, p));
 }
 
 /** 变更要修改的能力：specs/<cap>/spec.md */

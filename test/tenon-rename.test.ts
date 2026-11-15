@@ -127,8 +127,8 @@ test('AC3 生成的技能、入口说明与规则使用 Tenon 名称；旧版生
   installAgents(dir, ['claude', 'codex']);
 
   const skills = readdirSync(join(dir, '.claude/skills')).sort();
-  assert.deepEqual(skills, ['devflow-mine', 'tenon-apply', 'tenon-archive', 'tenon-ask', 'tenon-propose', 'tenon-scan']);
-  assert.deepEqual(readdirSync(join(dir, '.agents/skills')).sort(), ['tenon-apply', 'tenon-archive', 'tenon-ask', 'tenon-propose', 'tenon-scan']);
+  assert.deepEqual(skills, ['devflow-mine', 'tenon-apply', 'tenon-archive', 'tenon-ask', 'tenon-intake', 'tenon-propose', 'tenon-scan']);
+  assert.deepEqual(readdirSync(join(dir, '.agents/skills')).sort(), ['tenon-apply', 'tenon-archive', 'tenon-ask', 'tenon-intake', 'tenon-propose', 'tenon-scan']);
   assert.deepEqual(readdirSync(join(dir, '.codex/rules')), ['tenon.rules']);
 
   for (const f of [
