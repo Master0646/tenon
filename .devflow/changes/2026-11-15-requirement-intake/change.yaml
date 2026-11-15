@@ -1,0 +1,36 @@
+schema_version: 2
+min_cli_version: 0.2.0
+title: 新增需求转换环节：把原始需求文档的指定章节转成 md 并渲染成 html，变更以它为需求来源
+affected_paths:
+  - src/requirement.ts
+  - src/validate.ts
+  - src/core.ts
+  - src/render.ts
+  - src/cli.ts
+  - templates/skills/tenon-intake/**
+  - templates/skills/tenon-propose/SKILL.md
+  - templates/entry.md
+  - test/requirement.test.ts
+  - test/agents.test.ts
+  - README.md
+  - docs/使用手册.md
+summary:
+  - 新技能 tenon-intake：Agent 读原始 docx 的指定章节，写成 .tenon/requirements/<章节>/requirement.md，被删的修订内容另存 revisions.md
+  - 新命令 tenon req render <目录>：把 md 确定性地渲染成带目录栏的 html，供人阅读
+  - change.yaml 新增可选字段 requirement，指向需求 md；validate 检查文件存在且在 requirements/ 下
+  - 需求 md 计入批准哈希：批准后需求被改，批准失效
+  - tenon-propose 有 requirement 时以该 md 为需求来源，不再直接读 docx
+  - tenon 自己不读 docx、不调用模型；读文档、取舍修订都由 Agent 按技能完成
+decisions:
+  - question: 变更关联的需求 md 是否计入批准哈希？
+    options: [计入（批准后需求被改则批准失效）, 不计入（只记录路径）]
+    recommend: 计入（批准后需求被改则批准失效）
+  - question: 渲染出的 html 放在哪里？
+    options: [数据目录 runtime/rendered/requirements/（不进 git）, 与 md 同目录（进 git）]
+    recommend: 数据目录 runtime/rendered/requirements/（不进 git）
+  - question: 页面样式用什么？
+    options: [复用审查页的渲染器（doc 模板加目录栏）, 另写一套仿 Stripe 文档的样式]
+    recommend: 复用审查页的渲染器（doc 模板加目录栏）
+  - question: 技能读 docx 用什么工具？
+    options: [优先 officecli，没有时用 pandoc --track-changes=all, 只用 officecli，没有就停下请用户安装]
+    recommend: 优先 officecli，没有时用 pandoc --track-changes=all

@@ -1,0 +1,58 @@
+schema_version: 2
+tasks:
+  - id: T1
+    title: 'change.yaml 支持 requirement 字段，validate 检查，计入被审文件'
+    acceptance:
+      - id: AC1
+        text: 'requirement 指向 requirements/ 下已存在的 md 时 validate 通过，且该文件出现在 reviewedFiles 中'
+        method: automated
+        check: unit-tests
+      - id: AC2
+        text: 'requirement 指向不存在的文件、requirements/ 外的文件、非 md 文件或含 .. 的路径时 validate 报错'
+        method: automated
+        check: unit-tests
+      - id: AC3
+        text: '批准后修改 requirement 指向的 md，状态回到 draft'
+        method: automated
+        check: unit-tests
+      - id: AC4
+        text: '不写 requirement 的已有变更 validate 结果不变'
+        method: automated
+        check: unit-tests
+  - id: T2
+    title: '新增 tenon req render'
+    acceptance:
+      - id: AC5
+        text: '渲染含 ## 小节与 revisions.md 的需求目录，输出 html，包含每个小节标题和修订记录面板，默认写到 runtime/rendered/requirements/'
+        method: automated
+        check: unit-tests
+      - id: AC6
+        text: 'md 含 html 块、图片或 ::: 块时不出页面，报错带文件与行号'
+        method: automated
+        check: unit-tests
+      - id: AC7
+        text: '参数不在 requirements/ 下或目录里没有 requirement.md 时报错并给出用法'
+        method: automated
+        check: unit-tests
+      - id: AC8
+        text: '类型检查通过'
+        method: automated
+        check: typecheck
+  - id: T3
+    title: '新增 tenon-intake 技能，更新 tenon-propose 技能与入口说明'
+    depends_on: [T1, T2]
+    acceptance:
+      - id: AC9
+        text: 'tenon init 为 Claude 与 Codex 各生成 tenon-intake 技能，入口说明的技能列表包含 tenon-intake'
+        method: automated
+        check: unit-tests
+      - id: AC10
+        text: '用北二环详设的一个真实章节跑一遍 tenon-intake，修订内容进 revisions.md，html 能在浏览器里正常阅读'
+        method: manual
+  - id: T4
+    title: '更新 README 命令表与使用手册'
+    depends_on: [T2, T3]
+    acceptance:
+      - id: AC11
+        text: 'README 命令表与使用手册写明 tenon req render、requirement 字段和 tenon-intake 技能'
+        method: manual
