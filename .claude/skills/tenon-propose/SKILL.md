@@ -10,6 +10,8 @@ description: 把用户的需求写成一个 Tenon 变更方案（proposal、delt
 ## 步骤
 
 1. 弄清需求。缺了会做错的信息（改什么、改成什么、怎样算完成、不改什么）先问用户，一次问完。
+   - 需求来自原始需求文档的某个章节时：先看 `.tenon/requirements/` 下有没有对应目录。有就以其中的 `requirement.md` 为需求来源，并在 change.yaml 写 `requirement`；没有就先用 `tenon-intake` 技能生成。
+   - 以 requirement.md 为准，只在它含糊或和代码对不上时回查原文，并在 design.md 写明查了原文哪一节、结论是什么。requirement.md 本身有错时，告诉用户，改正后再继续出方案。
 2. 读相关代码与当前规范 `.tenon/specs/<能力>/spec.md`。知识页（`.tenon/knowledge/`）可当地图，结论以源码为准。方案里写到的端口、路径、配置值、类名，先在源码或配置文件里找到出处再写，并在 design.md 里注明 `文件:行号`；找不到就写"未知"，不要按经验猜。
 3. 运行 `tenon new <id>`。id 用 `<日期>-<英文短名>`，例如 `2026-11-06-role-access`。
 4. 按下面的格式写变更目录中的文件。
@@ -42,6 +44,8 @@ decisions:                 # 需要用户拍板的事项；没有就写 []
   - question: 已暂停的用户能否直接禁用？
     options: [不允许（按详设原文）, 允许]
     recommend: 不允许（按详设原文）
+requirement:               # 可选：关联的需求 md（tenon-intake 生成），计入批准哈希；批准后改了需求，批准失效
+  - .tenon/requirements/4.4.1.2-access-channel/requirement.md
 ```
 
 - `summary` 写结论，不写过程：读完这几条，审批人应当知道这次改了什么、没改什么。
